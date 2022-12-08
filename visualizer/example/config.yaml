@@ -1,0 +1,8 @@
+map_file: "./example/maze-32-32-2.map"
+scen_file: "./example/maze-32-32-2-random-2.scen"
+path_file: "./example/result.path"
+num_of_agents: 50
+show_ag_idx: true
+pixel_per_move: 5
+moves: 5
+delay: 0.08
