@@ -111,8 +111,8 @@ class PlanVis:
         self.makespan:int = -1
 
         self.load_map()
-        self.load_paths()
         self.load_agents()
+        self.load_paths()
 
         self.window = Tk()
         wd_width = str(self.width * self.tile_size + 10)
@@ -134,10 +134,10 @@ class PlanVis:
         self.render_static_positions(self.start_loc, "oval", "yellowgreen")
         self.render_positions()
         self.canvas.update()
-        time.sleep(self.delay*4)
+        time.sleep(self.delay*4)  # Show the initial setting
 
 
-    def render_static_positions(self, loc:List=None, shape:str="rectangle", color:str="blue"):
+    def render_static_positions(self, loc:List=None, shape:str="rectangle", color:str="blue")->None:
         if loc is None:
             loc = self.cur_loc
 
@@ -163,12 +163,12 @@ class PlanVis:
             if self.show_ag_idx:
                 self.canvas.create_text((loc[_ag_][0]+0.5)*self.tile_size,
                                         (loc[_ag_][1]+0.5)*self.tile_size,
-                                        text=str(_ag_+1),
+                                        text=str(_ag_),
                                         fill="black",
                                         font=("Arial", int(self.tile_size*0.8)))
 
 
-    def render_env(self):
+    def render_env(self) -> None:
         for rid, _cur_row_ in enumerate(self.env_map):
             for cid, _cur_ele_ in enumerate(_cur_row_):
                 if _cur_ele_ is False:
@@ -195,7 +195,7 @@ class PlanVis:
             if self.show_ag_idx:
                 ag_idx = self.canvas.create_text((loc[_ag_][0]+0.5)*self.tile_size,
                                                  (loc[_ag_][1]+0.5)*self.tile_size,
-                                                 text=str(_ag_+1),
+                                                 text=str(_ag_),
                                                  fill="black",
                                                  font=("Arial", int(self.tile_size*0.8)))
                 self.agent_texts.append(ag_idx)
@@ -305,7 +305,7 @@ if __name__ == "__main__":
     parser.add_argument('--map', type=str, help="Path to the map file")
     parser.add_argument('--scen', type=str, help="Path to the scen file")
     parser.add_argument('--path', type=str, help="Path to the path file")
-    parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents", 
+    parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
     parser.add_argument('--mv', type=int, dest="moves", help="Number of moves per action")
