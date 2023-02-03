@@ -42,7 +42,7 @@ class PlanVis:
     """
     def __init__(self, in_arg) -> None:
 
-        # Load the yaml file
+        # Load the yaml file or the input arguments
         tmp_config: Dict = dict()
 
         if in_arg.config is not None:
@@ -86,6 +86,7 @@ class PlanVis:
         assert "pixel_per_move" in tmp_config.keys()
         assert "moves" in tmp_config.keys()
 
+        # Assign configuration to the variable
         self.map_file:str = tmp_config["map_file"]
         self.scen_file:str = tmp_config["scen_file"]
         self.path_file:str = tmp_config["path_file"]
@@ -93,7 +94,7 @@ class PlanVis:
         self.show_ag_idx:bool = tmp_config["show_ag_idx"]
 
         self.moves:int = tmp_config["moves"]
-        self.tile_size:int = tmp_config["pixel_per_move"]* self.moves
+        self.tile_size:int = tmp_config["pixel_per_move"] * self.moves
         self.delay:int = tmp_config["delay"]
 
         self.width:int = -1
@@ -138,6 +139,13 @@ class PlanVis:
 
 
     def render_static_positions(self, loc:List=None, shape:str="rectangle", color:str="blue")->None:
+        """Mark certain positions on the visualizer
+
+        Args:
+            loc (List, optional): A list of locations on the map. Defaults to None.
+            shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
+            color (str, optional): The color of the mark. Defaults to "blue".
+        """
         if loc is None:
             loc = self.cur_loc
 
@@ -299,7 +307,9 @@ class PlanVis:
             time.sleep(self.delay * 2)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """The main function of the visualizer.
+    """
     parser = argparse.ArgumentParser(description='Plan visualizer for a MAPF instance')
     parser.add_argument('--config', type=str, help="use a yaml file as input")
     parser.add_argument('--map', type=str, help="Path to the map file")
@@ -317,3 +327,7 @@ if __name__ == "__main__":
     plan_visualizer = PlanVis(args)
     plan_visualizer.move_agents()
     mainloop()
+
+
+if __name__ == "__main__":
+    main()
