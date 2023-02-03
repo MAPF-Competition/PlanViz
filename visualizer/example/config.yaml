@@ -1,5 +1,5 @@
-map_file: "/home/rdaneel/mapf_benchmark/mapf-map/maze-32-32-2.map"
-scen_file: "/home/rdaneel/mapf_benchmark/scen-random/maze-32-32-2-random-2.scen"
+map_file: "./example/maze-32-32-2.map"
+scen_file: "./example/maze-32-32-2-random-2.scen"
 path_file: "./example/result.path"
 num_of_agents: 50
 show_ag_idx: true
