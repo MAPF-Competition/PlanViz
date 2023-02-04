@@ -8,7 +8,6 @@ import sys
 import logging
 import argparse
 from typing import List, Tuple, Dict
-# from tkinter import Tk, BooleanVar, Label, Canvas, Frame, Button, mainloop
 from tkinter import *
 import time
 import yaml
@@ -25,6 +24,23 @@ MAP_CONFIG: Dict[str,Dict] = {
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08}
 }
+
+
+class AutoScrollbar(Scrollbar):
+    ''' A scrollbar that hides itself if it's not needed.
+        Works only if you use the grid geometry manager '''
+    def set(self, lo, hi):
+        if float(lo) <= 0.0 and float(hi) >= 1.0:
+            self.grid_remove()
+        else:
+            self.grid()
+        Scrollbar.set(self, lo, hi)
+
+    def pack(self, **kw):
+        raise TclError('Cannot use pack with this widget')
+
+    def place(self, **kw):
+        raise TclError('Cannot use place with this widget')
 
 
 def get_map_name(in_file:str) -> str:
@@ -72,6 +88,7 @@ class PlanVis:
             tmp_config["path_file"] = in_arg.path
             tmp_config["num_of_agents"] = in_arg.num_of_agents
             tmp_config["show_ag_idx"] = in_arg.show_ag_idx
+            tmp_config["show_static"] = in_arg.show_static
 
             if in_arg.pixel_per_move is not None:
                 tmp_config["pixel_per_move"] = in_arg.pixel_per_move
@@ -128,8 +145,8 @@ class PlanVis:
         paths = self.load_paths()
 
         self.window = Tk()
-        wd_width = str(self.width * self.tile_size + self.pannel_width)
-        wd_height = str(self.height * self.tile_size + 60)
+        wd_width = str((self.width+1) * self.tile_size + self.pannel_width)
+        wd_height = str((self.height+1) * self.tile_size + 60)
         self.window.geometry(wd_width + "x" + wd_height)
         self.window.title("MAPF Instance")
 
@@ -142,11 +159,27 @@ class PlanVis:
         self.show_ag_idx = BooleanVar()
         self.show_ag_idx.set(tmp_config["show_ag_idx"])
 
+        self.show_static = BooleanVar()
+        self.show_static.set(tmp_config["show_static"])
+
         # Show MAPF instance
-        self.canvas = Canvas(width=self.width * self.tile_size,
-                             height=self.height * self.tile_size,
+        self.canvas = Canvas(width=(self.width+1) * self.tile_size,
+                             height=(self.height+1) * self.tile_size,
                              bg="white")
         self.canvas.grid(row=1, column=0)
+        self.canvas.configure(scrollregion=(0, 0,
+                                            (self.width) * self.tile_size,
+                                            (self.height) * self.tile_size))
+
+        # This is what enables using the mouse:
+        self.canvas.bind("<ButtonPress-1>", self.move_start)
+        self.canvas.bind("<B1-Motion>", self.move_move)
+        #linux scroll
+        self.canvas.bind("<Button-4>", self.zoomerP)
+        self.canvas.bind("<Button-5>", self.zoomerM)
+        #windows scroll
+        self.canvas.bind("<MouseWheel>",self.zoomer)
+
         self.render_env()
         self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
         self.canvas.update()
@@ -156,28 +189,64 @@ class PlanVis:
         self.is_run.set(False)
         self.frame = Frame(self.window)
         self.frame.grid(row=1, column=1,sticky="n")
+        row_idx = 0
+
         self.run_button = Button(self.frame, text="Run", command=self.move_agents)
-        self.run_button.grid(row=0, column=0, sticky="w")
+        self.run_button.grid(row=row_idx, column=0, sticky="w")
         self.pause_button = Button(self.frame, text="Pause", command=self.pause_agents)
-        self.pause_button.grid(row=0, column=1, sticky="w")
+        self.pause_button.grid(row=row_idx, column=1, sticky="w")
         self.next_button = Button(self.frame, text="Next", command=self.move_agents_per_timestep)
-        self.next_button.grid(row=0, column=2, sticky="W")
+        self.next_button.grid(row=row_idx, column=2, sticky="w")
         self.prev_button = Button(self.frame, text="Prev", command=self.back_agents_per_timestep)
-        self.prev_button.grid(row=0, column=3, sticky="W")
+        self.prev_button.grid(row=row_idx, column=3, sticky="w")
+        row_idx += 1
 
         self.id_button = Checkbutton(self.frame, text="Show indices", variable=self.show_ag_idx,
                                      onvalue=True, offvalue=False, command=self.show_index)
-        self.id_button.grid(row=1, column=0, columnspan=2)
+        self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        self.static_button = Checkbutton(self.frame, text="Show static", variable=self.show_static,
+                                         onvalue=True, offvalue=False, command=self.show_static_loc)
+        self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
 
         tmp_label = Label(self.frame, text="Start timestep: ")
-        tmp_label.grid(row=2, column=0, columnspan=2)
+        tmp_label.grid(row=row_idx, column=0, columnspan=2)
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time, 
                                       validatecommand=self.update_curtime)
-        self.start_time_entry.grid(row=2, column=2)
+        self.start_time_entry.grid(row=row_idx, column=2)
         self.update_button = Button(self.frame, text="Go", command=self.update_curtime)
-        self.update_button.grid(row=2, column=3)
+        self.update_button.grid(row=row_idx, column=3)
 
+
+    #move
+    def move_start(self, event):
+        self.canvas.scan_mark(event.x, event.y)
+    def move_move(self, event):
+        self.canvas.scan_dragto(event.x, event.y, gain=1)
+
+    #windows zoom
+    def zoomer(self,event):
+        if event.delta > 0:
+            self.canvas.scale("all", event.x, event.y, 1.1, 1.1)
+            self.tile_size *= 1.1
+        elif event.delta < 0:
+            self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
+            self.tile_size *= 0.9
+        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+
+    #linux zoom
+    def zoomerP(self,event):
+        self.canvas.scale("all", event.x, event.y, 1.1, 1.1)
+        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+        self.tile_size *= 1.1
+        
+    def zoomerM(self,event):
+        self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
+        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+        self.tile_size *= 0.9
 
     def render_obj(self, _idx_, loc:Tuple[int], shape:str="rectangle", color:str="blue")->None:
         """Mark certain positions on the visualizer
@@ -231,6 +300,24 @@ class PlanVis:
                                                  (cid+1)*self.tile_size,
                                                  (rid+1)*self.tile_size,
                                                  fill="black")
+        for cid in range(self.width):
+            self.canvas.create_text((cid+0.5)*self.tile_size,
+                                    (self.height+0.5)*self.tile_size,
+                                    text=str(cid),
+                                    fill="black",
+                                    font=("Arial", int(self.tile_size*0.4)))
+        for rid in range(self.height):
+            self.canvas.create_text((self.width+0.5)*self.tile_size,
+                                    (rid+0.5)*self.tile_size,
+                                    text=str(rid),
+                                    fill="black",
+                                    font=("Arial", int(self.tile_size*0.4)))
+        # self.canvas.create_line(self.width * self.tile_size, 0,
+        #                         self.width * self.tile_size, self.height * self.tile_size,
+        #                         fill="grey")
+        # self.canvas.create_line(0, self.height * self.tile_size,
+        #                         self.width * self.tile_size, self.height * self.tile_size,
+        #                         fill="grey")
 
 
     def render_agents(self, start_loc:List, goal_loc:List, paths:List) -> None:
@@ -250,17 +337,49 @@ class PlanVis:
 
 
     def show_index(self) -> None:
-        if self.show_ag_idx.get() is True:
+        if self.show_static.get() is True and self.show_ag_idx.get() is True:
             for (_, _agent_) in self.agents.items():
                 self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
                 self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
                 self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
 
-        else:
+        elif self.show_static.get() is True and self.show_ag_idx.get() is False:
             for (_, _agent_) in self.agents.items():
                 self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
                 self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
                 self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
+
+        elif self.show_static.get() is False and self.show_ag_idx.get() is True:
+            for (_, _agent_) in self.agents.items():
+                self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
+                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
+                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
+
+        else:
+            for (_, _agent_) in self.agents.items():
+                self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
+                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
+                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
+
+
+    def show_static_loc(self) -> None:
+        if self.show_static.get() is True:
+            for (_, _agent_) in self.agents.items():
+                self.canvas.itemconfig(_agent_.start_obj.obj, fill=_agent_.start_obj.color)
+                self.canvas.itemconfig(_agent_.goal_obj.obj, fill=_agent_.goal_obj.color)
+                if self.show_ag_idx.get() is True:
+                    self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
+                    self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
+                else:
+                    self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
+                    self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
+
+        else:
+            for (_, _agent_) in self.agents.items():
+                self.canvas.itemconfig(_agent_.start_obj.obj, fill="white")
+                self.canvas.itemconfig(_agent_.goal_obj.obj, fill="white")
+                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
+                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
 
 
     def load_map(self, map_file:str = None) -> None:
@@ -338,7 +457,6 @@ class PlanVis:
 
     def move_agents_per_timestep(self) -> None:
         self.next_button.config(state="disable")
-        self.update_button.config(state= "disabled")
 
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
@@ -347,8 +465,8 @@ class PlanVis:
                 next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
                 direction = (agent.path[next_timestep][0] - agent.agent_obj.loc[0],
                              agent.path[next_timestep][1] - agent.agent_obj.loc[1])
-                cur_move = (direction[0] * (self.tile_size // self.moves),
-                            direction[1] * (self.tile_size // self.moves))
+                cur_move = (direction[0] * (self.tile_size / self.moves),
+                            direction[1] * (self.tile_size / self.moves))
                 self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
 
@@ -361,13 +479,14 @@ class PlanVis:
                                    agent.path[next_timestep][1])
         self.cur_timestep += 1
         self.next_button.config(state="normal")
-        self.update_button.config(state= "normal")
 
 
     def back_agents_per_timestep(self) -> None:
         if self.cur_timestep == 0:
             return
+
         self.prev_button.config(state="disable")
+
         prev_timestep = max(self.cur_timestep-1, 0)
         prev_loc:Dict[int, Tuple[int, int]] = dict()
         for (ag_idx, agent) in self.agents.items():
@@ -394,6 +513,7 @@ class PlanVis:
         self.cur_timestep = prev_timestep
         for (ag_idx, agent) in self.agents.items():
             agent.agent_obj.loc = prev_loc[ag_idx]
+
         self.prev_button.config(state="normal")
 
 
@@ -402,7 +522,9 @@ class PlanVis:
         """
         self.run_button.config(state="disable")
         self.pause_button.config(state="normal")
+        self.next_button.config(state="disable")
         self.prev_button.config(state="disable")
+        self.update_button.config(state="disable")
 
         self.is_run.set(True)
         while self.cur_timestep < self.makespan:
@@ -411,7 +533,12 @@ class PlanVis:
                 time.sleep(self.delay * 2)
             else:
                 break
+
+        self.run_button.config(state="normal")
+        self.pause_button.config(state="normal")
+        self.next_button.config(state="normal")
         self.prev_button.config(state="normal")
+        self.update_button.config(state="normal")
 
 
     def pause_agents(self) -> None:
@@ -420,10 +547,12 @@ class PlanVis:
         self.run_button.config(state="normal")
         self.next_button.config(state="normal")
         self.prev_button.config(state="normal")
+        self.canvas.after(200, lambda: self.pause_button.config(state="normal"))
 
 
     def update_curtime(self) -> None:
         self.cur_timestep = self.new_time.get()
+        self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
         for (_idx_, _agent_) in self.agents.items():
             self.canvas.delete(_agent_.agent_obj.obj)
             self.canvas.delete(_agent_.agent_obj.text)
@@ -447,6 +576,8 @@ def main() -> None:
     parser.add_argument('--delay', type=float, help="Wait time between timesteps")
     parser.add_argument('--aid', type=bool, default=False, dest="show_ag_idx",
                         help="Show agent indices or not")
+    parser.add_argument('--static', type=bool, default=False, dest="show_static",
+                        help="Show start/goal locations or not")
     args = parser.parse_args()
 
     PlanVis(args)
