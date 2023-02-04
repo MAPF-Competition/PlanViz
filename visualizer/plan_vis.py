@@ -26,23 +26,6 @@ MAP_CONFIG: Dict[str,Dict] = {
 }
 
 
-class AutoScrollbar(Scrollbar):
-    ''' A scrollbar that hides itself if it's not needed.
-        Works only if you use the grid geometry manager '''
-    def set(self, lo, hi):
-        if float(lo) <= 0.0 and float(hi) >= 1.0:
-            self.grid_remove()
-        else:
-            self.grid()
-        Scrollbar.set(self, lo, hi)
-
-    def pack(self, **kw):
-        raise TclError('Cannot use pack with this widget')
-
-    def place(self, **kw):
-        raise TclError('Cannot use place with this widget')
-
-
 def get_map_name(in_file:str) -> str:
     """Get the map name from the file name
 
@@ -185,12 +168,12 @@ class PlanVis:
         self.canvas.update()
 
         # Generate the GUI pannel
-        self.is_run = BooleanVar(self.window)
-        self.is_run.set(False)
         self.frame = Frame(self.window)
         self.frame.grid(row=1, column=1,sticky="n")
         row_idx = 0
 
+        self.is_run = BooleanVar(self.window)
+        self.is_run.set(False)
         self.run_button = Button(self.frame, text="Run", command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="w")
         self.pause_button = Button(self.frame, text="Pause", command=self.pause_agents)
@@ -258,17 +241,17 @@ class PlanVis:
         """
         tmp_canvas = None
         if shape == "rectangle":
-            tmp_canvas = self.canvas.create_rectangle(loc[0] * self.tile_size,
-                                                      loc[1] * self.tile_size,
-                                                      (loc[0]+1) * self.tile_size,
-                                                      (loc[1]+1) * self.tile_size,
+            tmp_canvas = self.canvas.create_rectangle((loc[0]+0.02) * self.tile_size,
+                                                      (loc[1]+0.02) * self.tile_size,
+                                                      (loc[0]+1-0.02) * self.tile_size,
+                                                      (loc[1]+1-0.02) * self.tile_size,
                                                       fill=color,
                                                       outline="")
         elif shape == "oval":
-            tmp_canvas = self.canvas.create_oval(loc[0] * self.tile_size,
-                                    loc[1] * self.tile_size,
-                                    (loc[0]+1) * self.tile_size,
-                                    (loc[1]+1) * self.tile_size,
+            tmp_canvas = self.canvas.create_oval((loc[0]+0.02) * self.tile_size,
+                                    (loc[1]+0.02) * self.tile_size,
+                                    (loc[0]+1-0.02) * self.tile_size,
+                                    (loc[1]+1-0.02) * self.tile_size,
                                     fill=color,
                                     outline="")
         else:
@@ -283,8 +266,8 @@ class PlanVis:
                                                 fill="black",
                                                 font=("Arial", int(self.tile_size*0.6)))
         else:
-            tmp_text = self.canvas.create_text((loc[0]+0.5)*self.tile_size,
-                                                (loc[1]+0.5)*self.tile_size,
+            tmp_text = self.canvas.create_text((loc[0]+0.51)*self.tile_size,
+                                                (loc[1]+0.51)*self.tile_size,
                                                 text=str(_idx_),
                                                 fill=color,
                                                 font=("Arial", int(self.tile_size*0.6)))
