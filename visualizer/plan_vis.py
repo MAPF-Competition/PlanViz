@@ -13,6 +13,7 @@ from tkinter import *
 import time
 import yaml
 import numpy as np
+from dataclasses import dataclass
 
 COLORS: List[str] = ["deepskyblue", "orange", "yellowgreen", "purple", "pink",
                      "yellow", "blue", "violet", "tomato", "green",
@@ -37,11 +38,12 @@ def get_map_name(in_file:str) -> str:
     """
     return in_file.split("/")[-1].split(".")[0]
 
-
 class BaseObj:
-    def __init__(self, _obj_, _loc_:Tuple(int,int)) -> None:
+    def __init__(self, _obj_, _text_, _loc_, _color_) -> None:
         self.obj = _obj_
+        self.text = _text_
         self.loc = _loc_
+        self.color = _color_
 
 class Agent:
     def __init__(self, _idx_, _ag_obj_:BaseObj,
@@ -115,19 +117,8 @@ class PlanVis:
         self.height:int = -1
         self.env_map:List[List[bool]] = list()
 
-        self.new_agents:List = list()
-        
-        
-        
         self.agents:List = list()
-        self.starts:List = list()
-        self.goals:List = list()
 
-        self.start_loc:Dict[int,Tuple[int, int]] = dict()
-        self.goal_loc:Dict[int,Tuple[int,int]] = dict()
-        self.paths:Dict[int,List[Tuple[int,int]]] = dict()
-
-        self.cur_loc:Dict[int,Tuple[int,int]] = dict()
         self.cur_timestep:int = 0
         self.makespan:int = -1
 
@@ -135,8 +126,8 @@ class PlanVis:
         self.pannel_width=250
 
         self.load_map()
-        self.load_agents()
-        self.load_paths()
+        (start_loc, goal_loc) = self.load_init_loc()
+        paths = self.load_paths()
 
         self.window = Tk()
         wd_width = str(self.width * self.tile_size + self.pannel_width)
@@ -158,9 +149,7 @@ class PlanVis:
                              bg="white")
         self.canvas.grid(row=1, column=0)
         self.render_env()
-        self.render_static_positions(self.goal_loc, self.goals, "rectangle", "orange")
-        self.render_static_positions(self.start_loc, self.starts, "oval", "yellowgreen")
-        self.render_positions()
+        self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
         self.canvas.update()
 
         # Generate the GUI pannel
@@ -182,8 +171,7 @@ class PlanVis:
         self.id_button.grid(row=1, column=0,columnspan=2)
 
 
-    def render_static_positions(self, loc:List, save_var:List=None,
-                                shape:str="rectangle", color:str="blue")->None:
+    def render_obj(self, _idx_, loc:Tuple[int], shape:str="rectangle", color:str="blue")->None:
         """Mark certain positions on the visualizer
 
         Args:
@@ -191,43 +179,38 @@ class PlanVis:
             shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
             color (str, optional): The color of the mark. Defaults to "blue".
         """
+        tmp_canvas = None
+        if shape == "rectangle":
+            tmp_canvas = self.canvas.create_rectangle(loc[0] * self.tile_size,
+                                                      loc[1] * self.tile_size,
+                                                      (loc[0]+1) * self.tile_size,
+                                                      (loc[1]+1) * self.tile_size,
+                                                      fill=color,
+                                                      outline="")
+        elif shape == "oval":
+            tmp_canvas = self.canvas.create_oval(loc[0] * self.tile_size,
+                                    loc[1] * self.tile_size,
+                                    (loc[0]+1) * self.tile_size,
+                                    (loc[1]+1) * self.tile_size,
+                                    fill=color,
+                                    outline="")
+        else:
+            logging.error("Undefined shape.")
+            sys.exit()
 
-        tmp_obj = None
-        tmp_text = None
-        for _ag_ in range(self.num_of_agents):
-            if shape == "rectangle":
-                tmp_obj = self.canvas.create_rectangle(loc[_ag_][0] * self.tile_size,
-                                            loc[_ag_][1] * self.tile_size,
-                                            (loc[_ag_][0]+1) * self.tile_size,
-                                            (loc[_ag_][1]+1) * self.tile_size,
-                                            fill=color,
-                                            outline="")
-            elif shape == "oval":
-                tmp_obj = self.canvas.create_oval(loc[_ag_][0] * self.tile_size,
-                                        loc[_ag_][1] * self.tile_size,
-                                        (loc[_ag_][0]+1) * self.tile_size,
-                                        (loc[_ag_][1]+1) * self.tile_size,
-                                        fill=color,
-                                        outline="")
-            else:
-                logging.error("Undefined shape.")
-                sys.exit()
-
-            if self.show_ag_idx.get() is True:
-                tmp_text = self.canvas.create_text((loc[_ag_][0]+0.5)*self.tile_size,
-                                                   (loc[_ag_][1]+0.5)*self.tile_size,
-                                                   text=str(_ag_),
-                                                   fill="black",
-                                                   font=("Arial", int(self.tile_size*0.6)))
-            else:
-                tmp_text = self.canvas.create_text((loc[_ag_][0]+0.5)*self.tile_size,
-                                                   (loc[_ag_][1]+0.5)*self.tile_size,
-                                                   text=str(_ag_),
-                                                   fill=color,
-                                                   font=("Arial", int(self.tile_size*0.6)))
-            if save_var is not None:
-                save_var.append((tmp_obj, tmp_text, color))
-        return
+        if self.show_ag_idx.get() is True:
+            tmp_text = self.canvas.create_text((loc[0]+0.5)*self.tile_size,
+                                                (loc[1]+0.5)*self.tile_size,
+                                                text=str(_idx_),
+                                                fill="black",
+                                                font=("Arial", int(self.tile_size*0.6)))
+        else:
+            tmp_text = self.canvas.create_text((loc[0]+0.5)*self.tile_size,
+                                                (loc[1]+0.5)*self.tile_size,
+                                                text=str(_idx_),
+                                                fill=color,
+                                                font=("Arial", int(self.tile_size*0.6)))
+        return BaseObj(tmp_canvas, tmp_text, loc, color)
 
 
     def render_env(self) -> None:
@@ -241,43 +224,34 @@ class PlanVis:
                                                  fill="black")
 
 
-    def render_positions(self, loc: List = None) -> None:
-        if loc is None:
-            loc = self.cur_loc
+    def render_agents(self, start_loc:List, goal_loc:List, paths:List) -> None:
+        # Separate the render of static locations and agents so that agents can overlap
+        tmp_starts = list()
+        tmp_goals = list()
+        for _idx_, _ag_ in enumerate(range(self.num_of_agents)):
+            start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen")
+            goal = self.render_obj(_ag_, goal_loc[_ag_], "rectangle", "orange")
+            tmp_starts.append(start)
+            tmp_goals.append(goal)
 
-        for _ag_ in range(self.num_of_agents):
-            agent = self.canvas.create_oval(loc[_ag_][0] * self.tile_size,
-                                            loc[_ag_][1] * self.tile_size,
-                                            (loc[_ag_][0]+1) * self.tile_size,
-                                            (loc[_ag_][1]+1) * self.tile_size,
-                                            fill=COLORS[0],
-                                            outline="")
-
-            ag_idx = self.canvas.create_text((loc[_ag_][0]+0.5)*self.tile_size,
-                                                (loc[_ag_][1]+0.5)*self.tile_size,
-                                                text=str(_ag_),
-                                                fill="black",
-                                                font=("Arial", int(self.tile_size*0.6)))
-
-            self.agents.append((agent, ag_idx, COLORS[0]))
+        for _idx_, _ag_ in enumerate(range(self.num_of_agents)):
+            agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", COLORS[0])
+            agent = Agent(_idx_, agent_obj, tmp_starts[_idx_], tmp_goals[_idx_], paths[_ag_])
+            self.agents.append(agent)
 
 
     def show_index(self) -> None:
         if self.show_ag_idx.get() is True:
             for _agent_ in self.agents:
-                self.canvas.itemconfig(_agent_[1], fill="black")
-            for _pos_ in self.starts:
-                self.canvas.itemconfig(_pos_[1], fill="black")
-            for _pos_ in self.goals:
-                self.canvas.itemconfig(_pos_[1], fill="black")
+                self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
+                self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
+                self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
 
         else:
             for _agent_ in self.agents:
-                self.canvas.itemconfig(_agent_[1], fill=_agent_[2])
-            for _pos_ in self.starts:
-                self.canvas.itemconfig(_pos_[1], fill=_pos_[2])
-            for _pos_ in self.goals:
-                self.canvas.itemconfig(_pos_[1], fill=_pos_[2])
+                self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
+                self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
+                self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
 
 
     def load_map(self, map_file:str = None) -> None:
@@ -301,43 +275,45 @@ class PlanVis:
         assert len(self.env_map) == self.height
 
 
-    def load_agents(self, scen_file:str = None) -> None:
+    def load_init_loc(self, scen_file:str = None) -> Tuple[Dict]:
         if scen_file is None:
             scen_file = self.scen_file
 
+        start_loc = dict()
+        goal_loc = dict()
         with open(scen_file, "r") as fin:
             fin.readline()  # ignore the first line 'version 1'
             ag_counter:int = 0
             for line in fin.readlines():
                 line_seg = line.split('\t')
-                
-                self.start_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
-                self.cur_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
-                self.goal_loc[ag_counter] = (int(line_seg[6]), int(line_seg[7]))
+                start_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
+                goal_loc[ag_counter] = (int(line_seg[6]), int(line_seg[7]))
 
                 ag_counter += 1
                 if ag_counter == self.num_of_agents:
                     break
+        return (start_loc, goal_loc)
 
 
-    def load_paths(self, path_file:str = None) -> None:
+    def load_paths(self, path_file:str = None):
         if path_file is None:
             path_file = self.path_file
         if not os.path.exists(path_file):
             logging.warning("No path file is found!")
             return
 
+        paths = dict()
         with open(path_file, "r") as fin:
             ag_counter = 0
             for line in fin.readlines():
                 ag_idx = int(line.split(" ")[1].split(":")[0])
-                self.paths[ag_idx] = list()
+                paths[ag_idx] = list()
                 for cur_loc in line.split(" ")[-1].split("->"):
                     if cur_loc == "\n":
                         continue
                     cur_x = int(cur_loc.split(",")[1].split(")")[0])
                     cur_y = int(cur_loc.split(",")[0].split("(")[1])
-                    self.paths[ag_idx].append((cur_x, cur_y))
+                    paths[ag_idx].append((cur_x, cur_y))
                 ag_counter += 1
                 if ag_counter == self.num_of_agents:
                     break
@@ -345,8 +321,10 @@ class PlanVis:
             self.num_of_agents = ag_counter
 
         for ag_idx in range(self.num_of_agents):
-            if self.makespan < max(len(self.paths[ag_idx])-1, 0):
-                self.makespan = max(len(self.paths[ag_idx])-1, 0)
+            if self.makespan < max(len(paths[ag_idx])-1, 0):
+                self.makespan = max(len(paths[ag_idx])-1, 0)
+
+        return paths
 
 
     def move_agents_per_timestep(self) -> None:
@@ -354,22 +332,22 @@ class PlanVis:
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {self.cur_timestep+1:03d}")
-            for ag_idx, agent in enumerate(self.agents):
-                next_timestep = min(self.cur_timestep+1, len(self.paths[ag_idx])-1)
-                direction = (self.paths[ag_idx][next_timestep][0] - self.cur_loc[ag_idx][0],
-                             self.paths[ag_idx][next_timestep][1] - self.cur_loc[ag_idx][1])
+            for agent in self.agents:
+                next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
+                direction = (agent.path[next_timestep][0] - agent.agent_obj.loc[0],
+                             agent.path[next_timestep][1] - agent.agent_obj.loc[1])
                 cur_move = (direction[0] * (self.tile_size // self.moves),
                             direction[1] * (self.tile_size // self.moves))
-                self.canvas.move(agent[0], cur_move[0], cur_move[1])
-                self.canvas.move(agent[1], cur_move[0], cur_move[1])
+                self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
+                self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
 
             self.canvas.update()
             time.sleep(self.delay)
 
-        for ag_idx in range(self.num_of_agents):
-            next_timestep = min(self.cur_timestep+1, len(self.paths[ag_idx])-1)
-            self.cur_loc[ag_idx] = (self.paths[ag_idx][next_timestep][0],
-                                    self.paths[ag_idx][next_timestep][1])
+        for agent in self.agents:
+            next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
+            agent.agent_obj.loc = (agent.path[next_timestep][0],
+                                   agent.path[next_timestep][1])
         self.cur_timestep += 1
         self.next_button.config(state="normal")
 
@@ -380,30 +358,30 @@ class PlanVis:
         self.prev_button.config(state="disable")
         prev_timestep = max(self.cur_timestep-1, 0)
         prev_loc:Dict[int, Tuple[int, int]] = dict()
-        for ag_idx in range(self.num_of_agents):
-            if prev_timestep > len(self.paths[ag_idx])-1:
-                prev_loc[ag_idx] = (self.paths[ag_idx][-1][0], self.paths[ag_idx][-1][1])
+        for ag_idx, agent in enumerate(self.agents):
+            if prev_timestep > len(agent.path)-1:
+                prev_loc[ag_idx] = (agent.path[-1][0], agent.path[-1][1])
             else:
-                prev_loc[ag_idx] = (self.paths[ag_idx][prev_timestep][0],
-                                    self.paths[ag_idx][prev_timestep][1])
+                prev_loc[ag_idx] = (agent.path[prev_timestep][0],
+                                    agent.path[prev_timestep][1])
 
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {prev_timestep:03d}")
             for ag_idx, agent in enumerate(self.agents):
-                direction = (prev_loc[ag_idx][0] - self.cur_loc[ag_idx][0],
-                             prev_loc[ag_idx][1] - self.cur_loc[ag_idx][1])
+                direction = (prev_loc[ag_idx][0] - agent.agent_obj.loc[0],
+                             prev_loc[ag_idx][1] - agent.agent_obj.loc[1])
                 cur_move = (direction[0] * (self.tile_size // self.moves),
                             direction[1] * (self.tile_size // self.moves))
-                self.canvas.move(agent[0], cur_move[0], cur_move[1])
-                self.canvas.move(agent[1], cur_move[0], cur_move[1])
+                self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
+                self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
 
             self.canvas.update()
             time.sleep(self.delay)
 
         self.cur_timestep = prev_timestep
-        for ag_idx in range(self.num_of_agents):
-            self.cur_loc[ag_idx] = prev_loc[ag_idx]
+        for ag_idx, agent in enumerate(self.agents):
+            agent.agent_obj.loc = prev_loc[ag_idx]
         self.prev_button.config(state="normal")
 
 
