@@ -13,7 +13,7 @@ from tkinter import *
 import time
 import yaml
 import numpy as np
-from dataclasses import dataclass
+
 
 COLORS: List[str] = ["deepskyblue", "orange", "yellowgreen", "purple", "pink",
                      "yellow", "blue", "violet", "tomato", "green",
@@ -117,9 +117,7 @@ class PlanVis:
         self.height:int = -1
         self.env_map:List[List[bool]] = list()
 
-        self.agents:List = list()
-
-        self.cur_timestep:int = 0
+        self.agents:Dict = dict()
         self.makespan:int = -1
 
         # Initialize pannel variables
@@ -135,6 +133,7 @@ class PlanVis:
         self.window.geometry(wd_width + "x" + wd_height)
         self.window.title("MAPF Instance")
 
+        self.cur_timestep = 0
         self.timestep_label = Label(self.window,
                               text = f"Timestep: {self.cur_timestep:03d}",
                               font=("Arial", int(self.tile_size)))
@@ -156,7 +155,7 @@ class PlanVis:
         self.is_run = BooleanVar(self.window)
         self.is_run.set(False)
         self.frame = Frame(self.window)
-        self.frame.grid(row=0, column=1,sticky="n")
+        self.frame.grid(row=1, column=1,sticky="n")
         self.run_button = Button(self.frame, text="Run", command=self.move_agents)
         self.run_button.grid(row=0, column=0, sticky="w")
         self.pause_button = Button(self.frame, text="Pause", command=self.pause_agents)
@@ -168,7 +167,16 @@ class PlanVis:
 
         self.id_button = Checkbutton(self.frame, text="Show indices", variable=self.show_ag_idx,
                                      onvalue=True, offvalue=False, command=self.show_index)
-        self.id_button.grid(row=1, column=0,columnspan=2)
+        self.id_button.grid(row=1, column=0, columnspan=2)
+
+        tmp_label = Label(self.frame, text="Start timestep: ")
+        tmp_label.grid(row=2, column=0, columnspan=2)
+        self.new_time = IntVar()
+        self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time, 
+                                      validatecommand=self.update_curtime)
+        self.start_time_entry.grid(row=2, column=2)
+        self.update_button = Button(self.frame, text="Go", command=self.update_curtime)
+        self.update_button.grid(row=2, column=3)
 
 
     def render_obj(self, _idx_, loc:Tuple[int], shape:str="rectangle", color:str="blue")->None:
@@ -198,6 +206,7 @@ class PlanVis:
             logging.error("Undefined shape.")
             sys.exit()
 
+        tmp_text = None
         if self.show_ag_idx.get() is True:
             tmp_text = self.canvas.create_text((loc[0]+0.5)*self.tile_size,
                                                 (loc[1]+0.5)*self.tile_size,
@@ -228,27 +237,27 @@ class PlanVis:
         # Separate the render of static locations and agents so that agents can overlap
         tmp_starts = list()
         tmp_goals = list()
-        for _idx_, _ag_ in enumerate(range(self.num_of_agents)):
+        for _ag_ in range(self.num_of_agents):
             start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen")
             goal = self.render_obj(_ag_, goal_loc[_ag_], "rectangle", "orange")
             tmp_starts.append(start)
             tmp_goals.append(goal)
 
-        for _idx_, _ag_ in enumerate(range(self.num_of_agents)):
+        for _ag_ in range(self.num_of_agents):
             agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", COLORS[0])
-            agent = Agent(_idx_, agent_obj, tmp_starts[_idx_], tmp_goals[_idx_], paths[_ag_])
-            self.agents.append(agent)
+            agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_], paths[_ag_])
+            self.agents[_ag_] = agent
 
 
     def show_index(self) -> None:
         if self.show_ag_idx.get() is True:
-            for _agent_ in self.agents:
+            for (_, _agent_) in self.agents.items():
                 self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
                 self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
                 self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
 
         else:
-            for _agent_ in self.agents:
+            for (_, _agent_) in self.agents.items():
                 self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
                 self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
                 self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
@@ -329,10 +338,12 @@ class PlanVis:
 
     def move_agents_per_timestep(self) -> None:
         self.next_button.config(state="disable")
+        self.update_button.config(state= "disabled")
+
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {self.cur_timestep+1:03d}")
-            for agent in self.agents:
+            for (_, agent) in self.agents.items():
                 next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
                 direction = (agent.path[next_timestep][0] - agent.agent_obj.loc[0],
                              agent.path[next_timestep][1] - agent.agent_obj.loc[1])
@@ -344,12 +355,13 @@ class PlanVis:
             self.canvas.update()
             time.sleep(self.delay)
 
-        for agent in self.agents:
+        for (_, agent) in self.agents.items():
             next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
             agent.agent_obj.loc = (agent.path[next_timestep][0],
                                    agent.path[next_timestep][1])
         self.cur_timestep += 1
         self.next_button.config(state="normal")
+        self.update_button.config(state= "normal")
 
 
     def back_agents_per_timestep(self) -> None:
@@ -358,7 +370,7 @@ class PlanVis:
         self.prev_button.config(state="disable")
         prev_timestep = max(self.cur_timestep-1, 0)
         prev_loc:Dict[int, Tuple[int, int]] = dict()
-        for ag_idx, agent in enumerate(self.agents):
+        for (ag_idx, agent) in self.agents.items():
             if prev_timestep > len(agent.path)-1:
                 prev_loc[ag_idx] = (agent.path[-1][0], agent.path[-1][1])
             else:
@@ -368,7 +380,7 @@ class PlanVis:
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {prev_timestep:03d}")
-            for ag_idx, agent in enumerate(self.agents):
+            for (ag_idx, agent) in self.agents.items():
                 direction = (prev_loc[ag_idx][0] - agent.agent_obj.loc[0],
                              prev_loc[ag_idx][1] - agent.agent_obj.loc[1])
                 cur_move = (direction[0] * (self.tile_size // self.moves),
@@ -380,7 +392,7 @@ class PlanVis:
             time.sleep(self.delay)
 
         self.cur_timestep = prev_timestep
-        for ag_idx, agent in enumerate(self.agents):
+        for (ag_idx, agent) in self.agents.items():
             agent.agent_obj.loc = prev_loc[ag_idx]
         self.prev_button.config(state="normal")
 
@@ -410,6 +422,16 @@ class PlanVis:
         self.prev_button.config(state="normal")
 
 
+    def update_curtime(self) -> None:
+        self.cur_timestep = self.new_time.get()
+        for (_idx_, _agent_) in self.agents.items():
+            self.canvas.delete(_agent_.agent_obj.obj)
+            self.canvas.delete(_agent_.agent_obj.text)
+            _time_ = min(self.cur_timestep, len(_agent_.path)-1)
+            _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", COLORS[0])
+        return
+
+
 def main() -> None:
     """The main function of the visualizer.
     """
@@ -428,7 +450,6 @@ def main() -> None:
     args = parser.parse_args()
 
     PlanVis(args)
-    # plan_visualizer.move_agents()
     mainloop()
 
 
