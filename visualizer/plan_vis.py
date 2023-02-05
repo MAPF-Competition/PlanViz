@@ -110,7 +110,8 @@ class PlanVis:
         self.num_of_agents:int = tmp_config["num_of_agents"]
 
         self.moves:int = tmp_config["moves"]
-        self.tile_size:int = tmp_config["pixel_per_move"] * self.moves
+        self.ppm:int = tmp_config["pixel_per_move"]
+        self.tile_size:int = self.ppm * self.moves
         self.delay:int = tmp_config["delay"]
 
         self.width:int = -1
@@ -150,22 +151,19 @@ class PlanVis:
                              height=(self.height+1) * self.tile_size,
                              bg="white")
         self.canvas.grid(row=1, column=0)
-        self.canvas.configure(scrollregion=(0, 0,
-                                            (self.width) * self.tile_size,
-                                            (self.height) * self.tile_size))
+        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
         # This is what enables using the mouse:
-        self.canvas.bind("<ButtonPress-1>", self.move_start)
-        self.canvas.bind("<B1-Motion>", self.move_move)
+        self.canvas.bind("<ButtonPress-1>", self.__move_from)
+        self.canvas.bind("<B1-Motion>", self.__move_to)
         #linux scroll
-        self.canvas.bind("<Button-4>", self.zoomerP)
-        self.canvas.bind("<Button-5>", self.zoomerM)
+        self.canvas.bind("<Button-4>", self.__wheel)
+        self.canvas.bind("<Button-5>", self.__wheel)
         #windows scroll
-        self.canvas.bind("<MouseWheel>",self.zoomer)
+        self.canvas.bind("<MouseWheel>",self.__wheel)
 
         self.render_env()
         self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
-        self.canvas.update()
 
         # Generate the GUI pannel
         self.frame = Frame(self.window)
@@ -195,41 +193,54 @@ class PlanVis:
         row_idx += 1
 
         tmp_label = Label(self.frame, text="Start timestep: ")
-        tmp_label.grid(row=row_idx, column=0, columnspan=2)
+        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time, 
                                       validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2)
         self.update_button = Button(self.frame, text="Go", command=self.update_curtime)
-        self.update_button.grid(row=row_idx, column=3)
+        self.update_button.grid(row=row_idx, column=3, sticky="w")
+        row_idx += 1
 
+        self.resume_zoom_button = Button(self.frame, text="Resume", command=self.resumeZoom)
+        self.resume_zoom_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
 
-    #move
-    def move_start(self, event):
+    def __move_from(self, event):
+        """ Remember previous coordinates for scrolling with the mouse """
         self.canvas.scan_mark(event.x, event.y)
-    def move_move(self, event):
+
+    def __move_to(self, event):
+        """ Drag (move) canvas to the new position """
         self.canvas.scan_dragto(event.x, event.y, gain=1)
 
-    #windows zoom
-    def zoomer(self,event):
-        if event.delta > 0:
-            self.canvas.scale("all", event.x, event.y, 1.1, 1.1)
-            self.tile_size *= 1.1
-        elif event.delta < 0:
-            self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
-            self.tile_size *= 0.9
+
+    def __wheel(self, event):
+        """ Zoom with mouse wheel """
+        # x = self.canvas.canvasx(event.x)  # get coordinates of the event on the canvas
+        # y = self.canvas.canvasy(event.y)
+        scale = 1.0
+        # Respond to Linux (event.num) or Windows (event.delta) wheel event
+        if event.num == 5 or event.delta == -120:  # scroll down, smaller
+            if round(min(self.width, self.height) * self.tile_size) < 30:
+                return  # image is less than 30 pixels
+            scale /= 1.10
+            self.tile_size /= 1.10
+        if event.num == 4 or event.delta == 120:  # scroll up, bigger
+            scale *= 1.10
+            self.tile_size *= 1.10
+        self.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        for child_widget in self.canvas.find_withtag("text"):
+            self.canvas.itemconfigure(child_widget, font=("Ariel", int((self.tile_size//2)*scale)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
-    #linux zoom
-    def zoomerP(self,event):
-        self.canvas.scale("all", event.x, event.y, 1.1, 1.1)
+    def resumeZoom(self):
+        __scale = self.ppm * self.moves / self.tile_size
+        self.canvas.scale("all", 0, 0, __scale, __scale)
+        self.tile_size = self.ppm * self.moves
+        for child_widget in self.canvas.find_withtag("text"):
+            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.tile_size//2)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
-        self.tile_size *= 1.1
-        
-    def zoomerM(self,event):
-        self.canvas.scale("all", event.x, event.y, 0.9, 0.9)
-        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
-        self.tile_size *= 0.9
+        self.canvas.update()
 
     def render_obj(self, _idx_, loc:Tuple[int], shape:str="rectangle", color:str="blue")->None:
         """Mark certain positions on the visualizer
@@ -239,21 +250,24 @@ class PlanVis:
             shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
             color (str, optional): The color of the mark. Defaults to "blue".
         """
+        offset = 0.05
         tmp_canvas = None
         if shape == "rectangle":
-            tmp_canvas = self.canvas.create_rectangle((loc[0]+0.02) * self.tile_size,
-                                                      (loc[1]+0.02) * self.tile_size,
-                                                      (loc[0]+1-0.02) * self.tile_size,
-                                                      (loc[1]+1-0.02) * self.tile_size,
+            tmp_canvas = self.canvas.create_rectangle((loc[0]+offset) * self.tile_size,
+                                                      (loc[1]+offset) * self.tile_size,
+                                                      (loc[0]+1-offset) * self.tile_size,
+                                                      (loc[1]+1-offset) * self.tile_size,
                                                       fill=color,
+                                                      state="disable",
                                                       outline="")
         elif shape == "oval":
-            tmp_canvas = self.canvas.create_oval((loc[0]+0.02) * self.tile_size,
-                                    (loc[1]+0.02) * self.tile_size,
-                                    (loc[0]+1-0.02) * self.tile_size,
-                                    (loc[1]+1-0.02) * self.tile_size,
-                                    fill=color,
-                                    outline="")
+            tmp_canvas = self.canvas.create_oval((loc[0]+offset) * self.tile_size,
+                                                 (loc[1]+offset) * self.tile_size,
+                                                 (loc[0]+1-offset) * self.tile_size,
+                                                 (loc[1]+1-offset) * self.tile_size,
+                                                 fill=color,
+                                                 state="disable",
+                                                 outline="")
         else:
             logging.error("Undefined shape.")
             sys.exit()
@@ -264,13 +278,17 @@ class PlanVis:
                                                 (loc[1]+0.5)*self.tile_size,
                                                 text=str(_idx_),
                                                 fill="black",
-                                                font=("Arial", int(self.tile_size*0.6)))
+                                                tag="text",
+                                                state="disable",
+                                                font=("Arial", int(self.tile_size//2)))
         else:
             tmp_text = self.canvas.create_text((loc[0]+0.51)*self.tile_size,
                                                 (loc[1]+0.51)*self.tile_size,
                                                 text=str(_idx_),
                                                 fill=color,
-                                                font=("Arial", int(self.tile_size*0.6)))
+                                                tag="text",
+                                                state="disable",
+                                                font=("Arial", int(self.tile_size//2)))
         return BaseObj(tmp_canvas, tmp_text, loc, color)
 
 
@@ -288,12 +306,14 @@ class PlanVis:
                                     (self.height+0.5)*self.tile_size,
                                     text=str(cid),
                                     fill="black",
+                                    tag="coor",
                                     font=("Arial", int(self.tile_size*0.4)))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
                                     (rid+0.5)*self.tile_size,
                                     text=str(rid),
                                     fill="black",
+                                    tag="coor",
                                     font=("Arial", int(self.tile_size*0.4)))
         # self.canvas.create_line(self.width * self.tile_size, 0,
         #                         self.width * self.tile_size, self.height * self.tile_size,
@@ -317,6 +337,7 @@ class PlanVis:
             agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", COLORS[0])
             agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_], paths[_ag_])
             self.agents[_ag_] = agent
+        self.show_static_loc()
 
 
     def show_index(self) -> None:
@@ -485,8 +506,8 @@ class PlanVis:
             for (ag_idx, agent) in self.agents.items():
                 direction = (prev_loc[ag_idx][0] - agent.agent_obj.loc[0],
                              prev_loc[ag_idx][1] - agent.agent_obj.loc[1])
-                cur_move = (direction[0] * (self.tile_size // self.moves),
-                            direction[1] * (self.tile_size // self.moves))
+                cur_move = (direction[0] * (self.tile_size / self.moves),
+                            direction[1] * (self.tile_size / self.moves))
                 self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
 
@@ -541,6 +562,14 @@ class PlanVis:
             self.canvas.delete(_agent_.agent_obj.text)
             _time_ = min(self.cur_timestep, len(_agent_.path)-1)
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", COLORS[0])
+            self.canvas.update()
+            # offset = 0.05
+            # self.canvas.moveto(_agent_.agent_obj.obj,
+            #                    (_agent_.path[_time_][0])*self.tile_size,
+            #                    (_agent_.path[_time_][1])*self.tile_size)
+            # self.canvas.moveto(_agent_.agent_obj.text,
+            #                    (_agent_.path[_time_][0])*self.tile_size,
+            #                    (_agent_.path[_time_][1])*self.tile_size)
         return
 
 
