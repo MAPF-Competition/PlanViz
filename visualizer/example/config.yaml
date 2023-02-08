@@ -4,6 +4,7 @@ path_file: "./example/result.path"
 num_of_agents: 50
 show_ag_idx: true
 show_static: true
+show_conf_ag: true
 pixel_per_move: 5
 moves: 5
 delay: 0.08

@@ -14,8 +14,7 @@ import yaml
 import numpy as np
 
 
-COLORS: List[str] = ["deepskyblue", "orange", "yellowgreen", "purple", "pink",
-                     "yellow", "blue", "violet", "tomato", "green",
+COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
                      "cyan", "brown", "olive", "gray", "crimson"]
 
 
@@ -72,6 +71,7 @@ class PlanVis:
             tmp_config["num_of_agents"] = in_arg.num_of_agents
             tmp_config["show_ag_idx"] = in_arg.show_ag_idx
             tmp_config["show_static"] = in_arg.show_static
+            tmp_config["show_conf_ag"] = in_arg.show_conf_ag
 
             if in_arg.pixel_per_move is not None:
                 tmp_config["pixel_per_move"] = in_arg.pixel_per_move
@@ -127,6 +127,8 @@ class PlanVis:
         self.load_map()
         (start_loc, goal_loc) = self.load_init_loc()
         paths = self.load_paths()
+        self.conflicts:Dict = self.load_conflicts(self.path_file)
+        self.conflict_agents:set = self.get_conflict_agents(self.conflicts)
 
         self.window = Tk()
         wd_width = str((self.width+1) * self.tile_size + self.pannel_width)
@@ -145,6 +147,9 @@ class PlanVis:
 
         self.show_static = BooleanVar()
         self.show_static.set(tmp_config["show_static"])
+
+        self.show_all_conf_ag = BooleanVar()
+        self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
         self.canvas = Canvas(width=(self.width+1) * self.tile_size,
@@ -192,18 +197,93 @@ class PlanVis:
         self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
+        self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
+                                                   variable=self.show_all_conf_ag,
+                                                   onvalue=True, offvalue=False,
+                                                   command=self.mark_conf_agents)
+        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        row_idx += 1
+
         tmp_label = Label(self.frame, text="Start timestep: ")
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = IntVar()
-        self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time, 
+        self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
                                       validatecommand=self.update_curtime)
-        self.start_time_entry.grid(row=row_idx, column=2)
+        self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
         self.update_button = Button(self.frame, text="Go", command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
         self.resume_zoom_button = Button(self.frame, text="Resume", command=self.resumeZoom)
         self.resume_zoom_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        tmp_label2 = Label(self.frame, text="Conflicts")
+        tmp_label2.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        self.shown_conflicts:Dict[str, List[List,bool]] = dict()
+        self.conflict_listbox = Listbox(self.frame, height=10, selectmode=EXTENDED)
+        conf_id = 0
+        for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
+            for _conf_ in self.conflicts[_timestep_]:
+                conf_str = str()
+                for _c_ in _conf_:
+                    conf_str += str(_c_)
+                    if _c_ != "V" and _c_ != "E":
+                        conf_str += ", "
+                self.conflict_listbox.insert(conf_id, conf_str)
+                self.shown_conflicts[conf_str] = [_conf_, False]
+        self.conflict_listbox.grid(row=row_idx, column=1, columnspan=3, sticky="w")
+        self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
+        self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
+
+        scrollbar = Scrollbar(self.frame, orient="vertical")
+        self.conflict_listbox.config(yscrollcommand = scrollbar.set)
+        scrollbar.config(command=self.conflict_listbox.yview)
+        scrollbar.grid(row=row_idx, column=4, sticky="w")
+        row_idx += 1
+
+
+    def change_ag_color(self, ag_idx:int, color:str) -> None:
+        self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=color)
+        self.agents[ag_idx].agent_obj.color = color
+        if self.show_ag_idx.get() is True:
+            self.canvas.itemconfig(self.agents[ag_idx].agent_obj.text, fill="black")
+        else:
+            self.canvas.itemconfig(self.agents[ag_idx].agent_obj.text, fill=color)
+
+
+    def select_conflict(self, event):
+        selected_indices = event.widget.curselection()  # get all selected indices
+
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], "deepskyblue")
+            self.change_ag_color(_conf_[0][1], "deepskyblue")
+            _conf_[1] = False
+        for _sid_ in selected_indices:
+            _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+            self.change_ag_color(_conf_[0][0], "red")
+            self.change_ag_color(_conf_[0][1], "red")
+            self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+
+
+    def move_to_conflict(self, event):
+        if self.is_run.get() is True:
+            return
+
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], "deepskyblue")
+            self.change_ag_color(_conf_[0][1], "deepskyblue")
+            _conf_[1] = False
+        _sid_ = event.widget.curselection()[0]  # get all selected indices
+        _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+        self.change_ag_color(_conf_[0][0], "red")
+        self.change_ag_color(_conf_[0][1], "red")
+        self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        self.new_time.set(int(_conf_[0][4])-1)
+        self.update_curtime()
+
 
     def __move_from(self, event):
         """ Remember previous coordinates for scrolling with the mouse """
@@ -334,10 +414,19 @@ class PlanVis:
             tmp_goals.append(goal)
 
         for _ag_ in range(self.num_of_agents):
-            agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", COLORS[0])
+            agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", "deepskyblue")
             agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_], paths[_ag_])
             self.agents[_ag_] = agent
         self.show_static_loc()
+
+
+    def mark_conf_agents(self) -> None:
+        self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
+        _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], _color_)
+            self.change_ag_color(_conf_[0][1], _color_)
+            _conf_[1] = False
 
 
     def show_index(self) -> None:
@@ -438,6 +527,8 @@ class PlanVis:
         with open(path_file, "r") as fin:
             ag_counter = 0
             for line in fin.readlines():
+                if line.split(" ")[0] != "Agent":
+                    break
                 ag_idx = int(line.split(" ")[1].split(":")[0])
                 paths[ag_idx] = list()
                 for cur_loc in line.split(" ")[-1].split("->"):
@@ -447,8 +538,6 @@ class PlanVis:
                     cur_y = int(cur_loc.split(",")[0].split("(")[1])
                     paths[ag_idx].append((cur_x, cur_y))
                 ag_counter += 1
-                if ag_counter == self.num_of_agents:
-                    break
 
             self.num_of_agents = ag_counter
 
@@ -457,6 +546,40 @@ class PlanVis:
                 self.makespan = max(len(paths[ag_idx])-1, 0)
 
         return paths
+
+    @staticmethod
+    def load_conflicts(in_file:str):
+        if not os.path.exists(in_file):
+            logging.warning("No path file is found!")
+            return
+        conflicts = dict()
+        with open(in_file, "r") as fin:
+            while True:
+                line = fin.readline()
+                if line.rstrip('\n') == "Conflicts":
+                    line = fin.readline()
+                    while True:
+                        line = fin.readline().rstrip('\n')
+                        if line.rstrip('\n') == "---":
+                            break
+                        conf = line.split(",")
+                        for i in range(5):
+                            conf[i] = int(conf[i])
+                        timestep = conf[4]
+                        if timestep not in conflicts.keys():
+                            conflicts[timestep] = list()
+                        conflicts[timestep].append(conf)
+                    break
+        return conflicts
+
+    @staticmethod
+    def get_conflict_agents(conflicts:Dict):
+        conf_ags = set()
+        for (_, conf_list) in conflicts.items():
+            for conf in conf_list:
+                conf_ags.add(conf[0])
+                conf_ags.add(conf[1])
+        return conf_ags
 
 
     def move_agents_per_timestep(self) -> None:
@@ -558,10 +681,11 @@ class PlanVis:
         self.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
         for (_idx_, _agent_) in self.agents.items():
+            _color_ = _agent_.agent_obj.color
             self.canvas.delete(_agent_.agent_obj.obj)
             self.canvas.delete(_agent_.agent_obj.text)
             _time_ = min(self.cur_timestep, len(_agent_.path)-1)
-            _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", COLORS[0])
+            _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_)
             self.canvas.update()
             # offset = 0.05
             # self.canvas.moveto(_agent_.agent_obj.obj,
@@ -590,6 +714,8 @@ def main() -> None:
                         help="Show agent indices or not")
     parser.add_argument('--static', type=bool, default=False, dest="show_static",
                         help="Show start/goal locations or not")
+    parser.add_argument('--conf', type=bool, default=False, dest="show_conf_ag",
+                        help="Show all colliding agents")
     args = parser.parse_args()
 
     PlanVis(args)
