@@ -176,8 +176,8 @@ class PlanVis:
 
         self.timestep_label = Label(self.frame,
                               text = f"Timestep: {self.cur_timestep:03d}",
-                              font=("Arial"))
-        self.timestep_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+                              font=("Arial", self.text_size + 10))
+        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
 
         self.run_button = Button(self.frame, text="Run", command=self.move_agents)
@@ -217,7 +217,7 @@ class PlanVis:
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
-        self.resume_zoom_button = Button(self.frame, text="Resume", command=self.resumeZoom)
+        self.resume_zoom_button = Button(self.frame, text="Resize", command=self.resumeZoom)
         self.resume_zoom_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
@@ -226,18 +226,23 @@ class PlanVis:
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
-        self.conflict_listbox = Listbox(self.frame, selectmode=EXTENDED)
+        self.conflict_listbox = Listbox(self.frame,
+                                        width=28,
+                                        selectmode=EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
             for _conf_ in self.conflicts[_timestep_]:
                 conf_str = str()
-                for _c_ in _conf_:
-                    conf_str += str(_c_)
-                    if _c_ != "V" and _c_ != "E":
-                        conf_str += ", "
+                conf_str = "a" + str(_conf_[0]) + ", a" + str(_conf_[1])
+                if _conf_[-1] == "V":
+                    conf_str += ", v=" + str(_conf_[2])
+                elif _conf_[-1] == "E":
+                    conf_str += ", e=(" + str(_conf_[2]) + "," + str(_conf_[3]) + ")"
+                conf_str += ", t=" + str(_conf_[4])
+
                 self.conflict_listbox.insert(conf_id, conf_str)
                 self.shown_conflicts[conf_str] = [_conf_, False]
-        self.conflict_listbox.grid(row=row_idx, column=1, columnspan=3, sticky="w")
+        self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
         self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
 
