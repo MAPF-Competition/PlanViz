@@ -115,7 +115,7 @@ class PlanVis:
         self.moves:int = tmp_config["moves"]
         self.ppm:int = tmp_config["pixel_per_move"]
         self.tile_size:int = self.ppm * self.moves
-        self.text_size:int = self.tile_size//2
+        self.text_size:int = int(self.tile_size // 2)
         self.delay:int = tmp_config["delay"]
 
         self.width:int = -1
@@ -183,77 +183,77 @@ class PlanVis:
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="wn")
         row_idx += 1
 
-        self.run_button = Button(self.frame, text="Play", font=("Ariel",ui_text_size),
+        self.run_button = Button(self.frame, text="Play", font=("Arial",ui_text_size),
                                  command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="wn")
-        self.pause_button = Button(self.frame, text="Pause", font=("Ariel",ui_text_size),
+        self.pause_button = Button(self.frame, text="Pause", font=("Arial",ui_text_size),
                                    command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="wn")
-        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Ariel",ui_text_size),
+        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
                                          command=self.resumeZoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.next_button = Button(self.frame, text="Next", font=("Ariel",ui_text_size),
+        self.next_button = Button(self.frame, text="Next", font=("Arial",ui_text_size),
                                   command=self.move_agents_per_timestep)
         self.next_button.grid(row=row_idx, column=0, sticky="w")
-        self.prev_button = Button(self.frame, text="Prev", font=("Ariel",ui_text_size),
+        self.prev_button = Button(self.frame, text="Prev", font=("Arial",ui_text_size),
                                   command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="w")
-        self.restart_button = Button(self.frame, text="Reset", font=("Ariel",ui_text_size),
+        self.restart_button = Button(self.frame, text="Reset", font=("Arial",ui_text_size),
                                      command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="wn")
         row_idx += 1
 
         self.grid_button = Checkbutton(self.frame, text="Show grids",
-                                       font=("Ariel",ui_text_size),
+                                       font=("Arial",ui_text_size),
                                        variable=self.is_grid, onvalue=True, offvalue=False,
                                        command=self.show_grid)
         self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.id_button = Checkbutton(self.frame, text="Show indices",
-                                     font=("Ariel",ui_text_size),
+                                     font=("Arial",ui_text_size),
                                      variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                      command=self.show_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.static_button = Checkbutton(self.frame, text="Show start/goal locations",
-                                         font=("Ariel",ui_text_size),
+                                         font=("Arial",ui_text_size),
                                          variable=self.show_static, onvalue=True, offvalue=False,
                                          command=self.show_static_loc)
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
-                                                   font=("Ariel",ui_text_size),
+                                                   font=("Arial",ui_text_size),
                                                    variable=self.show_all_conf_ag,
                                                    onvalue=True, offvalue=False,
                                                    command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        tmp_label = Label(self.frame, text="Start timestep: ", font=("Ariel",ui_text_size))
+        tmp_label = Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
-                                      font=("Ariel",ui_text_size),
+                                      font=("Arial",ui_text_size),
                                       validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
-        self.update_button = Button(self.frame, text="Go", font=("Ariel",ui_text_size),
+        self.update_button = Button(self.frame, text="Go", font=("Arial",ui_text_size),
                                     command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
-        tmp_label2 = Label(self.frame, text="List of collisions", font=("Ariel",ui_text_size))
+        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
         self.conflict_listbox = Listbox(self.frame,
                                         width=28,
-                                        font=("Ariel",ui_text_size),
+                                        font=("Arial",ui_text_size),
                                         selectmode=EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
@@ -348,29 +348,29 @@ class PlanVis:
         # x = self.canvas.canvasx(event.x)  # get coordinates of the event on the canvas
         # y = self.canvas.canvasy(event.y)
         scale = 1.0
-        text_scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
             if round(min(self.width, self.height) * self.tile_size) < 30:
                 return  # image is less than 30 pixels
             scale /= 1.10
-            text_scale /= 1.10
             self.tile_size /= 1.10
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
             scale *= 1.10
-            text_scale *= 1.50
             self.tile_size *= 1.10
+        self.text_size = int(self.tile_size // 2)
         self.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.text_size*text_scale)))
+            self.canvas.itemconfigure(child_widget,
+                                      font=("Arial", self.text_size))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
     def resumeZoom(self):
         __scale = self.ppm * self.moves / self.tile_size
         self.canvas.scale("all", 0, 0, __scale, __scale)
         self.tile_size = self.ppm * self.moves
+        self.text_size = int(self.tile_size // 2)
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Ariel", self.text_size))
+            self.canvas.itemconfigure(child_widget, font=("Arial", self.text_size))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
         self.canvas.update()
 
@@ -383,7 +383,7 @@ class PlanVis:
             shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
             color (str, optional): The color of the mark. Defaults to "blue".
         """
-        offset = 0.002 * self.tile_size
+        offset = 0.05
         tmp_canvas = None
         if shape == "rectangle":
             tmp_canvas = self.canvas.create_rectangle((loc[0]+offset) * self.tile_size,
@@ -413,7 +413,7 @@ class PlanVis:
                                                 fill="black",
                                                 tag="text",
                                                 state="disable",
-                                                font=("Arial", self.text_size))
+                                                font=("Arial", int(self.tile_size // 2)))
         else:
             tmp_text = self.canvas.create_text((loc[0]+0.51)*self.tile_size,
                                                 (loc[1]+0.51)*self.tile_size,
@@ -421,7 +421,7 @@ class PlanVis:
                                                 fill=color,
                                                 tag="text",
                                                 state="disable",
-                                                font=("Arial", self.text_size))
+                                                font=("Arial", int(self.tile_size // 2)))
         return BaseObj(tmp_canvas, tmp_text, loc, color)
 
 
@@ -784,9 +784,9 @@ class PlanVis:
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
         for (_idx_, _agent_) in self.agents.items():
             _color_ = _agent_.agent_obj.color
+            _time_ = min(self.cur_timestep, len(_agent_.path)-1)
             self.canvas.delete(_agent_.agent_obj.obj)
             self.canvas.delete(_agent_.agent_obj.text)
-            _time_ = min(self.cur_timestep, len(_agent_.path)-1)
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_)
             self.canvas.update()
         return
