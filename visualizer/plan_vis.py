@@ -238,6 +238,7 @@ class PlanVis:
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
+                                      font=("Ariel",ui_text_size),
                                       validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
         self.update_button = Button(self.frame, text="Go", font=("Ariel",ui_text_size),
@@ -370,10 +371,11 @@ class PlanVis:
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
         self.canvas.update()
 
-    def render_obj(self, _idx_, loc:Tuple[int], shape:str="rectangle", color:str="blue")->None:
+    def render_obj(self, _idx_:int, loc:Tuple[int], shape:str="rectangle", color:str="blue"):
         """Mark certain positions on the visualizer
 
         Args:
+            _idx_ (int, required): The index of the object
             loc (List, required): A list of locations on the map.
             shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
             color (str, optional): The color of the mark. Defaults to "blue".
