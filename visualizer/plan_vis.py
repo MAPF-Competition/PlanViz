@@ -172,84 +172,87 @@ class PlanVis:
 
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
+        ui_text_size:int = 12
         self.frame = Frame(self.window)
         self.frame.grid(row=1, column=1,sticky="n")
         row_idx = 0
 
         self.timestep_label = Label(self.frame,
                               text = f"Timestep: {self.cur_timestep:03d}",
-                              font=("Arial", self.text_size + 10))
+                              font=("Arial", ui_text_size + 10))
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="wn")
         row_idx += 1
 
-        self.run_button = Button(self.frame, text="Play", font=("Ariel",self.text_size),
+        self.run_button = Button(self.frame, text="Play", font=("Ariel",ui_text_size),
                                  command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="wn")
-        self.pause_button = Button(self.frame, text="Pause", font=("Ariel",self.text_size),
+        self.pause_button = Button(self.frame, text="Pause", font=("Ariel",ui_text_size),
                                    command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="wn")
-        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Ariel",self.text_size),
+        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Ariel",ui_text_size),
                                          command=self.resumeZoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.next_button = Button(self.frame, text="Next", font=("Ariel",self.text_size),
+        self.next_button = Button(self.frame, text="Next", font=("Ariel",ui_text_size),
                                   command=self.move_agents_per_timestep)
         self.next_button.grid(row=row_idx, column=0, sticky="w")
-        self.prev_button = Button(self.frame, text="Prev", font=("Ariel",self.text_size),
+        self.prev_button = Button(self.frame, text="Prev", font=("Ariel",ui_text_size),
                                   command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="w")
-        self.restart_button = Button(self.frame, text="Reset", font=("Ariel",self.text_size),
+        self.restart_button = Button(self.frame, text="Reset", font=("Ariel",ui_text_size),
                                      command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="wn")
         row_idx += 1
 
-        self.grid_button = Checkbutton(self.frame, text="Show grids", font=("Ariel",self.text_size),
+        self.grid_button = Checkbutton(self.frame, text="Show grids",
+                                       font=("Ariel",ui_text_size),
                                        variable=self.is_grid, onvalue=True, offvalue=False,
                                        command=self.show_grid)
         self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.id_button = Checkbutton(self.frame, text="Show indices", font=("Ariel",self.text_size),
+        self.id_button = Checkbutton(self.frame, text="Show indices",
+                                     font=("Ariel",ui_text_size),
                                      variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                      command=self.show_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.static_button = Checkbutton(self.frame, text="Show start/goal locations",
-                                         font=("Ariel",self.text_size),
+                                         font=("Ariel",ui_text_size),
                                          variable=self.show_static, onvalue=True, offvalue=False,
                                          command=self.show_static_loc)
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
-                                                   font=("Ariel",self.text_size),
+                                                   font=("Ariel",ui_text_size),
                                                    variable=self.show_all_conf_ag,
                                                    onvalue=True, offvalue=False,
                                                    command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        tmp_label = Label(self.frame, text="Start timestep: ", font=("Ariel",self.text_size))
+        tmp_label = Label(self.frame, text="Start timestep: ", font=("Ariel",ui_text_size))
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
                                       validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
-        self.update_button = Button(self.frame, text="Go", font=("Ariel",self.text_size),
+        self.update_button = Button(self.frame, text="Go", font=("Ariel",ui_text_size),
                                     command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
-        tmp_label2 = Label(self.frame, text="List of collisions", font=("Ariel",self.text_size),)
+        tmp_label2 = Label(self.frame, text="List of collisions", font=("Ariel",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
         self.conflict_listbox = Listbox(self.frame,
                                         width=28,
-                                        font=("Ariel",self.text_size),
+                                        font=("Ariel",ui_text_size),
                                         selectmode=EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
@@ -271,7 +274,7 @@ class PlanVis:
         scrollbar = Scrollbar(self.frame, orient="vertical")
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
-        scrollbar.grid(row=row_idx, column=4, sticky="w")
+        scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
 
         print("Done!")
@@ -279,7 +282,7 @@ class PlanVis:
         # Adjust window size
         self.frame.update()
         wd_width = str((self.width+1) * self.tile_size + 300)
-        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height() + 10))
+        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
         self.window.geometry(wd_width + "x" + wd_height)
         self.window.title("MAPF Instance")
         print("=====            DONE            =====")
@@ -422,14 +425,14 @@ class PlanVis:
         # Render grids
         _line_color_ = "grey" if self.is_grid.get() is True else "white"
         for rid in range(self.height):  # Render horizontal lines
-            _line_ = self.canvas.create_line(rid * self.tile_size, 0,
-                                             rid * self.tile_size, self.width * self.tile_size,
+            _line_ = self.canvas.create_line(0, rid * self.tile_size,
+                                             self.width * self.tile_size, rid * self.tile_size,
                                              tags="grid",
                                              fill=_line_color_)
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
-            _line_ = self.canvas.create_line(0, cid * self.tile_size,
-                                             self.height * self.tile_size, cid * self.tile_size,
+            _line_ = self.canvas.create_line(cid * self.tile_size, 0,
+                                             cid * self.tile_size, self.height * self.tile_size,
                                              tags="grid",
                                              fill=_line_color_)
             self.grids.append(_line_)
