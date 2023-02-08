@@ -6,6 +6,7 @@ Python-based analitic tools for MAPF problems, which contains a visualizer and a
 - `--scen` (type: *str*): Path to the scen file (ends with `.scen`). See `example/maze-32-32-2-random-2.scen` for more details.
 - `--path` (type: *str*): Path to the path file (ends with `.path`). See `example/result.path` for more details.
 - `--n` (type: *int*): Number of agents need to show (*default*: All agents in the path file)
+- `--grid` (type: *bool*): Whether to show the grids on the map (*default*: false)
 - `--aid` (type: *bool*): Whether to show the agent indices (*default*: false)
 - `--static` (type: *bool*): Whether to show the start and goal locations (*default*: false)
 - `--ca` (type: *bool*): Whether to show the colliding agnets (*default*: false)
