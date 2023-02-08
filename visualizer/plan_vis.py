@@ -348,18 +348,21 @@ class PlanVis:
         # x = self.canvas.canvasx(event.x)  # get coordinates of the event on the canvas
         # y = self.canvas.canvasy(event.y)
         scale = 1.0
+        text_scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
             if round(min(self.width, self.height) * self.tile_size) < 30:
                 return  # image is less than 30 pixels
             scale /= 1.10
+            text_scale /= 1.10
             self.tile_size /= 1.10
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
             scale *= 1.10
+            text_scale *= 1.50
             self.tile_size *= 1.10
         self.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.text_size*scale)))
+            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.text_size*text_scale)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
     def resumeZoom(self):
