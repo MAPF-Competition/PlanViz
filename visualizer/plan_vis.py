@@ -741,11 +741,9 @@ def main() -> None:
                         help="Show agent indices or not")
     parser.add_argument('--static', type=bool, default=False, dest="show_static",
                         help="Show start/goal locations or not")
-    parser.add_argument('--conf', type=bool, default=False, dest="show_conf_ag",
+    parser.add_argument('--ca', type=bool, default=False, dest="show_conf_ag",
                         help="Show all colliding agents")
     args = parser.parse_args()
-
-    logging.getLogger().setLevel(logging.INFO)
 
     PlanVis(args)
     mainloop()
