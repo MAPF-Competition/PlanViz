@@ -115,7 +115,6 @@ class PlanVis:
         self.moves:int = tmp_config["moves"]
         self.ppm:int = tmp_config["pixel_per_move"]
         self.tile_size:int = self.ppm * self.moves
-        self.text_size:int = int(self.tile_size // 2)
         self.delay:int = tmp_config["delay"]
 
         self.width:int = -1
@@ -354,20 +353,18 @@ class PlanVis:
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
             scale *= 1.10
             self.tile_size *= 1.10
-        self.text_size = int(self.tile_size // 2)
         self.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.canvas.find_withtag("text"):
             self.canvas.itemconfigure(child_widget,
-                                      font=("Arial", self.text_size))
+                                      font=("Arial", int(self.tile_size // 2)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
     def resumeZoom(self):
         __scale = self.ppm * self.moves / self.tile_size
         self.canvas.scale("all", 0, 0, __scale, __scale)
         self.tile_size = self.ppm * self.moves
-        self.text_size = int(self.tile_size // 2)
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Arial", self.text_size))
+            self.canvas.itemconfigure(child_widget, font=("Arial", int(self.tile_size // 2)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
         self.canvas.update()
 
