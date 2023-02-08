@@ -182,7 +182,7 @@ class PlanVis:
                                    command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="wn")
         self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
-                                         command=self.resumeZoom)
+                                         command=self.resume_zoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
@@ -269,12 +269,13 @@ class PlanVis:
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
+        print("Done!")
 
         # Render instance on canvas
         self.render_env()
         self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
         self.mark_conf_agents()
-        print("Done!")
+        self.resume_zoom()
 
         # Adjust window size
         self.frame.update()
@@ -359,7 +360,7 @@ class PlanVis:
                                       font=("Arial", int(self.tile_size // 2)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
-    def resumeZoom(self):
+    def resume_zoom(self):
         __scale = self.ppm * self.moves / self.tile_size
         self.canvas.scale("all", 0, 0, __scale, __scale)
         self.tile_size = self.ppm * self.moves
@@ -782,7 +783,6 @@ class PlanVis:
             self.canvas.delete(_agent_.agent_obj.obj)
             self.canvas.delete(_agent_.agent_obj.text)
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_)
-            self.canvas.update()
         return
 
 
