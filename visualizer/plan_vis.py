@@ -56,6 +56,7 @@ class PlanVis:
     """Render MAPF instance
     """
     def __init__(self, in_arg) -> None:
+        print("===== Initialize MAPF visualizer =====")
 
         # Load the yaml file or the input arguments
         tmp_config: Dict = dict()
@@ -112,6 +113,7 @@ class PlanVis:
         self.moves:int = tmp_config["moves"]
         self.ppm:int = tmp_config["pixel_per_move"]
         self.tile_size:int = self.ppm * self.moves
+        self.text_size:int = self.tile_size//2
         self.delay:int = tmp_config["delay"]
 
         self.width:int = -1
@@ -131,16 +133,11 @@ class PlanVis:
         self.conflict_agents:set = self.get_conflict_agents(self.conflicts)
 
         self.window = Tk()
-        wd_width = str((self.width+1) * self.tile_size + self.pannel_width)
-        wd_height = str((self.height+1) * self.tile_size + 60)
-        self.window.geometry(wd_width + "x" + wd_height)
-        self.window.title("MAPF Instance")
 
         self.cur_timestep = 0
-        self.timestep_label = Label(self.window,
-                              text = f"Timestep: {self.cur_timestep:03d}",
-                              font=("Arial", int(self.tile_size)))
-        self.timestep_label.grid(row=0, column=0, sticky="w")
+
+        self.is_run = BooleanVar(self.window)
+        self.is_run.set(False)
 
         self.show_ag_idx = BooleanVar()
         self.show_ag_idx.set(tmp_config["show_ag_idx"])
@@ -171,12 +168,17 @@ class PlanVis:
         self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
 
         # Generate the GUI pannel
+        print("Rendering the pannel... ", end="")
         self.frame = Frame(self.window)
         self.frame.grid(row=1, column=1,sticky="n")
         row_idx = 0
 
-        self.is_run = BooleanVar(self.window)
-        self.is_run.set(False)
+        self.timestep_label = Label(self.frame,
+                              text = f"Timestep: {self.cur_timestep:03d}",
+                              font=("Arial"))
+        self.timestep_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
         self.run_button = Button(self.frame, text="Run", command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="w")
         self.pause_button = Button(self.frame, text="Pause", command=self.pause_agents)
@@ -223,7 +225,7 @@ class PlanVis:
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
-        self.conflict_listbox = Listbox(self.frame, height=10, selectmode=EXTENDED)
+        self.conflict_listbox = Listbox(self.frame, selectmode=EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
             for _conf_ in self.conflicts[_timestep_]:
@@ -243,6 +245,16 @@ class PlanVis:
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=row_idx, column=4, sticky="w")
         row_idx += 1
+
+        print("Done!")
+
+        # Adjust window size
+        self.frame.update()
+        wd_width = str((self.width+1) * self.tile_size + self.pannel_width)
+        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height() + 10))
+        self.window.geometry(wd_width + "x" + wd_height)
+        self.window.title("MAPF Instance")
+        print("=====            DONE            =====")
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
@@ -310,7 +322,7 @@ class PlanVis:
             self.tile_size *= 1.10
         self.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Ariel", int((self.tile_size//2)*scale)))
+            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.text_size*scale)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
     def resumeZoom(self):
@@ -318,7 +330,7 @@ class PlanVis:
         self.canvas.scale("all", 0, 0, __scale, __scale)
         self.tile_size = self.ppm * self.moves
         for child_widget in self.canvas.find_withtag("text"):
-            self.canvas.itemconfigure(child_widget, font=("Ariel", int(self.tile_size//2)))
+            self.canvas.itemconfigure(child_widget, font=("Ariel", self.text_size))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
         self.canvas.update()
 
@@ -330,7 +342,7 @@ class PlanVis:
             shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
             color (str, optional): The color of the mark. Defaults to "blue".
         """
-        offset = 0.05
+        offset = 0.002 * self.tile_size
         tmp_canvas = None
         if shape == "rectangle":
             tmp_canvas = self.canvas.create_rectangle((loc[0]+offset) * self.tile_size,
@@ -360,7 +372,7 @@ class PlanVis:
                                                 fill="black",
                                                 tag="text",
                                                 state="disable",
-                                                font=("Arial", int(self.tile_size//2)))
+                                                font=("Arial", self.text_size))
         else:
             tmp_text = self.canvas.create_text((loc[0]+0.51)*self.tile_size,
                                                 (loc[1]+0.51)*self.tile_size,
@@ -368,11 +380,12 @@ class PlanVis:
                                                 fill=color,
                                                 tag="text",
                                                 state="disable",
-                                                font=("Arial", int(self.tile_size//2)))
+                                                font=("Arial", self.text_size))
         return BaseObj(tmp_canvas, tmp_text, loc, color)
 
 
     def render_env(self) -> None:
+        print("Rendering the environment ... ", end="")
         for rid, _cur_row_ in enumerate(self.env_map):
             for cid, _cur_ele_ in enumerate(_cur_row_):
                 if _cur_ele_ is False:
@@ -401,9 +414,11 @@ class PlanVis:
         # self.canvas.create_line(0, self.height * self.tile_size,
         #                         self.width * self.tile_size, self.height * self.tile_size,
         #                         fill="grey")
+        print("Done!")
 
 
     def render_agents(self, start_loc:List, goal_loc:List, paths:List) -> None:
+        print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         tmp_starts = list()
         tmp_goals = list()
@@ -418,6 +433,7 @@ class PlanVis:
             agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_], paths[_ag_])
             self.agents[_ag_] = agent
         self.show_static_loc()
+        print("Done!")
 
 
     def mark_conf_agents(self) -> None:
@@ -478,6 +494,7 @@ class PlanVis:
     def load_map(self, map_file:str = None) -> None:
         if map_file is None:
             map_file = self.map_file
+        print("Loading map from " + map_file, end = '... ')
 
         with open(map_file, "r") as fin:
             fin.readline()  # ignore type
@@ -494,11 +511,16 @@ class PlanVis:
                 assert len(out_line) == self.width
                 self.env_map.append(out_line)
         assert len(self.env_map) == self.height
-
+        print("Done!")
 
     def load_init_loc(self, scen_file:str = None) -> Tuple[Dict]:
         if scen_file is None:
             scen_file = self.scen_file
+
+        print("Loading scen from "+str(scen_file), end="... ")
+        if not os.path.exists(scen_file):
+            logging.warning("\nNo scen file is found!")
+            return
 
         start_loc = dict()
         goal_loc = dict()
@@ -513,14 +535,18 @@ class PlanVis:
                 ag_counter += 1
                 if ag_counter == self.num_of_agents:
                     break
+
+        print("Done!")
         return (start_loc, goal_loc)
 
 
     def load_paths(self, path_file:str = None):
         if path_file is None:
             path_file = self.path_file
+
+        print("Loading paths from "+str(path_file), end="... ")
         if not os.path.exists(path_file):
-            logging.warning("No path file is found!")
+            logging.warning("\nNo path file is found!")
             return
 
         paths = dict()
@@ -545,14 +571,19 @@ class PlanVis:
             if self.makespan < max(len(paths[ag_idx])-1, 0):
                 self.makespan = max(len(paths[ag_idx])-1, 0)
 
+        print("Done!")
         return paths
+
 
     @staticmethod
     def load_conflicts(in_file:str):
         if not os.path.exists(in_file):
-            logging.warning("No path file is found!")
+            logging.warning("No conflict file is found!")
             return
         conflicts = dict()
+        last_line = str()
+        with open(in_file, "r") as fin:
+            last_line = fin.readlines()[-1]
         with open(in_file, "r") as fin:
             while True:
                 line = fin.readline()
@@ -569,6 +600,8 @@ class PlanVis:
                         if timestep not in conflicts.keys():
                             conflicts[timestep] = list()
                         conflicts[timestep].append(conf)
+                    break
+                if line == last_line:
                     break
         return conflicts
 
@@ -687,13 +720,6 @@ class PlanVis:
             _time_ = min(self.cur_timestep, len(_agent_.path)-1)
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_)
             self.canvas.update()
-            # offset = 0.05
-            # self.canvas.moveto(_agent_.agent_obj.obj,
-            #                    (_agent_.path[_time_][0])*self.tile_size,
-            #                    (_agent_.path[_time_][1])*self.tile_size)
-            # self.canvas.moveto(_agent_.agent_obj.text,
-            #                    (_agent_.path[_time_][0])*self.tile_size,
-            #                    (_agent_.path[_time_][1])*self.tile_size)
         return
 
 
@@ -717,6 +743,8 @@ def main() -> None:
     parser.add_argument('--conf', type=bool, default=False, dest="show_conf_ag",
                         help="Show all colliding agents")
     args = parser.parse_args()
+
+    logging.getLogger().setLevel(logging.INFO)
 
     PlanVis(args)
     mainloop()
