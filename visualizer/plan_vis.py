@@ -125,30 +125,26 @@ class PlanVis:
 
         self.agents:Dict = dict()
         self.makespan:int = -1
+        self.cur_timestep = 0
 
+        # Load from files
         self.load_map()
         (start_loc, goal_loc) = self.load_init_loc()
         paths = self.load_paths()
         self.conflicts:Dict = self.load_conflicts(self.path_file)
-        self.conflict_agents:set = self.get_conflict_agents(self.conflicts)
 
+        # Initialize the window
         self.window = Tk()
-
-        self.cur_timestep = 0
-
-        self.is_run = BooleanVar(self.window)
-        self.is_run.set(False)
-
+        self.is_run = BooleanVar()
         self.is_grid = BooleanVar()
-        self.is_grid.set(tmp_config["show_grid"])
-
         self.show_ag_idx = BooleanVar()
-        self.show_ag_idx.set(tmp_config["show_ag_idx"])
-
         self.show_static = BooleanVar()
-        self.show_static.set(tmp_config["show_static"])
-
         self.show_all_conf_ag = BooleanVar()
+
+        self.is_run.set(False)
+        self.is_grid.set(tmp_config["show_grid"])
+        self.show_ag_idx.set(tmp_config["show_ag_idx"])
+        self.show_static.set(tmp_config["show_static"])
         self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
@@ -166,9 +162,6 @@ class PlanVis:
         self.canvas.bind("<Button-5>", self.__wheel)
         #windows scroll
         self.canvas.bind("<MouseWheel>",self.__wheel)
-
-        self.render_env()
-        self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
 
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
@@ -278,6 +271,10 @@ class PlanVis:
         scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
 
+        # Render instance on canvas
+        self.render_env()
+        self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
+        self.mark_conf_agents()
         print("Done!")
 
         # Adjust window size
