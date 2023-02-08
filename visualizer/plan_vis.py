@@ -454,15 +454,15 @@ class PlanVis:
                                     (self.height+0.5)*self.tile_size,
                                     text=str(cid),
                                     fill="black",
-                                    tag="coor",
-                                    font=("Arial", int(self.tile_size*0.4)))
+                                    tag="text",
+                                    font=("Arial", int(self.tile_size//2)))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
                                     (rid+0.5)*self.tile_size,
                                     text=str(rid),
                                     fill="black",
-                                    tag="coor",
-                                    font=("Arial", int(self.tile_size*0.4)))
+                                    tag="text",
+                                    font=("Arial", int(self.tile_size//2)))
         self.canvas.create_line(self.width * self.tile_size, 0,
                                 self.width * self.tile_size, self.height * self.tile_size,
                                 fill="black")
