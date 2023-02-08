@@ -21,7 +21,8 @@ COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "gr
 MAP_CONFIG: Dict[str,Dict] = {
     "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08}
+    "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
+    "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
 }
 
 
