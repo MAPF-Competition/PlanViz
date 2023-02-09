@@ -475,7 +475,7 @@ class PlanVis:
         print("Done!")
 
 
-    def render_agents(self, start_loc:Dict, goal_loc:Dict, paths:Dict[List[Tuple[int]]]):
+    def render_agents(self, start_loc, goal_loc, paths):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         tmp_starts = list()

@@ -11,7 +11,7 @@ Python-based analitic tools for MAPF problems, which contains a visualizer and a
 - `--static` (type: *bool*): Whether to show the start and goal locations (*default*: false)
 - `--ca` (type: *bool*): Whether to show the colliding agnets (*default*: false)
 - `--ppm` (type: *int*):  Number of pixels per move, depending on the size of the map
-- `--mv` (type: *int*):  Number of moves per timestep; the tile size of the map is the multiplication of `ppm` and `mv`.
+- `--mv` (type: *int*):  Number of moves per timestep; the tile size of the map is `ppm` $\times$ `mv`.
 - `--delay` (type: *float*):  Wait time for each timestep
 
 If one is using the map from the [mapf benchmarks](https://movingai.com/benchmarks/mapf.html),
