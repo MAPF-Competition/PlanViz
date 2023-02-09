@@ -45,13 +45,14 @@ class BaseObj:
         self.color = _color_
 
 class Agent:
-    def __init__(self, _idx_, _ag_obj_:BaseObj,
-                 _start_:BaseObj, _goal_:BaseObj, _path_:List) -> None:
+    def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj, _goal_:BaseObj,
+                 _path_:List, _path_objs_:List[BaseObj]):
         self.idx = _idx_
         self.agent_obj = _ag_obj_
         self.start_obj = _start_
         self.goal_obj = _goal_
         self.path = _path_
+        self.path_objs = _path_objs_
 
 class PlanVis:
     """Render MAPF instance
@@ -125,6 +126,7 @@ class PlanVis:
         self.agents:Dict = dict()
         self.makespan:int = -1
         self.cur_timestep = 0
+        self.shown_path_agents = set()
 
         # Load from files
         self.load_map()
@@ -161,6 +163,8 @@ class PlanVis:
         self.canvas.bind("<Button-5>", self.__wheel)
         #windows scroll
         self.canvas.bind("<MouseWheel>",self.__wheel)
+
+        self.canvas.bind("<Button-3>", self.show_ag_path)
 
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
@@ -274,6 +278,8 @@ class PlanVis:
         # Render instance on canvas
         self.render_env()
         self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
+        self.show_static_loc()
+        self.show_index()
         self.mark_conf_agents()
         self.resume_zoom()
 
@@ -289,10 +295,6 @@ class PlanVis:
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=color)
         self.agents[ag_idx].agent_obj.color = color
-        if self.show_ag_idx.get() is True:
-            self.canvas.itemconfig(self.agents[ag_idx].agent_obj.text, fill="black")
-        else:
-            self.canvas.itemconfig(self.agents[ag_idx].agent_obj.text, fill=color)
 
 
     def select_conflict(self, event):
@@ -360,6 +362,7 @@ class PlanVis:
                                       font=("Arial", int(self.tile_size // 2)))
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
+
     def resume_zoom(self):
         __scale = self.ppm * self.moves / self.tile_size
         self.canvas.scale("all", 0, 0, __scale, __scale)
@@ -369,72 +372,69 @@ class PlanVis:
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
         self.canvas.update()
 
-    def render_obj(self, _idx_:int, loc:Tuple[int], shape:str="rectangle", color:str="blue"):
+
+    def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
+                   _color_:str="blue", _state_:str="normal", offset:float=0.05, _tag_:str="obj"):
         """Mark certain positions on the visualizer
 
         Args:
             _idx_ (int, required): The index of the object
-            loc (List, required): A list of locations on the map.
-            shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
-            color (str, optional): The color of the mark. Defaults to "blue".
+            _loc_ (List, required): A list of locations on the map.
+            _shape_ (str, optional): The shape of marked on each location. Defaults to "rectangle".
+            _color_ (str, optional): The color of the mark. Defaults to "blue".
+            _state_ (str, optional): Whether to show the object or not. Defaults to "normal"
         """
-        offset = 0.05
-        tmp_canvas = None
-        if shape == "rectangle":
-            tmp_canvas = self.canvas.create_rectangle((loc[0]+offset) * self.tile_size,
-                                                      (loc[1]+offset) * self.tile_size,
-                                                      (loc[0]+1-offset) * self.tile_size,
-                                                      (loc[1]+1-offset) * self.tile_size,
-                                                      fill=color,
-                                                      state="disable",
-                                                      outline="")
-        elif shape == "oval":
-            tmp_canvas = self.canvas.create_oval((loc[0]+offset) * self.tile_size,
-                                                 (loc[1]+offset) * self.tile_size,
-                                                 (loc[0]+1-offset) * self.tile_size,
-                                                 (loc[1]+1-offset) * self.tile_size,
-                                                 fill=color,
-                                                 state="disable",
-                                                 outline="")
+        _tmp_canvas_ = None
+        if _shape_ == "rectangle":
+            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[0]+offset) * self.tile_size,
+                                                        (_loc_[1]+offset) * self.tile_size,
+                                                        (_loc_[0]+1-offset) * self.tile_size,
+                                                        (_loc_[1]+1-offset) * self.tile_size,
+                                                        fill=_color_,
+                                                        tag=_tag_,
+                                                        state=_state_,
+                                                        outline="")
+        elif _shape_ == "oval":
+            _tmp_canvas_ = self.canvas.create_oval((_loc_[0]+offset) * self.tile_size,
+                                                   (_loc_[1]+offset) * self.tile_size,
+                                                   (_loc_[0]+1-offset) * self.tile_size,
+                                                   (_loc_[1]+1-offset) * self.tile_size,
+                                                   fill=_color_,
+                                                   tag=_tag_,
+                                                   state=_state_,
+                                                   outline="")
         else:
             logging.error("Undefined shape.")
             sys.exit()
 
-        tmp_text = None
-        if self.show_ag_idx.get() is True:
-            tmp_text = self.canvas.create_text((loc[0]+0.5)*self.tile_size,
-                                                (loc[1]+0.5)*self.tile_size,
-                                                text=str(_idx_),
-                                                fill="black",
-                                                tag="text",
-                                                state="disable",
-                                                font=("Arial", int(self.tile_size // 2)))
-        else:
-            tmp_text = self.canvas.create_text((loc[0]+0.51)*self.tile_size,
-                                                (loc[1]+0.51)*self.tile_size,
-                                                text=str(_idx_),
-                                                fill=color,
-                                                tag="text",
-                                                state="disable",
-                                                font=("Arial", int(self.tile_size // 2)))
-        return BaseObj(tmp_canvas, tmp_text, loc, color)
+        _tmp_text_ = self.canvas.create_text((_loc_[0]+0.5)*self.tile_size,
+                                            (_loc_[1]+0.5)*self.tile_size,
+                                            text=str(_idx_),
+                                            fill="black",
+                                            tag=("text", _tag_),
+                                            state=_state_,
+                                            font=("Arial", int(self.tile_size // 2)))
+
+        return BaseObj(_tmp_canvas_, _tmp_text_, _loc_, _color_)
 
 
     def render_env(self) -> None:
         print("Rendering the environment ... ", end="")
         # Render grids
-        _line_color_ = "grey" if self.is_grid.get() is True else "white"
+        _line_state_ = "normal" if self.is_grid.get() is True else "hidden"
         for rid in range(self.height):  # Render horizontal lines
             _line_ = self.canvas.create_line(0, rid * self.tile_size,
                                              self.width * self.tile_size, rid * self.tile_size,
                                              tags="grid",
-                                             fill=_line_color_)
+                                             state= _line_state_,
+                                             fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
             _line_ = self.canvas.create_line(cid * self.tile_size, 0,
                                              cid * self.tile_size, self.height * self.tile_size,
                                              tags="grid",
-                                             fill=_line_color_)
+                                             state= _line_state_,
+                                             fill="grey")
             self.grids.append(_line_)
 
         # Render obstacles
@@ -445,6 +445,7 @@ class PlanVis:
                                                  rid * self.tile_size,
                                                  (cid+1)*self.tile_size,
                                                  (rid+1)*self.tile_size,
+                                                 state="disable",
                                                  fill="black")
         # Render coordinates
         for cid in range(self.width):
@@ -453,6 +454,7 @@ class PlanVis:
                                     text=str(cid),
                                     fill="black",
                                     tag="text",
+                                    state="disable",
                                     font=("Arial", int(self.tile_size//2)))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
@@ -460,33 +462,73 @@ class PlanVis:
                                     text=str(rid),
                                     fill="black",
                                     tag="text",
+                                    state="disable",
                                     font=("Arial", int(self.tile_size//2)))
         self.canvas.create_line(self.width * self.tile_size, 0,
                                 self.width * self.tile_size, self.height * self.tile_size,
+                                state="disable",
                                 fill="black")
         self.canvas.create_line(0, self.height * self.tile_size,
                                 self.width * self.tile_size, self.height * self.tile_size,
+                                state="disable",
                                 fill="black")
         print("Done!")
 
 
-    def render_agents(self, start_loc:List, goal_loc:List, paths:List) -> None:
+    def render_agents(self, start_loc:Dict, goal_loc:Dict, paths:Dict[List[Tuple[int]]]):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         tmp_starts = list()
         tmp_goals = list()
+        tmp_paths = list()
         for _ag_ in range(self.num_of_agents):
-            start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen")
-            goal = self.render_obj(_ag_, goal_loc[_ag_], "rectangle", "orange")
+            start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen", "disable")
+            goal = self.render_obj(_ag_, goal_loc[_ag_], "rectangle", "orange", "disable")
             tmp_starts.append(start)
             tmp_goals.append(goal)
 
         for _ag_ in range(self.num_of_agents):
-            agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", "deepskyblue")
-            agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_], paths[_ag_])
+            ag_path = list()
+            for _pid_ in range(len(paths[_ag_])):
+                _p_loc_ = paths[_ag_][_pid_]
+                _p_obj = None
+                if _pid_ > 0 and _p_loc_ == paths[_ag_][_pid_-1]:  # wait action
+                    _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.25)
+                else:  # non=wait action, smaller rectangle
+                    _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.4)
+                self.canvas.itemconfigure(_p_obj.obj, state="hidden")
+                self.canvas.delete(_p_obj.text)
+                ag_path.append(_p_obj)
+            tmp_paths.append(ag_path)
+
+        for _ag_ in range(self.num_of_agents):
+            agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", "deepskyblue",
+                                        "normal", 0.05, str(_ag_))
+            agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_],
+                          paths[_ag_], tmp_paths[_ag_])
             self.agents[_ag_] = agent
-        self.show_static_loc()
         print("Done!")
+
+
+    def show_ag_path(self, event):
+        item = self.canvas.find_closest(event.x, event.y)[0]
+        tags:set(str) = self.canvas.gettags(item)
+        ag_idx = -1
+        for _tt_ in tags:
+            if _tt_.isnumeric():
+                ag_idx = int(_tt_)  # get the id of the agent
+                break
+        if ag_idx == -1:
+            return
+
+        if ag_idx in self.shown_path_agents:
+            self.shown_path_agents.remove(ag_idx)
+            for _p_ in self.agents[ag_idx].path_objs:
+                self.canvas.itemconfigure(_p_.obj, state="hidden")
+        else:
+            self.shown_path_agents.add(ag_idx)
+            for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].path_objs)):
+                self.canvas.itemconfigure(self.agents[ag_idx].path_objs[_pid_].obj, state="disable")
 
 
     def mark_conf_agents(self) -> None:
@@ -501,56 +543,31 @@ class PlanVis:
     def show_grid(self) -> None:
         if self.is_grid.get() is True:
             for _line_ in self.grids:
-                self.canvas.itemconfig(_line_, fill="grey")
+                self.canvas.itemconfig(_line_, state="normal")
         else:
             for _line_ in self.grids:
-                self.canvas.itemconfig(_line_, fill="white")
+                self.canvas.itemconfig(_line_, state="hidden")
 
 
     def show_index(self) -> None:
-        if self.show_static.get() is True and self.show_ag_idx.get() is True:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
-                self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
-                self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
-
-        elif self.show_static.get() is True and self.show_ag_idx.get() is False:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
-                self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
-                self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
-
-        elif self.show_static.get() is False and self.show_ag_idx.get() is True:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.agent_obj.text, fill="black")
-                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
-                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
-
-        else:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.agent_obj.text, fill=_agent_.agent_obj.color)
-                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
-                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
+        _state_ = "disable" if self.show_ag_idx.get() is True else "hidden"
+        _ts_ = "disable" if (self.show_ag_idx.get() is True and\
+            self.show_static.get() is True) else "hidden"
+        for (_, _agent_) in self.agents.items():
+            self.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
+            self.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
+            self.canvas.itemconfig(_agent_.goal_obj.text, state=_ts_)
 
 
     def show_static_loc(self) -> None:
-        if self.show_static.get() is True:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.start_obj.obj, fill=_agent_.start_obj.color)
-                self.canvas.itemconfig(_agent_.goal_obj.obj, fill=_agent_.goal_obj.color)
-                if self.show_ag_idx.get() is True:
-                    self.canvas.itemconfig(_agent_.start_obj.text, fill="black")
-                    self.canvas.itemconfig(_agent_.goal_obj.text, fill="black")
-                else:
-                    self.canvas.itemconfig(_agent_.start_obj.text, fill=_agent_.start_obj.color)
-                    self.canvas.itemconfig(_agent_.goal_obj.text, fill=_agent_.goal_obj.color)
-
-        else:
-            for (_, _agent_) in self.agents.items():
-                self.canvas.itemconfig(_agent_.start_obj.obj, fill="white")
-                self.canvas.itemconfig(_agent_.goal_obj.obj, fill="white")
-                self.canvas.itemconfig(_agent_.start_obj.text, fill="white")
-                self.canvas.itemconfig(_agent_.goal_obj.text, fill="white")
+        _os_ = "disable" if self.show_static.get() is True else "hidden"
+        _ts_ = "disable" if (self.show_ag_idx.get() is True and\
+            self.show_static.get() is True) else "hidden"
+        for (_, _agent_) in self.agents.items():
+            self.canvas.itemconfig(_agent_.start_obj.obj, state=_os_)
+            self.canvas.itemconfig(_agent_.goal_obj.obj, state=_os_)
+            self.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
+            self.canvas.itemconfig(_agent_.goal_obj.text, state=_ts_)
 
 
     def load_map(self, map_file:str = None) -> None:
@@ -582,7 +599,7 @@ class PlanVis:
         print("Loading scen from "+str(scen_file), end="... ")
         if not os.path.exists(scen_file):
             logging.warning("\nNo scen file is found!")
-            return
+            return (-1, -1)
 
         start_loc = dict()
         goal_loc = dict()
@@ -602,7 +619,7 @@ class PlanVis:
         return (start_loc, goal_loc)
 
 
-    def load_paths(self, path_file:str = None):
+    def load_paths(self, path_file:str = None) -> List[List[Tuple[int]]]:
         if path_file is None:
             path_file = self.path_file
 
@@ -782,8 +799,9 @@ class PlanVis:
             _time_ = min(self.cur_timestep, len(_agent_.path)-1)
             self.canvas.delete(_agent_.agent_obj.obj)
             self.canvas.delete(_agent_.agent_obj.text)
-            _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_)
-        return
+            _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_,
+                                                "normal", 0.05, str(_idx_))
+        self.show_index()
 
 
 def main() -> None:
