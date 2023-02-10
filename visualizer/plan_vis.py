@@ -313,6 +313,9 @@ class PlanVis:
 
     def restart_timestep(self):
         self.new_time.set(0)
+        for (_, _agent_) in self.agents.items():
+            for _p_obj_ in _agent_.path_objs:
+                self.canvas.itemconfigure(_p_obj_.obj, state="hidden")
         self.update_curtime()
 
 
