@@ -4,7 +4,9 @@ Python-based analitic tools for MAPF problems, which contains a visualizer and a
 ### Arguments
 - `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/maze-32-32-2.map` for more details.
 - `--scen` (type: *str*): Path to the scen file (ends with `.scen`). See `example/maze-32-32-2-random-2.scen` for more details.
-- `--path` (type: *str*): Path to the path file (ends with `.path`). See `example/result.path` for more details.
+- `--plan` (type: *str*): Path to the planned path file (ends with `.path`). See `example/result.path` for more details.
+- `--exec` (type: *str*): Path to the execution path file (ends with `.path`). See `example/invalid_result.path` for more details.
+- `--conf` (type: *str*): Path to the conflict file (ends with `.conf`). See `example/invalid_result.conf` for more details.
 - `--n` (type: *int*): Number of agents need to show (*default*: All agents in the path file)
 - `--grid` (type: *bool*): Whether to show the grids on the map (*default*: false)
 - `--aid` (type: *bool*): Whether to show the agent indices (*default*: false)

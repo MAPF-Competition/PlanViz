@@ -22,7 +22,8 @@ MAP_CONFIG: Dict[str,Dict] = {
     "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
+    "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08},
+    "warehouse-20-40-10-2-1": {"pixel_per_move": 2, "moves": 2, "delay": 0.08}
 }
 
 
@@ -46,13 +47,15 @@ class BaseObj:
 
 class Agent:
     def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj, _goal_:BaseObj,
-                 _path_:List, _path_objs_:List[BaseObj]):
+                 _path_:List, _path_objs_:List[BaseObj], _exec_path_:List=None):
         self.idx = _idx_
         self.agent_obj = _ag_obj_
         self.start_obj = _start_
         self.goal_obj = _goal_
-        self.path = _path_
+        self.plan_path = _path_
         self.path_objs = _path_objs_
+        self.exec_path = _exec_path_
+        self.path = self.exec_path
 
 class PlanVis:
     """Render MAPF instance
@@ -70,7 +73,9 @@ class PlanVis:
         else:
             tmp_config["map_file"] = in_arg.map
             tmp_config["scen_file"] = in_arg.scen
-            tmp_config["path_file"] = in_arg.path
+            tmp_config["plan_file"] = in_arg.plan
+            tmp_config["exec_file"] = in_arg.exec
+            tmp_config["conf_file"] = in_arg.conf
             tmp_config["num_of_agents"] = in_arg.num_of_agents
             tmp_config["show_grid"] = in_arg.show_grid
             tmp_config["show_ag_idx"] = in_arg.show_ag_idx
@@ -101,7 +106,7 @@ class PlanVis:
 
         assert "map_file" in tmp_config.keys()
         assert "scen_file" in tmp_config.keys()
-        assert "path_file" in tmp_config.keys()
+        assert "plan_file" in tmp_config.keys()
         assert "num_of_agents" in tmp_config.keys()
         assert "delay" in tmp_config.keys()
         assert "pixel_per_move" in tmp_config.keys()
@@ -110,7 +115,9 @@ class PlanVis:
         # Assign configuration to the variable
         self.map_file:str = tmp_config["map_file"]
         self.scen_file:str = tmp_config["scen_file"]
-        self.path_file:str = tmp_config["path_file"]
+        self.plan_file:str = tmp_config["plan_file"]
+        self.exec_file:str = tmp_config["exec_file"]
+        self.conf_file:str = tmp_config["conf_file"]
         self.num_of_agents:int = tmp_config["num_of_agents"]
 
         self.moves:int = tmp_config["moves"]
@@ -131,8 +138,9 @@ class PlanVis:
         # Load from files
         self.load_map()
         (start_loc, goal_loc) = self.load_init_loc()
-        paths = self.load_paths()
-        self.conflicts:Dict = self.load_conflicts(self.path_file)
+        plan_paths = self.load_paths()
+        exec_paths = self.load_paths(self.exec_file)
+        self.conflicts:Dict = self.load_conflicts()
 
         # Initialize the window
         self.window = Tk()
@@ -222,6 +230,13 @@ class PlanVis:
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
+        self.is_move_plan = BooleanVar()
+        self.is_move_plan.set(False)
+        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
+                                          command=self.update_is_move_plan)
+        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
         self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
                                                    font=("Arial",ui_text_size),
                                                    variable=self.show_all_conf_ag,
@@ -277,7 +292,8 @@ class PlanVis:
 
         # Render instance on canvas
         self.render_env()
-        self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
+        self.render_agents(start_loc=start_loc, goal_loc=goal_loc,
+                           plan_paths=plan_paths, exec_paths=exec_paths)
         self.show_static_loc()
         self.show_index()
         self.mark_conf_agents()
@@ -309,6 +325,7 @@ class PlanVis:
             self.change_ag_color(_conf_[0][0], "red")
             self.change_ag_color(_conf_[0][1], "red")
             self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        logging.info("Select conflict.")
 
 
     def restart_timestep(self):
@@ -478,12 +495,19 @@ class PlanVis:
         print("Done!")
 
 
-    def render_agents(self, start_loc, goal_loc, paths):
+    def render_agents(self, start_loc, goal_loc, plan_paths, exec_paths=None):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         tmp_starts = list()
         tmp_goals = list()
-        tmp_paths = list()
+        tmp_plan_paths = list()
+
+        shown_paths = None
+        if exec_paths is None:
+            shown_paths = plan_paths
+        else:
+            shown_paths = exec_paths
+
         for _ag_ in range(self.num_of_agents):
             start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen", "disable")
             goal = self.render_obj(_ag_, goal_loc[_ag_], "rectangle", "orange", "disable")
@@ -492,23 +516,23 @@ class PlanVis:
 
         for _ag_ in range(self.num_of_agents):
             ag_path = list()
-            for _pid_ in range(len(paths[_ag_])):
-                _p_loc_ = paths[_ag_][_pid_]
+            for _pid_ in range(len(plan_paths[_ag_])):
+                _p_loc_ = plan_paths[_ag_][_pid_]
                 _p_obj = None
-                if _pid_ > 0 and _p_loc_ == paths[_ag_][_pid_-1]:  # wait action
+                if _pid_ > 0 and _p_loc_ == plan_paths[_ag_][_pid_-1]:  # wait action
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.25)
                 else:  # non=wait action, smaller rectangle
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.4)
                 self.canvas.itemconfigure(_p_obj.obj, state="hidden")
                 self.canvas.delete(_p_obj.text)
                 ag_path.append(_p_obj)
-            tmp_paths.append(ag_path)
+            tmp_plan_paths.append(ag_path)
 
         for _ag_ in range(self.num_of_agents):
             agent_obj = self.render_obj(_ag_, start_loc[_ag_], "oval", "deepskyblue",
                                         "normal", 0.05, str(_ag_))
             agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_],
-                          paths[_ag_], tmp_paths[_ag_])
+                          plan_paths[_ag_], tmp_plan_paths[_ag_], shown_paths[_ag_])
             self.agents[_ag_] = agent
         print("Done!")
 
@@ -532,9 +556,10 @@ class PlanVis:
             self.shown_path_agents.add(ag_idx)
             for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].path_objs)):
                 self.canvas.itemconfigure(self.agents[ag_idx].path_objs[_pid_].obj, state="disable")
-
+            logging.info("Showing path for agent %d", ag_idx)
 
     def mark_conf_agents(self) -> None:
+        logging.info("Marking colliding agents.")
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
         _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
         for _conf_ in self.shown_conflicts.values():
@@ -545,6 +570,7 @@ class PlanVis:
 
     def show_grid(self) -> None:
         if self.is_grid.get() is True:
+            logging.info("Show grids")
             for _line_ in self.grids:
                 self.canvas.itemconfig(_line_, state="normal")
         else:
@@ -563,6 +589,8 @@ class PlanVis:
 
 
     def show_static_loc(self) -> None:
+        if self.show_static.get():
+            logging.info("Show start and goal locations.")
         _os_ = "disable" if self.show_static.get() is True else "hidden"
         _ts_ = "disable" if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else "hidden"
@@ -602,21 +630,36 @@ class PlanVis:
         print("Loading scen from "+str(scen_file), end="... ")
         if not os.path.exists(scen_file):
             logging.warning("\nNo scen file is found!")
-            return (-1, -1)
+            exit(1)
 
         start_loc = dict()
         goal_loc = dict()
         with open(scen_file, "r") as fin:
-            fin.readline()  # ignore the first line 'version 1'
-            ag_counter:int = 0
-            for line in fin.readlines():
-                line_seg = line.split('\t')
-                start_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
-                goal_loc[ag_counter] = (int(line_seg[6]), int(line_seg[7]))
+            head = fin.readline().rstrip('\n').split(" ")[0]  # ignore the first line 'version 1'
+            if head == "version":  # load scen file in Nathan's format
+                ag_counter:int = 0
+                for line in fin.readlines():
+                    line_seg = line.split('\t')
+                    start_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
+                    goal_loc[ag_counter] = (int(line_seg[6]), int(line_seg[7]))
+                    ag_counter += 1
+                    if ag_counter == self.num_of_agents:
+                        break
 
-                ag_counter += 1
-                if ag_counter == self.num_of_agents:
-                    break
+            elif head.isnumeric():  # load scen file in Jiaoyang's format
+                total_ag_num = int(head)
+                if self.num_of_agents > 0 and self.num_of_agents > total_ag_num:
+                    logging.warning("Invalid number of agents!")
+                    sys.exit()
+
+                ag_counter = 0
+                for line in fin.readlines():
+                    line_seg = line.split(",")
+                    start_loc[ag_counter] = (int(line_seg[1]), int(line_seg[0]))
+                    goal_loc[ag_counter] = (int(line_seg[3]), int(line_seg[2]))
+                    ag_counter += 1
+                    if ag_counter == self.num_of_agents:
+                        break
 
         print("Done!")
         return (start_loc, goal_loc)
@@ -624,7 +667,7 @@ class PlanVis:
 
     def load_paths(self, path_file:str = None) -> List[List[Tuple[int]]]:
         if path_file is None:
-            path_file = self.path_file
+            path_file = self.plan_file
 
         print("Loading paths from "+str(path_file), end="... ")
         if not os.path.exists(path_file):
@@ -657,11 +700,15 @@ class PlanVis:
         return paths
 
 
-    @staticmethod
-    def load_conflicts(in_file:str):
+    def load_conflicts(self, in_file:str = None):
+        if in_file is None:
+            in_file = self.conf_file
+
+        print("Loading conflicts from "+str(in_file), end="... ")
         if not os.path.exists(in_file):
             logging.warning("No conflict file is found!")
-            return
+            in_file = self.plan_file
+
         conflicts = dict()
         last_line = str()
         with open(in_file, "r") as fin:
@@ -670,7 +717,6 @@ class PlanVis:
             while True:
                 line = fin.readline()
                 if line.rstrip('\n') == "Conflicts":
-                    line = fin.readline()
                     while True:
                         line = fin.readline().rstrip('\n')
                         if line.rstrip('\n') == "---":
@@ -762,6 +808,7 @@ class PlanVis:
     def move_agents(self) -> None:
         """Move agents from cur_timstep to cur_timestep+1 and increase the cur_timestep by 1
         """
+        logging.info("Play.")
         self.run_button.config(state="disable")
         self.pause_button.config(state="normal")
         self.next_button.config(state="disable")
@@ -777,6 +824,7 @@ class PlanVis:
             else:
                 break
 
+        self.is_run.set(False)
         self.run_button.config(state="normal")
         self.pause_button.config(state="normal")
         self.next_button.config(state="normal")
@@ -786,6 +834,7 @@ class PlanVis:
 
 
     def pause_agents(self) -> None:
+        logging.info("Pause.")
         self.is_run.set(False)
         self.pause_button.config(state="disable")
         self.run_button.config(state="normal")
@@ -795,6 +844,8 @@ class PlanVis:
 
 
     def update_curtime(self) -> None:
+        if self.new_time.get() < 0:
+            self.new_time.set(0)
         self.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
         for (_idx_, _agent_) in self.agents.items():
@@ -805,6 +856,25 @@ class PlanVis:
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_,
                                                 "normal", 0.05, str(_idx_))
         self.show_index()
+        logging.info("Update to timestep %d", self.new_time.get())
+
+    def update_is_move_plan(self) -> None:
+        if self.is_run.get() is True:
+            return
+        if self.is_move_plan.get() is False:
+            self.is_move_plan.set(True)
+            self.is_move_plan_button.configure(text="Plan mode")
+            logging.info("Switch to Planning mode.")
+        else:
+            self.is_move_plan.set(False)
+            self.is_move_plan_button.configure(text="Exec mode")
+            logging.info("Switch to Execution mode.")
+
+        for (_, _agent_) in self.agents.items():
+            if self.is_move_plan.get() is True:
+                _agent_.path = _agent_.plan_path
+            else:
+                _agent_.path = _agent_.exec_path
 
 
 def main() -> None:
@@ -814,7 +884,9 @@ def main() -> None:
     parser.add_argument('--config', type=str, help="use a yaml file as input")
     parser.add_argument('--map', type=str, help="Path to the map file")
     parser.add_argument('--scen', type=str, help="Path to the scen file")
-    parser.add_argument('--path', type=str, help="Path to the path file")
+    parser.add_argument('--plan', type=str, help="Path to the path file")
+    parser.add_argument('--exec', type=str, help="Path to the exec file")
+    parser.add_argument('--conf', type=str, help="Path to the conflict file")
     parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
@@ -835,4 +907,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

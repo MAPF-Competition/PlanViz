@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-""" Plan Visualizer
+""" Plan Visualizer with rotation agents
 This is a script for visualizing the plan for MAPF.
 """
 
@@ -23,10 +23,12 @@ MAP_CONFIG: Dict[str,Dict] = {
     "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
+    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
     "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
 }
 
+DIR_DIAMETER = 0.1
+DIR_OFFSET = 0.05
 
 sin = lambda degs: math.sin(math.radians(degs))
 cos = lambda degs: math.cos(math.radians(degs))
@@ -64,14 +66,16 @@ class BaseObj:
 
 class Agent:
     def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj, _goal_:BaseObj,
-                 _path_:List, _path_objs_:List[BaseObj], _dir_obj_):
+                 _plan_path_:List, _plan_path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
         self.idx = _idx_
         self.agent_obj = _ag_obj_
         self.start_obj = _start_
         self.goal_obj = _goal_
-        self.dir_obj = _dir_obj_
-        self.path = _path_
-        self.path_objs = _path_objs_
+        self.dir_obj = _dir_obj_  # oval on canvas
+        self.plan_path = _plan_path_
+        self.exec_path = _exec_path_
+        self.plan_path_objs = _plan_path_objs_
+        self.path = self.exec_path  # Set execution path as default
 
 class PlanVis:
     """Render MAPF instance
@@ -90,7 +94,8 @@ class PlanVis:
             tmp_config["map_file"] = in_arg.map
             tmp_config["scen_file"] = in_arg.scen
             tmp_config["task_file"] = in_arg.task
-            tmp_config["path_file"] = in_arg.path
+            tmp_config["plan_file"] = in_arg.plan
+            tmp_config["exec_file"] = in_arg.exec
             tmp_config["num_of_agents"] = in_arg.num_of_agents
             tmp_config["show_grid"] = in_arg.show_grid
             tmp_config["show_ag_idx"] = in_arg.show_ag_idx
@@ -122,7 +127,7 @@ class PlanVis:
         assert "map_file" in tmp_config.keys()
         assert "scen_file" in tmp_config.keys()
         assert "task_file" in tmp_config.keys()
-        assert "path_file" in tmp_config.keys()
+        assert "plan_file" in tmp_config.keys()
         assert "num_of_agents" in tmp_config.keys()
         assert "delay" in tmp_config.keys()
         assert "pixel_per_move" in tmp_config.keys()
@@ -132,7 +137,8 @@ class PlanVis:
         self.map_file:str = tmp_config["map_file"]
         self.scen_file:str = tmp_config["scen_file"]
         self.task_file:str = tmp_config["task_file"]
-        self.path_file:str = tmp_config["path_file"]
+        self.plan_file:str = tmp_config["plan_file"]
+        self.exec_file:str = tmp_config["exec_file"]
         self.num_of_agents:int = tmp_config["num_of_agents"]
 
         self.moves:int = tmp_config["moves"]
@@ -145,16 +151,16 @@ class PlanVis:
         self.env_map:List[List[bool]] = list()
         self.grids:List = list()
 
-        self.agents:Dict = dict()
+        self.agents:Dict[int,Agent] = dict()
         self.makespan:int = -1
         self.cur_timestep = 0
         self.shown_path_agents = set()
 
         # Load from files
         self.load_map()
-        # (start_loc, goal_loc) = self.load_init_loc()
         (start_loc, goal_loc) = self.load_tasks(self.task_file)
-        paths:Dict[List[Tuple[int]]] = self.load_paths()
+        plan_paths:Dict[List[Tuple[int]]] = self.load_paths()
+        exec_paths:Dict[List[Tuple[int]]] = self.load_paths(self.exec_file)
         # self.conflicts:Dict = self.load_conflicts(self.path_file)
 
         # Initialize the window
@@ -187,7 +193,7 @@ class PlanVis:
         #windows scroll
         self.canvas.bind("<MouseWheel>",self.__wheel)
 
-        self.canvas.bind("<Button-3>", self.show_ag_path)
+        self.canvas.bind("<Button-3>", self.show_ag_plan)
 
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
@@ -265,6 +271,13 @@ class PlanVis:
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
+        self.is_move_plan = BooleanVar()
+        self.is_move_plan.set(False)
+        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
+                                          command=self.update_is_move_plan)
+        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
         # tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
         # tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         # row_idx += 1
@@ -300,7 +313,8 @@ class PlanVis:
 
         # Render instance on canvas
         self.render_env()
-        self.render_agents(start_loc=start_loc, goal_loc=goal_loc, paths=paths)
+        self.render_agents(start_loc=start_loc, goal_loc=goal_loc,
+                           plan_paths=plan_paths, exec_paths=exec_paths)
         self.show_static_loc()
         self.show_index()
         # self.mark_conf_agents()
@@ -498,58 +512,81 @@ class PlanVis:
         print("Done!")
 
 
-    def render_agents(self, start_loc, goal_loc, paths):
+    def render_agents(self, start_loc, goal_loc, plan_paths, exec_paths=None):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
-        tmp_starts = list()
-        tmp_goals = list()
-        tmp_paths = list()
+        start_objs = list()
+        goal_objs = list()
+        plan_path_objs = list()
+        # exec_path_objs = list()
+
         for _ag_ in range(self.num_of_agents):
             start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen", "disable")
             goal = self.render_obj(_ag_, goal_loc[_ag_][-1], "rectangle", "orange", "disable")
-            tmp_starts.append(start)
-            tmp_goals.append(goal)
+            start_objs.append(start)
+            goal_objs.append(goal)
 
         for _ag_ in range(self.num_of_agents):
             ag_path = list()
-            for _pid_ in range(len(paths[_ag_])):
-                _p_loc_ = (paths[_ag_][_pid_][0], paths[_ag_][_pid_][1])
+            for _pid_ in range(len(plan_paths[_ag_])):
+                _p_loc_ = (plan_paths[_ag_][_pid_][0], plan_paths[_ag_][_pid_][1])
                 _p_obj = None
-                if _pid_ > 0 and _p_loc_ == (paths[_ag_][_pid_-1][0], paths[_ag_][_pid_-1][1]):
+                if _pid_ > 0 and _p_loc_ == (plan_paths[_ag_][_pid_-1][0],
+                                             plan_paths[_ag_][_pid_-1][1]):
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.25)
                 else:  # non=wait action, smaller rectangle
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.4)
                 self.canvas.itemconfigure(_p_obj.obj, state="hidden")
                 self.canvas.delete(_p_obj.text)
                 ag_path.append(_p_obj)
-            tmp_paths.append(ag_path)
+            plan_path_objs.append(ag_path)
+
+        # if exec_paths is not None:
+        #     for _ag_ in range(self.num_of_agents):
+        #         ag_path = list()
+        #         for _pid_ in range(len(plan_paths[_ag_])):
+        #             _p_loc_ = (plan_paths[_ag_][_pid_][0], plan_paths[_ag_][_pid_][1])
+        #             _p_obj = None
+        #             if _pid_ > 0 and _p_loc_ == (plan_paths[_ag_][_pid_-1][0],
+        #                                         plan_paths[_ag_][_pid_-1][1]):
+        #                 _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "pink", "disable", 0.25)
+        #             else:  # non=wait action, smaller rectangle
+        #                 _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "pink", "disable", 0.4)
+        #             self.canvas.itemconfigure(_p_obj.obj, state="hidden")
+        #             self.canvas.delete(_p_obj.text)
+        #             ag_path.append(_p_obj)
+        #         plan_path_objs.append(ag_path)
+
+        shown_paths = None
+        if exec_paths is None:
+            shown_paths = plan_paths
+        else:
+            shown_paths = exec_paths
 
         for _ag_ in range(self.num_of_agents):
-            offset = 0.05
-            agent_obj = self.render_obj(_ag_, paths[_ag_][0], "oval",
+            agent_obj = self.render_obj(_ag_, shown_paths[_ag_][0], "oval",
                                         "deepskyblue", "normal", 0.05, str(_ag_))
-            dir_diameter = 0.1
             dir_loc = [0.0, 0.0, 0.0, 0.0]
-            if paths[_ag_][0][2] == 0:  # Right
-                dir_loc[1] = paths[_ag_][0][1] + 0.5 - dir_diameter
-                dir_loc[0] = paths[_ag_][0][0] + 1 - offset - dir_diameter*2
-                dir_loc[3] = paths[_ag_][0][1] + 0.5 + dir_diameter
-                dir_loc[2] = paths[_ag_][0][0] + 1 - offset
-            elif paths[_ag_][0][2] == 1:  # Up
-                dir_loc[1] = paths[_ag_][0][1] + offset
-                dir_loc[0] = paths[_ag_][0][0] + 0.5 - dir_diameter
-                dir_loc[3] = paths[_ag_][0][1] + offset + dir_diameter*2
-                dir_loc[2] = paths[_ag_][0][0] + 0.5 + dir_diameter
-            elif paths[_ag_][0][2] == 2:  # Left
-                dir_loc[1] = paths[_ag_][0][1] + 0.5 - dir_diameter
-                dir_loc[0] = paths[_ag_][0][0] + offset
-                dir_loc[3] = paths[_ag_][0][1] + 0.5 + dir_diameter
-                dir_loc[2] = paths[_ag_][0][0] + offset + dir_diameter*2
-            elif paths[_ag_][0][2] == 3:  # Down
-                dir_loc[1] = paths[_ag_][0][1] + 1 - offset - dir_diameter*2
-                dir_loc[0] = paths[_ag_][0][0] + 0.5 - dir_diameter
-                dir_loc[3] = paths[_ag_][0][1] + 1 - offset
-                dir_loc[2] = paths[_ag_][0][0] + 0.5 + dir_diameter
+            if shown_paths[_ag_][0][2] == 0:  # Right
+                dir_loc[1] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[3] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET
+            elif shown_paths[_ag_][0][2] == 1:  # Up
+                dir_loc[1] = shown_paths[_ag_][0][1] + DIR_OFFSET
+                dir_loc[0] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = shown_paths[_ag_][0][1] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[2] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
+            elif shown_paths[_ag_][0][2] == 2:  # Left
+                dir_loc[1] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = shown_paths[_ag_][0][0] + DIR_OFFSET
+                dir_loc[3] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = shown_paths[_ag_][0][0] + DIR_OFFSET + DIR_DIAMETER*2
+            elif shown_paths[_ag_][0][2] == 3:  # Down
+                dir_loc[1] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[0] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET
+                dir_loc[2] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
 
             dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -560,13 +597,13 @@ class PlanVis:
                                               state="disable",
                                               outline="")
 
-            agent = Agent(_ag_, agent_obj, tmp_starts[_ag_], tmp_goals[_ag_],
-                          paths[_ag_], tmp_paths[_ag_], dir_obj)
+            agent = Agent(_ag_, agent_obj, start_objs[_ag_], goal_objs[_ag_],
+                          plan_paths[_ag_], plan_path_objs[_ag_], exec_paths[_ag_], dir_obj)
             self.agents[_ag_] = agent
         print("Done!")
 
 
-    def show_ag_path(self, event):
+    def show_ag_plan(self, event):
         item = self.canvas.find_closest(event.x, event.y)[0]
         tags:set(str) = self.canvas.gettags(item)
         ag_idx = -1
@@ -579,12 +616,12 @@ class PlanVis:
 
         if ag_idx in self.shown_path_agents:
             self.shown_path_agents.remove(ag_idx)
-            for _p_ in self.agents[ag_idx].path_objs:
+            for _p_ in self.agents[ag_idx].plan_path_objs:
                 self.canvas.itemconfigure(_p_.obj, state="hidden")
         else:
             self.shown_path_agents.add(ag_idx)
-            for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].path_objs)):
-                self.canvas.itemconfigure(self.agents[ag_idx].path_objs[_pid_].obj, state="disable")
+            for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].plan_path_objs)):
+                self.canvas.itemconfigure(self.agents[ag_idx].plan_path_objs[_pid_].obj, state="disable")
 
 
     # def mark_conf_agents(self) -> None:
@@ -700,7 +737,7 @@ class PlanVis:
 
     def load_paths(self, path_file:str = None) -> List[List[Tuple[int]]]:
         if path_file is None:
-            path_file = self.path_file
+            path_file = self.plan_file
 
         print("Loading paths from "+str(path_file), end="... ")
         if not os.path.exists(path_file):
@@ -801,8 +838,7 @@ class PlanVis:
 
     def move_agents_per_timestep(self) -> None:
         self.next_button.config(state="disable")
-        offset = 0.05
-        _radius_ = ((1 - 2*offset) - 0.1*2) * self.tile_size/2
+        _radius_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
 
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
@@ -843,8 +879,7 @@ class PlanVis:
             return
 
         self.prev_button.config(state="disable")
-        offset = 0.05
-        _radius_ = ((1 - 2*offset) - 0.1*2) * self.tile_size/2
+        _radius_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
 
         prev_timestep = max(self.cur_timestep-1, 0)
         prev_loc:Dict[int, Tuple[int, int]] = dict()
@@ -934,29 +969,27 @@ class PlanVis:
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_,
                                                 "normal", 0.05, str(_idx_))
 
-            dir_diameter = 0.1
-            offset = 0.05
             dir_loc = [0.0, 0.0, 0.0, 0.0]
             if _agent_.path[_time_][2] == 0:  # Right
-                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - dir_diameter
-                dir_loc[0] = _agent_.path[_time_][0] + 1 - offset - dir_diameter*2
-                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + dir_diameter
-                dir_loc[2] = _agent_.path[_time_][0] + 1 - offset
+                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = _agent_.path[_time_][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = _agent_.path[_time_][0] + 1 - DIR_OFFSET
             elif _agent_.path[_time_][2] == 1:  # Up
-                dir_loc[1] = _agent_.path[_time_][1] + offset
-                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - dir_diameter
-                dir_loc[3] = _agent_.path[_time_][1] + offset + dir_diameter*2
-                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + dir_diameter
+                dir_loc[1] = _agent_.path[_time_][1] + DIR_OFFSET
+                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = _agent_.path[_time_][1] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
             elif _agent_.path[_time_][2] == 2:  # Left
-                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - dir_diameter
-                dir_loc[0] = _agent_.path[_time_][0] + offset
-                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + dir_diameter
-                dir_loc[2] = _agent_.path[_time_][0] + offset + dir_diameter*2
+                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = _agent_.path[_time_][0] + DIR_OFFSET
+                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = _agent_.path[_time_][0] + DIR_OFFSET + DIR_DIAMETER*2
             elif _agent_.path[_time_][2] == 3:  # Down
-                dir_loc[1] = _agent_.path[_time_][1] + 1 - offset - dir_diameter*2
-                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - dir_diameter
-                dir_loc[3] = _agent_.path[_time_][1] + 1 - offset
-                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + dir_diameter
+                dir_loc[1] = _agent_.path[_time_][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = _agent_.path[_time_][1] + 1 - DIR_OFFSET
+                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
 
             _agent_.dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -969,6 +1002,23 @@ class PlanVis:
         self.show_index()
 
 
+    def update_is_move_plan(self) -> None:
+        if self.is_run.get() is True:
+            return
+        if self.is_move_plan.get() is False:
+            self.is_move_plan.set(True)
+            self.is_move_plan_button.configure(text="Plan mode")
+        else:
+            self.is_move_plan.set(False)
+            self.is_move_plan_button.configure(text="Exec mode")
+
+        for (_, _agent_) in self.agents.items():
+            if self.is_move_plan.get() is True:
+                _agent_.path = _agent_.plan_path
+            else:
+                _agent_.path = _agent_.exec_path
+
+
 def main() -> None:
     """The main function of the visualizer.
     """
@@ -977,7 +1027,8 @@ def main() -> None:
     parser.add_argument('--map', type=str, help="Path to the map file")
     parser.add_argument('--scen', type=str, help="Path to the scen file")
     parser.add_argument('--task', type=str, help="Path to the task file")
-    parser.add_argument('--path', type=str, help="Path to the path file")
+    parser.add_argument('--plan', type=str, help="Path to the planned path file")
+    parser.add_argument('--exec', type=str, help="Path to the executed path file")
     parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
