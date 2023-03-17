@@ -1,6 +1,8 @@
 map_file: "./example/maze-32-32-2.map"
 scen_file: "./example/maze-32-32-2-random-2.scen"
 plan_file: "./example/result.path"
+exec_file: "./example/result.path"
+conf_file: "./example/invalid_result.conf"
 num_of_agents: 50
 show_grid: true
 show_ag_idx: true

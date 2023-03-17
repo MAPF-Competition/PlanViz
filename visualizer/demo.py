@@ -12,6 +12,7 @@ from typing import List, Tuple, Dict
 from tkinter import *
 import time
 import yaml
+import json
 import numpy as np
 
 
@@ -23,7 +24,7 @@ MAP_CONFIG: Dict[str,Dict] = {
     "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
+    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
 }
 
@@ -65,12 +66,11 @@ class BaseObj:
         self.color = _color_
 
 class Agent:
-    def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj, _goal_:BaseObj,
+    def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj,
                  _plan_path_:List, _plan_path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
         self.idx = _idx_
         self.agent_obj = _ag_obj_
         self.start_obj = _start_
-        self.goal_obj = _goal_
         self.dir_obj = _dir_obj_  # oval on canvas
         self.plan_path = _plan_path_
         self.exec_path = _exec_path_
@@ -95,7 +95,6 @@ class PlanVis:
             tmp_config["scen_file"] = in_arg.scen
             tmp_config["task_file"] = in_arg.task
             tmp_config["plan_file"] = in_arg.plan
-            tmp_config["exec_file"] = in_arg.exec
             tmp_config["num_of_agents"] = in_arg.num_of_agents
             tmp_config["show_grid"] = in_arg.show_grid
             tmp_config["show_ag_idx"] = in_arg.show_ag_idx
@@ -138,7 +137,6 @@ class PlanVis:
         self.scen_file:str = tmp_config["scen_file"]
         self.task_file:str = tmp_config["task_file"]
         self.plan_file:str = tmp_config["plan_file"]
-        self.exec_file:str = tmp_config["exec_file"]
         self.num_of_agents:int = tmp_config["num_of_agents"]
 
         self.moves:int = tmp_config["moves"]
@@ -150,7 +148,13 @@ class PlanVis:
         self.height:int = -1
         self.env_map:List[List[bool]] = list()
         self.grids:List = list()
+        self.tasks = list()
+        self.tasks_idx = dict()
+        self.task_eve = dict()
 
+        self.plan_paths = dict()
+        self.exec_paths = dict()
+        self.conflicts = dict()
         self.agents:Dict[int,Agent] = dict()
         self.makespan:int = -1
         self.cur_timestep = 0
@@ -158,10 +162,8 @@ class PlanVis:
 
         # Load from files
         self.load_map()
-        (start_loc, goal_loc) = self.load_tasks(self.task_file)
-        plan_paths:Dict[List[Tuple[int]]] = self.load_paths()
-        exec_paths:Dict[List[Tuple[int]]] = self.load_paths(self.exec_file)
-        # self.conflicts:Dict = self.load_conflicts(self.path_file)
+        self.load_tasks()
+        self.load_json()
 
         # Initialize the window
         self.window = Tk()
@@ -251,13 +253,13 @@ class PlanVis:
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        # self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
-        #                                            font=("Arial",ui_text_size),
-        #                                            variable=self.show_all_conf_ag,
-        #                                            onvalue=True, offvalue=False,
-        #                                            command=self.mark_conf_agents)
-        # self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
-        # row_idx += 1
+        self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
+                                                   font=("Arial",ui_text_size),
+                                                   variable=self.show_all_conf_ag,
+                                                   onvalue=True, offvalue=False,
+                                                   command=self.mark_conf_agents)
+        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        row_idx += 1
 
         tmp_label = Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
@@ -278,46 +280,50 @@ class PlanVis:
         self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        # tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
-        # tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
-        # row_idx += 1
+        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
+        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        row_idx += 1
 
-        # self.shown_conflicts:Dict[str, List[List,bool]] = dict()
-        # self.conflict_listbox = Listbox(self.frame,
-        #                                 width=28,
-        #                                 font=("Arial",ui_text_size),
-        #                                 selectmode=EXTENDED)
-        # conf_id = 0
-        # for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
-        #     for _conf_ in self.conflicts[_timestep_]:
-        #         conf_str = str()
-        #         conf_str = "a" + str(_conf_[0]) + ", a" + str(_conf_[1])
-        #         if _conf_[-1] == "V":
-        #             conf_str += ", v=" + str(_conf_[2])
-        #         elif _conf_[-1] == "E":
-        #             conf_str += ", e=(" + str(_conf_[2]) + "," + str(_conf_[3]) + ")"
-        #         conf_str += ", t=" + str(_conf_[4])
+        self.shown_conflicts:Dict[str, List[List,bool]] = dict()
+        self.conflict_listbox = Listbox(self.frame,
+                                        width=28,
+                                        font=("Arial",ui_text_size),
+                                        selectmode=EXTENDED)
+        conf_id = 0
+        for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
+            for _conf_ in self.conflicts[_timestep_]:
+                agent1 = _conf_[0]
+                agent2 = _conf_[1]
+                timestep = _conf_[2]
+                conf_str = str()
+                conf_str = "a" + str(agent1) + ", a" + str(agent2)
+                if _conf_[-1] == "V":
+                    conf_str += ", v=" + str(self.agents[agent1].plan_path[timestep])
+                elif _conf_[-1] == "E":
+                    conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep]) + "," +\
+                        str(self.agents[agent1].plan_path[timestep+1]) + ")"
+                conf_str += ", t=" + str(timestep)
 
-        #         self.conflict_listbox.insert(conf_id, conf_str)
-        #         self.shown_conflicts[conf_str] = [_conf_, False]
-        # self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
-        # self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
-        # self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
+                self.conflict_listbox.insert(conf_id, conf_str)
+                self.shown_conflicts[conf_str] = [_conf_, False]
+        self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
+        self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
+        self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
 
-        # scrollbar = Scrollbar(self.frame, orient="vertical")
-        # self.conflict_listbox.config(yscrollcommand = scrollbar.set)
-        # scrollbar.config(command=self.conflict_listbox.yview)
-        # scrollbar.grid(row=row_idx, column=5, sticky="w")
-        # row_idx += 1
+        scrollbar = Scrollbar(self.frame, orient="vertical")
+        self.conflict_listbox.config(yscrollcommand = scrollbar.set)
+        scrollbar.config(command=self.conflict_listbox.yview)
+        scrollbar.grid(row=row_idx, column=5, sticky="w")
+        row_idx += 1
         print("Done!")
 
         # Render instance on canvas
         self.render_env()
-        self.render_agents(start_loc=start_loc, goal_loc=goal_loc,
-                           plan_paths=plan_paths, exec_paths=exec_paths)
+        self.render_tasks()
+        self.render_agents()
         self.show_static_loc()
         self.show_index()
-        # self.mark_conf_agents()
+        self.mark_conf_agents()
         self.resume_zoom()
 
         # Adjust window size
@@ -334,18 +340,18 @@ class PlanVis:
         self.agents[ag_idx].agent_obj.color = color
 
 
-    # def select_conflict(self, event):
-    #     selected_indices = event.widget.curselection()  # get all selected indices
+    def select_conflict(self, event):
+        selected_indices = event.widget.curselection()  # get all selected indices
 
-    #     for _conf_ in self.shown_conflicts.values():
-    #         self.change_ag_color(_conf_[0][0], "deepskyblue")
-    #         self.change_ag_color(_conf_[0][1], "deepskyblue")
-    #         _conf_[1] = False
-    #     for _sid_ in selected_indices:
-    #         _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-    #         self.change_ag_color(_conf_[0][0], "red")
-    #         self.change_ag_color(_conf_[0][1], "red")
-    #         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], "deepskyblue")
+            self.change_ag_color(_conf_[0][1], "deepskyblue")
+            _conf_[1] = False
+        for _sid_ in selected_indices:
+            _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+            self.change_ag_color(_conf_[0][0], "red")
+            self.change_ag_color(_conf_[0][1], "red")
+            self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
 
 
     def restart_timestep(self):
@@ -353,21 +359,21 @@ class PlanVis:
         self.update_curtime()
 
 
-    # def move_to_conflict(self, event):
-    #     if self.is_run.get() is True:
-    #         return
+    def move_to_conflict(self, event):
+        if self.is_run.get() is True:
+            return
 
-    #     for _conf_ in self.shown_conflicts.values():
-    #         self.change_ag_color(_conf_[0][0], "deepskyblue")
-    #         self.change_ag_color(_conf_[0][1], "deepskyblue")
-    #         _conf_[1] = False
-    #     _sid_ = event.widget.curselection()[0]  # get all selected indices
-    #     _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-    #     self.change_ag_color(_conf_[0][0], "red")
-    #     self.change_ag_color(_conf_[0][1], "red")
-    #     self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-    #     self.new_time.set(int(_conf_[0][4])-1)
-    #     self.update_curtime()
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], "deepskyblue")
+            self.change_ag_color(_conf_[0][1], "deepskyblue")
+            _conf_[1] = False
+        _sid_ = event.widget.curselection()[0]  # get all selected indices
+        _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+        self.change_ag_color(_conf_[0][0], "red")
+        self.change_ag_color(_conf_[0][1], "red")
+        self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        self.new_time.set(int(_conf_[0][4])-1)
+        self.update_curtime()
 
 
     def __move_from(self, event):
@@ -423,19 +429,19 @@ class PlanVis:
         """
         _tmp_canvas_ = None
         if _shape_ == "rectangle":
-            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[0]+offset) * self.tile_size,
-                                                        (_loc_[1]+offset) * self.tile_size,
-                                                        (_loc_[0]+1-offset) * self.tile_size,
+            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[1]+offset) * self.tile_size,
+                                                        (_loc_[0]+offset) * self.tile_size,
                                                         (_loc_[1]+1-offset) * self.tile_size,
+                                                        (_loc_[0]+1-offset) * self.tile_size,
                                                         fill=_color_,
                                                         tag=_tag_,
                                                         state=_state_,
                                                         outline="")
         elif _shape_ == "oval":
-            _tmp_canvas_ = self.canvas.create_oval((_loc_[0]+offset) * self.tile_size,
-                                                   (_loc_[1]+offset) * self.tile_size,
-                                                   (_loc_[0]+1-offset) * self.tile_size,
+            _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
+                                                   (_loc_[0]+offset) * self.tile_size,
                                                    (_loc_[1]+1-offset) * self.tile_size,
+                                                   (_loc_[0]+1-offset) * self.tile_size,
                                                    fill=_color_,
                                                    tag=_tag_,
                                                    state=_state_,
@@ -444,8 +450,8 @@ class PlanVis:
             logging.error("Undefined shape.")
             sys.exit()
 
-        _tmp_text_ = self.canvas.create_text((_loc_[0]+0.5)*self.tile_size,
-                                            (_loc_[1]+0.5)*self.tile_size,
+        _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
+                                            (_loc_[0]+0.5)*self.tile_size,
                                             text=str(_idx_),
                                             fill="black",
                                             tag=("text", _tag_),
@@ -512,27 +518,22 @@ class PlanVis:
         print("Done!")
 
 
-    def render_agents(self, start_loc, goal_loc, plan_paths, exec_paths=None):
+    def render_agents(self):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         start_objs = list()
-        goal_objs = list()
         plan_path_objs = list()
-        # exec_path_objs = list()
 
         for _ag_ in range(self.num_of_agents):
-            start = self.render_obj(_ag_, start_loc[_ag_], "oval", "yellowgreen", "disable")
-            goal = self.render_obj(_ag_, goal_loc[_ag_][-1], "rectangle", "orange", "disable")
+            start = self.render_obj(_ag_, self.plan_paths[_ag_][0],"oval","yellowgreen","disable")
             start_objs.append(start)
-            goal_objs.append(goal)
 
-        for _ag_ in range(self.num_of_agents):
             ag_path = list()
-            for _pid_ in range(len(plan_paths[_ag_])):
-                _p_loc_ = (plan_paths[_ag_][_pid_][0], plan_paths[_ag_][_pid_][1])
+            for _pid_ in range(len(self.plan_paths[_ag_])):
+                _p_loc_ = (self.plan_paths[_ag_][_pid_][0], self.plan_paths[_ag_][_pid_][1])
                 _p_obj = None
-                if _pid_ > 0 and _p_loc_ == (plan_paths[_ag_][_pid_-1][0],
-                                             plan_paths[_ag_][_pid_-1][1]):
+                if _pid_ > 0 and _p_loc_ == (self.plan_paths[_ag_][_pid_-1][0],
+                                             self.plan_paths[_ag_][_pid_-1][1]):
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.25)
                 else:  # non=wait action, smaller rectangle
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.4)
@@ -541,52 +542,36 @@ class PlanVis:
                 ag_path.append(_p_obj)
             plan_path_objs.append(ag_path)
 
-        # if exec_paths is not None:
-        #     for _ag_ in range(self.num_of_agents):
-        #         ag_path = list()
-        #         for _pid_ in range(len(plan_paths[_ag_])):
-        #             _p_loc_ = (plan_paths[_ag_][_pid_][0], plan_paths[_ag_][_pid_][1])
-        #             _p_obj = None
-        #             if _pid_ > 0 and _p_loc_ == (plan_paths[_ag_][_pid_-1][0],
-        #                                         plan_paths[_ag_][_pid_-1][1]):
-        #                 _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "pink", "disable", 0.25)
-        #             else:  # non=wait action, smaller rectangle
-        #                 _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "pink", "disable", 0.4)
-        #             self.canvas.itemconfigure(_p_obj.obj, state="hidden")
-        #             self.canvas.delete(_p_obj.text)
-        #             ag_path.append(_p_obj)
-        #         plan_path_objs.append(ag_path)
-
         shown_paths = None
-        if exec_paths is None:
-            shown_paths = plan_paths
+        if len(self.exec_paths) == 0:
+            shown_paths = self.plan_paths
         else:
-            shown_paths = exec_paths
+            shown_paths = self.exec_paths
 
         for _ag_ in range(self.num_of_agents):
             agent_obj = self.render_obj(_ag_, shown_paths[_ag_][0], "oval",
                                         "deepskyblue", "normal", 0.05, str(_ag_))
             dir_loc = [0.0, 0.0, 0.0, 0.0]
             if shown_paths[_ag_][0][2] == 0:  # Right
-                dir_loc[1] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[3] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET
+                dir_loc[1] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[3] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET
             elif shown_paths[_ag_][0][2] == 1:  # Up
-                dir_loc[1] = shown_paths[_ag_][0][1] + DIR_OFFSET
-                dir_loc[0] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = shown_paths[_ag_][0][1] + DIR_OFFSET + DIR_DIAMETER*2
-                dir_loc[2] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
+                dir_loc[1] = shown_paths[_ag_][0][0] + DIR_OFFSET
+                dir_loc[0] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = shown_paths[_ag_][0][0] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[2] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
             elif shown_paths[_ag_][0][2] == 2:  # Left
-                dir_loc[1] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = shown_paths[_ag_][0][0] + DIR_OFFSET
-                dir_loc[3] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = shown_paths[_ag_][0][0] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[1] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = shown_paths[_ag_][0][1] + DIR_OFFSET
+                dir_loc[3] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = shown_paths[_ag_][0][1] + DIR_OFFSET + DIR_DIAMETER*2
             elif shown_paths[_ag_][0][2] == 3:  # Down
-                dir_loc[1] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[0] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET
-                dir_loc[2] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
+                dir_loc[1] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[0] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET
+                dir_loc[2] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
 
             dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -597,8 +582,8 @@ class PlanVis:
                                               state="disable",
                                               outline="")
 
-            agent = Agent(_ag_, agent_obj, start_objs[_ag_], goal_objs[_ag_],
-                          plan_paths[_ag_], plan_path_objs[_ag_], exec_paths[_ag_], dir_obj)
+            agent = Agent(_ag_, agent_obj, start_objs[_ag_], self.plan_paths[_ag_],
+                          plan_path_objs[_ag_], self.exec_paths[_ag_], dir_obj)
             self.agents[_ag_] = agent
         print("Done!")
 
@@ -621,16 +606,17 @@ class PlanVis:
         else:
             self.shown_path_agents.add(ag_idx)
             for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].plan_path_objs)):
-                self.canvas.itemconfigure(self.agents[ag_idx].plan_path_objs[_pid_].obj, state="disable")
+                self.canvas.itemconfigure(self.agents[ag_idx].plan_path_objs[_pid_].obj,
+                                          state="disable")
 
 
-    # def mark_conf_agents(self) -> None:
-    #     self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
-    #     _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
-    #     for _conf_ in self.shown_conflicts.values():
-    #         self.change_ag_color(_conf_[0][0], _color_)
-    #         self.change_ag_color(_conf_[0][1], _color_)
-    #         _conf_[1] = False
+    def mark_conf_agents(self) -> None:
+        self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
+        _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
+        for _conf_ in self.shown_conflicts.values():
+            self.change_ag_color(_conf_[0][0], _color_)
+            self.change_ag_color(_conf_[0][1], _color_)
+            _conf_[1] = False
 
 
     def show_grid(self) -> None:
@@ -649,7 +635,6 @@ class PlanVis:
         for (_, _agent_) in self.agents.items():
             self.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
-            self.canvas.itemconfig(_agent_.goal_obj.text, state=_ts_)
 
 
     def show_static_loc(self) -> None:
@@ -658,9 +643,7 @@ class PlanVis:
             self.show_static.get() is True) else "hidden"
         for (_, _agent_) in self.agents.items():
             self.canvas.itemconfig(_agent_.start_obj.obj, state=_os_)
-            self.canvas.itemconfig(_agent_.goal_obj.obj, state=_os_)
             self.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
-            self.canvas.itemconfig(_agent_.goal_obj.text, state=_ts_)
 
 
     def load_map(self, map_file:str = None) -> None:
@@ -684,6 +667,7 @@ class PlanVis:
                 self.env_map.append(out_line)
         assert len(self.env_map) == self.height
         print("Done!")
+
 
     def load_init_loc(self, scen_file:str = None) -> Tuple[Dict]:
         if scen_file is None:
@@ -712,27 +696,108 @@ class PlanVis:
         return (start_loc, goal_loc)
 
 
-    def load_tasks(self, task_file:str=None):
-        start_loc:Dict[int,Tuple[int]] = dict()
-        tasks:Dict[int,List[Tuple[int]]] = dict()
-        with open(task_file, "r") as fin:
-            fin.readline()  # ignore comments
-            self.num_of_agents = int(fin.readline())
-            fin.readline()  # ignore comments
-            fin.readline()  # ignore comments
-            ag_idx = 0
+    def load_tasks(self):
+        with open(self.task_file, "r") as fin:
+            fin.readline()
+            i = 0
             for line in fin.readlines():
-                line = line.rstrip('\n').split(",")
-                _tmp_loc_ = (int(line[1]) % self.width, int(line[1]) // self.width)
-                start_loc[ag_idx] = _tmp_loc_
+                line = int(line.rstrip('\n'))
+                _tmp_loc_ = (line // self.width, line % self.width)
+                self.tasks_idx[_tmp_loc_] = i
+                i += 1
 
-                for _tid_ in range(int(line[0])):
-                    _tmp_loc_ = (int(line[_tid_+2]) % self.width, int(line[_tid_+2]) // self.width)
-                    if ag_idx not in tasks.keys():
-                        tasks[ag_idx] = list()
-                    tasks[ag_idx].append(_tmp_loc_)
-                ag_idx += 1
-        return (start_loc, tasks)
+
+    def render_tasks(self):
+        with open(self.task_file, "r") as fin:
+            fin.readline()
+            i = 0
+            for line in fin.readlines():
+                line = int(line.rstrip('\n'))
+                _tmp_loc_ = (line // self.width, line % self.width)
+                task_obj = self.render_obj(i, _tmp_loc_, "rectangle", "orange")
+                self.tasks.append(task_obj)
+                i += 1
+        for _tkey_ in self.task_eve.keys():
+            if self.task_eve[_tkey_]["assigned"]["timestep"] == 0:
+                self.canvas.itemconfig(self.tasks[_tkey_].obj, fill="pink")
+
+
+    def load_json(self):
+        fin = open(self.plan_file)
+        data = json.load(fin)
+        self.num_of_agents = len(data["Start"])
+
+        print("Loading paths from "+str(self.plan_file), end="... ")
+        for ag_idx in range(self.num_of_agents):
+            self.plan_paths[ag_idx] = list()
+            self.exec_paths[ag_idx] = list()
+            start = data["Start"][ag_idx].strip("(").strip(")").split(",")
+            start = (int(start[0]), int(start[1]), int(start[2]))
+            self.plan_paths[ag_idx].append(start)
+            self.exec_paths[ag_idx].append(start)
+
+            tmp_str = data["Planned Paths"][ag_idx].split(",")
+            for _motion_ in tmp_str:
+                next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
+                self.plan_paths[ag_idx].append(next_state)
+            if self.makespan < max(len(self.plan_paths[ag_idx])-1, 0):
+                self.makespan = max(len(self.plan_paths[ag_idx])-1, 0)
+
+            tmp_str = data["Actual Paths"][ag_idx].split(",")
+            for _motion_ in tmp_str:
+                next_state = self.state_transition(self.exec_paths[ag_idx][-1], _motion_)
+                self.exec_paths[ag_idx].append(next_state)
+            if self.makespan < max(len(self.exec_paths[ag_idx])-1, 0):
+                self.makespan = max(len(self.exec_paths[ag_idx])-1, 0)
+        print("Done!")
+
+        print("Loading conflicts from "+str(self.plan_file), end="... ")
+        for err in data["Errors"]:
+            conf = err.split(",")
+            for i in range(3):
+                conf[i] = int(conf[i])
+            timestep = conf[2]
+            if timestep not in self.conflicts.keys():
+                self.conflicts[timestep] = list()
+            self.conflicts[timestep].append(conf)
+        print("Done!")
+
+        print("Loading events from "+str(self.plan_file), end="... ")
+        for _ag_ in range(self.num_of_agents):
+            for _eve_ in data["Events"][_ag_]:
+                _eve_ = _eve_.strip("(")
+                _eve_ = _eve_.rstrip(")")
+                _eve_ = _eve_.split(",")
+                task_id = self.tasks_idx[int(_eve_[0]), int(_eve_[1])]
+                if task_id not in self.task_eve.keys():
+                    self.task_eve[task_id] = dict()
+
+                if _eve_[-1] == "assigned":
+                    self.task_eve[task_id]["assigned"] = {"agent": _ag_, "timestep": int(_eve_[2])}
+                elif _eve_[-1] == "finished":
+                    self.task_eve[task_id]["finished"] = {"agent": _ag_, "timestep": int(_eve_[2])}
+        print("Done!")
+
+
+    def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
+        if motion == "F":  # Forward
+            if cur_state[-1] == 0:  # Right
+                return (cur_state[0], cur_state[1]+1, cur_state[2])
+            elif cur_state[-1] == 1:  # Up
+                return (cur_state[0]-1, cur_state[1], cur_state[2])
+            elif cur_state[-1] == 2:  # Left
+                return (cur_state[0], cur_state[1]-1, cur_state[2])
+            elif cur_state[-1] == 3:  # Down
+                return (cur_state[0]+1, cur_state[1], cur_state[2])
+        elif motion == "R":  # Clockwise
+            return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
+        elif motion == "C":  # Counter-clockwise
+            return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
+        elif motion == "W":
+            return cur_state
+        else:
+            logging.error("Invalid motion")
+            sys.exit()
 
 
     def load_paths(self, path_file:str = None) -> List[List[Tuple[int]]]:
@@ -843,11 +908,21 @@ class PlanVis:
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {self.cur_timestep+1:03d}")
+                for _tid_, _task_ in enumerate(self.tasks):
+                    if _tid_ not in self.task_eve.keys():
+                        continue
+                    if "assigned" in self.task_eve[_tid_].keys():
+                        if self.task_eve[_tid_]["assigned"]["timestep"] == self.cur_timestep+1:
+                            self.canvas.itemconfig(_task_.obj, fill="pink")
+                    if "finished" in self.task_eve[_tid_].keys():
+                        if self.task_eve[_tid_]["finished"]["timestep"] == self.cur_timestep+1:
+                            self.canvas.itemconfig(_task_.obj, fill="grey")
+
             for (_, agent) in self.agents.items():
                 next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
                 cur_angle = get_angle(agent.agent_obj.loc[2])
-                direction = (agent.path[next_timestep][0] - agent.agent_obj.loc[0],
-                             agent.path[next_timestep][1] - agent.agent_obj.loc[1])
+                direction = (agent.path[next_timestep][1] - agent.agent_obj.loc[1],
+                             agent.path[next_timestep][0] - agent.agent_obj.loc[0])
                 cur_move = (direction[0] * (self.tile_size / self.moves),
                             direction[1] * (self.tile_size / self.moves))
                 cur_rotation = self.get_rotation(agent.agent_obj.loc[2],
@@ -896,8 +971,8 @@ class PlanVis:
                 self.timestep_label.config(text = f"Timestep: {prev_timestep:03d}")
             for (ag_idx, agent) in self.agents.items():
                 cur_angle = get_angle(agent.agent_obj.loc[2])
-                direction = (prev_loc[ag_idx][0] - agent.agent_obj.loc[0],
-                             prev_loc[ag_idx][1] - agent.agent_obj.loc[1])
+                direction = (prev_loc[ag_idx][1] - agent.agent_obj.loc[1],
+                             prev_loc[ag_idx][0] - agent.agent_obj.loc[0])
                 cur_move = (direction[0] * (self.tile_size / self.moves),
                             direction[1] * (self.tile_size / self.moves))
                 cur_rotation = self.get_rotation(agent.agent_obj.loc[2],
@@ -960,6 +1035,20 @@ class PlanVis:
     def update_curtime(self) -> None:
         self.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
+
+        for _tid_, _task_ in enumerate(self.tasks):
+            if _tid_ in self.task_eve.keys():
+                if "finished" in self.task_eve[_tid_].keys() and\
+                    self.cur_timestep >= self.task_eve[_tid_]["finished"]["timestep"]:
+                    self.canvas.itemconfig(_task_, fill="grey")
+                elif "assigned" in self.task_eve[_tid_].keys() and\
+                    self.cur_timestep >= self.task_eve[_tid_]["assigned"]["timestep"]:
+                    self.canvas.itemconfig(_task_, fill="pink")
+                else:
+                    self.canvas.itemconfig(_task_, fill="orange")
+            else:
+                self.canvas.itemconfig(_task_, fill="orange")
+
         for (_idx_, _agent_) in self.agents.items():
             _color_ = _agent_.agent_obj.color
             _time_ = min(self.cur_timestep, len(_agent_.path)-1)
@@ -971,25 +1060,25 @@ class PlanVis:
 
             dir_loc = [0.0, 0.0, 0.0, 0.0]
             if _agent_.path[_time_][2] == 0:  # Right
-                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = _agent_.path[_time_][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = _agent_.path[_time_][0] + 1 - DIR_OFFSET
+                dir_loc[1] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = _agent_.path[_time_][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[3] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = _agent_.path[_time_][1] + 1 - DIR_OFFSET
             elif _agent_.path[_time_][2] == 1:  # Up
-                dir_loc[1] = _agent_.path[_time_][1] + DIR_OFFSET
-                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = _agent_.path[_time_][1] + DIR_OFFSET + DIR_DIAMETER*2
-                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
+                dir_loc[1] = _agent_.path[_time_][0] + DIR_OFFSET
+                dir_loc[0] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = _agent_.path[_time_][0] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[2] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
             elif _agent_.path[_time_][2] == 2:  # Left
-                dir_loc[1] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = _agent_.path[_time_][0] + DIR_OFFSET
-                dir_loc[3] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = _agent_.path[_time_][0] + DIR_OFFSET + DIR_DIAMETER*2
+                dir_loc[1] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
+                dir_loc[0] = _agent_.path[_time_][1] + DIR_OFFSET
+                dir_loc[3] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
+                dir_loc[2] = _agent_.path[_time_][1] + DIR_OFFSET + DIR_DIAMETER*2
             elif _agent_.path[_time_][2] == 3:  # Down
-                dir_loc[1] = _agent_.path[_time_][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[0] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = _agent_.path[_time_][1] + 1 - DIR_OFFSET
-                dir_loc[2] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
+                dir_loc[1] = _agent_.path[_time_][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+                dir_loc[0] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
+                dir_loc[3] = _agent_.path[_time_][0] + 1 - DIR_OFFSET
+                dir_loc[2] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
 
             _agent_.dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -1028,7 +1117,6 @@ def main() -> None:
     parser.add_argument('--scen', type=str, help="Path to the scen file")
     parser.add_argument('--task', type=str, help="Path to the task file")
     parser.add_argument('--plan', type=str, help="Path to the planned path file")
-    parser.add_argument('--exec', type=str, help="Path to the executed path file")
     parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
