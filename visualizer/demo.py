@@ -11,20 +11,21 @@ import math
 from typing import List, Tuple, Dict
 from tkinter import *
 import time
-import yaml
-import json
 import numpy as np
+import json
+import yaml
 
 
 COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
                      "cyan", "brown", "olive", "gray", "crimson"]
-
+TASK_COLORS: Dict[str, str] = {"init": "orange", "assign": "pink", "finish": "grey"}
+DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
 
 MAP_CONFIG: Dict[str,Dict] = {
     "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
+    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
     "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
 }
 
@@ -77,6 +78,17 @@ class Agent:
         self.plan_path_objs = _plan_path_objs_
         self.path = self.exec_path  # Set execution path as default
 
+
+class Task:
+    def __init__(self, _idx_:int, _loc_:Tuple[int,int], _task_obj_: BaseObj,
+                  _assign_:Tuple[int,int]=(-1,-1), _finish_:Tuple[int,int]=(-1,-1)):
+        self.idx = _idx_
+        self.loc = _loc_
+        self.assign = {"agent": _assign_[0], "timestep":_assign_[1]}
+        self.finish = {"agent": _finish_[0], "timestep":_finish_[1]}
+        self.task_obj = _task_obj_
+
+
 class PlanVis:
     """Render MAPF instance
     """
@@ -88,7 +100,7 @@ class PlanVis:
 
         if in_arg.config is not None:
             config_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), in_arg.config)
-            with open(config_dir, 'r') as fin:
+            with open(file=config_dir, mode='r', encoding="UTF-8") as fin:
                 tmp_config = yaml.load(fin, Loader=yaml.FullLoader)
         else:
             tmp_config["map_file"] = in_arg.map
@@ -148,8 +160,8 @@ class PlanVis:
         self.height:int = -1
         self.env_map:List[List[bool]] = list()
         self.grids:List = list()
-        self.tasks = list()
-        self.tasks_idx = dict()
+        self.tasks = dict()
+        # self.tasks_idx = dict()
         self.task_eve = dict()
 
         self.plan_paths = dict()
@@ -162,8 +174,6 @@ class PlanVis:
 
         # Load from files
         self.load_map()
-        self.load_tasks()
-        self.load_json()
 
         # Initialize the window
         self.window = Tk()
@@ -318,8 +328,8 @@ class PlanVis:
         print("Done!")
 
         # Render instance on canvas
+        self.load_json()
         self.render_env()
-        self.render_tasks()
         self.render_agents()
         self.show_static_loc()
         self.show_index()
@@ -651,7 +661,7 @@ class PlanVis:
             map_file = self.map_file
         print("Loading map from " + map_file, end = '... ')
 
-        with open(map_file, "r") as fin:
+        with open(file=map_file, mode="r", encoding="UTF-8") as fin:
             fin.readline()  # ignore type
             self.height = int(fin.readline().strip().split(' ')[1])
             self.width  = int(fin.readline().strip().split(' ')[1])
@@ -680,7 +690,7 @@ class PlanVis:
 
         start_loc = dict()
         goal_loc = dict()
-        with open(scen_file, "r") as fin:
+        with open(file=scen_file, mode="r", encoding="UTF-8") as fin:
             fin.readline()  # ignore the first line 'version 1'
             ag_counter:int = 0
             for line in fin.readlines():
@@ -696,47 +706,47 @@ class PlanVis:
         return (start_loc, goal_loc)
 
 
-    def load_tasks(self):
-        with open(self.task_file, "r") as fin:
-            fin.readline()
-            i = 0
-            for line in fin.readlines():
-                line = int(line.rstrip('\n'))
-                _tmp_loc_ = (line // self.width, line % self.width)
-                self.tasks_idx[_tmp_loc_] = i
-                i += 1
+    # def load_tasks(self):
+    #     with open(file=self.task_file, mode="r", encoding="UTF-8") as fin:
+    #         fin.readline()
+    #         i = 0
+    #         for line in fin.readlines():
+    #             line = int(line.rstrip('\n'))
+    #             _tmp_loc_ = (line // self.width, line % self.width)
+    #             self.tasks_idx[_tmp_loc_] = i
+    #             i += 1
 
 
-    def render_tasks(self):
-        with open(self.task_file, "r") as fin:
-            fin.readline()
-            i = 0
-            for line in fin.readlines():
-                line = int(line.rstrip('\n'))
-                _tmp_loc_ = (line // self.width, line % self.width)
-                task_obj = self.render_obj(i, _tmp_loc_, "rectangle", "orange")
-                self.tasks.append(task_obj)
-                i += 1
-        for _tkey_ in self.task_eve.keys():
-            if self.task_eve[_tkey_]["assigned"]["timestep"] == 0:
-                self.canvas.itemconfig(self.tasks[_tkey_].obj, fill="pink")
+    # def render_tasks(self):
+    #     with open(file=self.task_file, mode="r", encoding="UTF-8") as fin:
+    #         fin.readline()
+    #         i = 0
+    #         for line in fin.readlines():
+    #             line = int(line.rstrip('\n'))
+    #             _tmp_loc_ = (line // self.width, line % self.width)
+    #             task_obj = self.render_obj(i, _tmp_loc_, "rectangle", "orange")
+    #             self.tasks.append(task_obj)
+    #             i += 1
+    #     for (_tkey_, _task_) in self.task_eve.items():
+    #         if _task_["assigned"]["timestep"] == 0:
+    #             self.canvas.itemconfig(self.tasks[_tkey_].obj, fill="pink")
 
 
     def load_json(self):
-        fin = open(self.plan_file)
+        fin = open(file=self.plan_file, mode="r", encoding="UTF-8")
         data = json.load(fin)
         self.num_of_agents = len(data["Start"])
 
         print("Loading paths from "+str(self.plan_file), end="... ")
         for ag_idx in range(self.num_of_agents):
-            self.plan_paths[ag_idx] = list()
-            self.exec_paths[ag_idx] = list()
-            start = data["Start"][ag_idx].strip("(").strip(")").split(",")
-            start = (int(start[0]), int(start[1]), int(start[2]))
+            self.plan_paths[ag_idx] = []
+            self.exec_paths[ag_idx] = []
+            start = data["Start"][ag_idx]
+            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
-            tmp_str = data["Planned Paths"][ag_idx].split(",")
+            tmp_str = data["Planner Paths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
                 self.plan_paths[ag_idx].append(next_state)
@@ -751,31 +761,42 @@ class PlanVis:
                 self.makespan = max(len(self.exec_paths[ag_idx])-1, 0)
         print("Done!")
 
-        print("Loading conflicts from "+str(self.plan_file), end="... ")
+        print("Loading errors from "+str(self.plan_file), end="... ")
         for err in data["Errors"]:
-            conf = err.split(",")
-            for i in range(3):
-                conf[i] = int(conf[i])
-            timestep = conf[2]
-            if timestep not in self.conflicts.keys():
-                self.conflicts[timestep] = list()
-            self.conflicts[timestep].append(conf)
+            # conf = err.split(",")
+            # for i in range(3):
+            #     conf[i] = int(conf[i])
+            timestep = err[2]
+            if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
+                self.conflicts[timestep] = []
+            self.conflicts[timestep].append(err)
+        print("Done!")
+
+        print("Loading tasks from "+str(self.plan_file), end="... ")
+        for _task_ in data["Task Pool"]:
+            _tid_ = _task_[0]
+            _tloc_ = (_task_[1], _task_[2])
+            _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle", TASK_COLORS["init"])
+            new_task = Task(_tid_, _tloc_, _tobj_)
+            self.tasks[_tid_] = new_task
         print("Done!")
 
         print("Loading events from "+str(self.plan_file), end="... ")
         for _ag_ in range(self.num_of_agents):
             for _eve_ in data["Events"][_ag_]:
-                _eve_ = _eve_.strip("(")
-                _eve_ = _eve_.rstrip(")")
-                _eve_ = _eve_.split(",")
-                task_id = self.tasks_idx[int(_eve_[0]), int(_eve_[1])]
-                if task_id not in self.task_eve.keys():
-                    self.task_eve[task_id] = dict()
-
-                if _eve_[-1] == "assigned":
-                    self.task_eve[task_id]["assigned"] = {"agent": _ag_, "timestep": int(_eve_[2])}
-                elif _eve_[-1] == "finished":
-                    self.task_eve[task_id]["finished"] = {"agent": _ag_, "timestep": int(_eve_[2])}
+                _tid_ = _eve_[0]
+                if _eve_[2] == "assigned":
+                    self.tasks[_tid_].assign["agent"] = _ag_
+                    self.tasks[_tid_].assign["timestep"] = _eve_[1]
+                    if _eve_[1] == 0:
+                        self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
+                                               fill=TASK_COLORS["assign"])
+                elif _eve_[2] == "finished":
+                    self.tasks[_tid_].finish["agent"] = _ag_
+                    self.tasks[_tid_].finish["timestep"] = _eve_[1]
+                    if _eve_[1] == 0:
+                        self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
+                                               fill=TASK_COLORS["finish"])
         print("Done!")
 
 
@@ -810,7 +831,7 @@ class PlanVis:
             return
 
         paths = dict()
-        with open(path_file, "r") as fin:
+        with open(file=path_file, mode="r", encoding='UTF-8') as fin:
             ag_counter = 0
             for line in fin.readlines():
                 if line.split(" ")[0] != "Agent":
@@ -843,9 +864,9 @@ class PlanVis:
             return
         conflicts = dict()
         last_line = str()
-        with open(in_file, "r") as fin:
+        with open(file=in_file, mode="r", encoding="UTF-8") as fin:
             last_line = fin.readlines()[-1]
-        with open(in_file, "r") as fin:
+        with open(file=in_file, mode="r", encoding="UTF-8") as fin:
             while True:
                 line = fin.readline()
                 if line.rstrip('\n') == "Conflicts":
@@ -903,20 +924,11 @@ class PlanVis:
 
     def move_agents_per_timestep(self) -> None:
         self.next_button.config(state="disable")
-        _radius_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
+        _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
 
         for _m_ in range(self.moves):
             if _m_ == self.moves // 2:
                 self.timestep_label.config(text = f"Timestep: {self.cur_timestep+1:03d}")
-                for _tid_, _task_ in enumerate(self.tasks):
-                    if _tid_ not in self.task_eve.keys():
-                        continue
-                    if "assigned" in self.task_eve[_tid_].keys():
-                        if self.task_eve[_tid_]["assigned"]["timestep"] == self.cur_timestep+1:
-                            self.canvas.itemconfig(_task_.obj, fill="pink")
-                    if "finished" in self.task_eve[_tid_].keys():
-                        if self.task_eve[_tid_]["finished"]["timestep"] == self.cur_timestep+1:
-                            self.canvas.itemconfig(_task_.obj, fill="grey")
 
             for (_, agent) in self.agents.items():
                 next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
@@ -930,15 +942,25 @@ class PlanVis:
                 next_ang = cur_rotation*(math.pi/2)/(self.moves)
 
                 # Move agent
+                _cos = math.cos(cur_angle + next_ang * (_m_+1)) - math.cos(cur_angle+next_ang*_m_)
+                _sin = -1 * (math.sin(cur_angle+ next_ang*(_m_+1))-math.sin(cur_angle+next_ang*_m_))
                 self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
                 self.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.dir_obj,
-                                 _radius_*(math.cos(cur_angle + next_ang * (_m_+1))-math.cos(cur_angle+next_ang*_m_)),
-                                 -1*_radius_*(math.sin(cur_angle+ next_ang*(_m_+1))-math.sin(cur_angle+next_ang*_m_)))
+                                 _rad_ * _cos,
+                                 _rad_ * _sin)
 
             self.canvas.update()
             time.sleep(self.delay)
+
+        for (_, _task_) in self.tasks.items():
+            if self.cur_timestep+1 >= _task_.finish["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["finish"])
+            elif self.cur_timestep+1 >= _task_.assign["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["assign"])
+            else:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["init"])
 
         for (_, agent) in self.agents.items():
             next_timestep = min(self.cur_timestep+1, len(agent.path)-1)
@@ -954,7 +976,7 @@ class PlanVis:
             return
 
         self.prev_button.config(state="disable")
-        _radius_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
+        _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
 
         prev_timestep = max(self.cur_timestep-1, 0)
         prev_loc:Dict[int, Tuple[int, int]] = dict()
@@ -980,15 +1002,25 @@ class PlanVis:
                 next_ang = cur_rotation*(math.pi/2)/(self.moves)
 
                 # Move agent
+                _cos = math.cos(cur_angle + next_ang*(_m_+1)) - math.cos(cur_angle + next_ang*_m_)
+                _sin = -1*(math.sin(cur_angle + next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_))
                 self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
                 self.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.dir_obj,
-                                 _radius_*(math.cos(cur_angle + next_ang * (_m_+1))-math.cos(cur_angle + next_ang*_m_)),
-                                 -1*_radius_*(math.sin(cur_angle + next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_)))
+                                 _rad_*_cos,
+                                 _rad_*_sin)
 
             self.canvas.update()
             time.sleep(self.delay)
+
+        for (_, _task_) in self.tasks.items():
+            if prev_timestep >= _task_.finish["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["finish"])
+            elif prev_timestep >= _task_.assign["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["assign"])
+            else:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["init"])
 
         self.cur_timestep = prev_timestep
         for (ag_idx, agent) in self.agents.items():
@@ -1036,18 +1068,13 @@ class PlanVis:
         self.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
 
-        for _tid_, _task_ in enumerate(self.tasks):
-            if _tid_ in self.task_eve.keys():
-                if "finished" in self.task_eve[_tid_].keys() and\
-                    self.cur_timestep >= self.task_eve[_tid_]["finished"]["timestep"]:
-                    self.canvas.itemconfig(_task_, fill="grey")
-                elif "assigned" in self.task_eve[_tid_].keys() and\
-                    self.cur_timestep >= self.task_eve[_tid_]["assigned"]["timestep"]:
-                    self.canvas.itemconfig(_task_, fill="pink")
-                else:
-                    self.canvas.itemconfig(_task_, fill="orange")
+        for (_, _task_) in self.tasks.items():
+            if self.cur_timestep >= _task_.finish["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["finish"])
+            elif self.cur_timestep >= _task_.assign["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["assign"])
             else:
-                self.canvas.itemconfig(_task_, fill="orange")
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["init"])
 
         for (_idx_, _agent_) in self.agents.items():
             _color_ = _agent_.agent_obj.color
