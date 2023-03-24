@@ -11,9 +11,9 @@ import math
 from typing import List, Tuple, Dict
 from tkinter import *
 import time
-import numpy as np
 import json
 import yaml
+import numpy as np
 
 
 COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
@@ -161,7 +161,6 @@ class PlanVis:
         self.env_map:List[List[bool]] = list()
         self.grids:List = list()
         self.tasks = dict()
-        # self.tasks_idx = dict()
         self.task_eve = dict()
 
         self.plan_paths = dict()
@@ -172,8 +171,7 @@ class PlanVis:
         self.cur_timestep = 0
         self.shown_path_agents = set()
 
-        # Load from files
-        self.load_map()
+        self.load_map()  # Load from files
 
         # Initialize the window
         self.window = Tk()
@@ -527,6 +525,31 @@ class PlanVis:
                                 fill="black")
         print("Done!")
 
+    @staticmethod
+    def get_dir_loc(_loc_:Tuple[int]):
+        dir_loc = [0.0, 0.0, 0.0, 0.0]
+        if _loc_[2] == 0:  # Right
+            dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
+            dir_loc[0] = _loc_[1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+            dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
+            dir_loc[2] = _loc_[1] + 1 - DIR_OFFSET
+        elif _loc_[2] == 1:  # Up
+            dir_loc[1] = _loc_[0] + DIR_OFFSET
+            dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
+            dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
+            dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+        elif _loc_[2] == 2:  # Left
+            dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
+            dir_loc[0] = _loc_[1] + DIR_OFFSET
+            dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
+            dir_loc[2] = _loc_[1] + DIR_OFFSET + DIR_DIAMETER*2
+        elif _loc_[2] == 3:  # Down
+            dir_loc[1] = _loc_[0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+            dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
+            dir_loc[3] = _loc_[0] + 1 - DIR_OFFSET
+            dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+        return dir_loc
+
 
     def render_agents(self):
         print("Rendering the agents... ", end="")
@@ -561,28 +584,7 @@ class PlanVis:
         for _ag_ in range(self.num_of_agents):
             agent_obj = self.render_obj(_ag_, shown_paths[_ag_][0], "oval",
                                         "deepskyblue", "normal", 0.05, str(_ag_))
-            dir_loc = [0.0, 0.0, 0.0, 0.0]
-            if shown_paths[_ag_][0][2] == 0:  # Right
-                dir_loc[1] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[3] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = shown_paths[_ag_][0][1] + 1 - DIR_OFFSET
-            elif shown_paths[_ag_][0][2] == 1:  # Up
-                dir_loc[1] = shown_paths[_ag_][0][0] + DIR_OFFSET
-                dir_loc[0] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = shown_paths[_ag_][0][0] + DIR_OFFSET + DIR_DIAMETER*2
-                dir_loc[2] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
-            elif shown_paths[_ag_][0][2] == 2:  # Left
-                dir_loc[1] = shown_paths[_ag_][0][0] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = shown_paths[_ag_][0][1] + DIR_OFFSET
-                dir_loc[3] = shown_paths[_ag_][0][0] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = shown_paths[_ag_][0][1] + DIR_OFFSET + DIR_DIAMETER*2
-            elif shown_paths[_ag_][0][2] == 3:  # Down
-                dir_loc[1] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[0] = shown_paths[_ag_][0][1] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = shown_paths[_ag_][0][0] + 1 - DIR_OFFSET
-                dir_loc[2] = shown_paths[_ag_][0][1] + 0.5 + DIR_DIAMETER
-
+            dir_loc = self.get_dir_loc(shown_paths[_ag_][0])
             dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
                                               dir_loc[2] * self.tile_size,
@@ -704,32 +706,6 @@ class PlanVis:
 
         print("Done!")
         return (start_loc, goal_loc)
-
-
-    # def load_tasks(self):
-    #     with open(file=self.task_file, mode="r", encoding="UTF-8") as fin:
-    #         fin.readline()
-    #         i = 0
-    #         for line in fin.readlines():
-    #             line = int(line.rstrip('\n'))
-    #             _tmp_loc_ = (line // self.width, line % self.width)
-    #             self.tasks_idx[_tmp_loc_] = i
-    #             i += 1
-
-
-    # def render_tasks(self):
-    #     with open(file=self.task_file, mode="r", encoding="UTF-8") as fin:
-    #         fin.readline()
-    #         i = 0
-    #         for line in fin.readlines():
-    #             line = int(line.rstrip('\n'))
-    #             _tmp_loc_ = (line // self.width, line % self.width)
-    #             task_obj = self.render_obj(i, _tmp_loc_, "rectangle", "orange")
-    #             self.tasks.append(task_obj)
-    #             i += 1
-    #     for (_tkey_, _task_) in self.task_eve.items():
-    #         if _task_["assigned"]["timestep"] == 0:
-    #             self.canvas.itemconfig(self.tasks[_tkey_].obj, fill="pink")
 
 
     def load_json(self):
@@ -887,6 +863,7 @@ class PlanVis:
                     break
         return conflicts
 
+
     @staticmethod
     def get_conflict_agents(conflicts:Dict):
         conf_ags = set()
@@ -1002,8 +979,8 @@ class PlanVis:
                 next_ang = cur_rotation*(math.pi/2)/(self.moves)
 
                 # Move agent
-                _cos = math.cos(cur_angle + next_ang*(_m_+1)) - math.cos(cur_angle + next_ang*_m_)
-                _sin = -1*(math.sin(cur_angle + next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_))
+                _cos = math.cos(cur_angle+next_ang*(_m_+1)) - math.cos(cur_angle + next_ang*_m_)
+                _sin = -1*(math.sin(cur_angle+next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_))
                 self.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
                 self.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
@@ -1085,28 +1062,7 @@ class PlanVis:
             _agent_.agent_obj = self.render_obj(_idx_, _agent_.path[_time_], "oval", _color_,
                                                 "normal", 0.05, str(_idx_))
 
-            dir_loc = [0.0, 0.0, 0.0, 0.0]
-            if _agent_.path[_time_][2] == 0:  # Right
-                dir_loc[1] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = _agent_.path[_time_][1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[3] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = _agent_.path[_time_][1] + 1 - DIR_OFFSET
-            elif _agent_.path[_time_][2] == 1:  # Up
-                dir_loc[1] = _agent_.path[_time_][0] + DIR_OFFSET
-                dir_loc[0] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = _agent_.path[_time_][0] + DIR_OFFSET + DIR_DIAMETER*2
-                dir_loc[2] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
-            elif _agent_.path[_time_][2] == 2:  # Left
-                dir_loc[1] = _agent_.path[_time_][0] + 0.5 - DIR_DIAMETER
-                dir_loc[0] = _agent_.path[_time_][1] + DIR_OFFSET
-                dir_loc[3] = _agent_.path[_time_][0] + 0.5 + DIR_DIAMETER
-                dir_loc[2] = _agent_.path[_time_][1] + DIR_OFFSET + DIR_DIAMETER*2
-            elif _agent_.path[_time_][2] == 3:  # Down
-                dir_loc[1] = _agent_.path[_time_][0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
-                dir_loc[0] = _agent_.path[_time_][1] + 0.5 - DIR_DIAMETER
-                dir_loc[3] = _agent_.path[_time_][0] + 1 - DIR_OFFSET
-                dir_loc[2] = _agent_.path[_time_][1] + 0.5 + DIR_DIAMETER
-
+            dir_loc = self.get_dir_loc(_agent_.path[_time_])
             _agent_.dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
                                               dir_loc[2] * self.tile_size,
