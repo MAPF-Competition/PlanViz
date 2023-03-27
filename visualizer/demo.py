@@ -81,7 +81,8 @@ class Agent:
 
 class Task:
     def __init__(self, _idx_:int, _loc_:Tuple[int,int], _task_obj_: BaseObj,
-                  _assign_:Tuple[int,int]=(-1,-1), _finish_:Tuple[int,int]=(-1,-1)):
+                  _assign_:Tuple[int,int]=(math.inf,math.inf),
+                  _finish_:Tuple[int,int]=(math.inf,math.inf)):
         self.idx = _idx_
         self.loc = _loc_
         self.assign = {"agent": _assign_[0], "timestep":_assign_[1]}
@@ -161,7 +162,7 @@ class PlanVis:
         self.env_map:List[List[bool]] = list()
         self.grids:List = list()
         self.tasks = dict()
-        self.task_eve = dict()
+        self.events = dict()
 
         self.plan_paths = dict()
         self.exec_paths = dict()
@@ -193,6 +194,11 @@ class PlanVis:
                              bg="white")
         self.canvas.grid(row=1, column=0)
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+
+        # Render instance on canvas
+        self.load_json()  # Load the results
+        self.render_env()
+        self.render_agents()
 
         # This is what enables using the mouse:
         self.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -305,9 +311,9 @@ class PlanVis:
                 timestep = _conf_[2]
                 conf_str = str()
                 conf_str = "a" + str(agent1) + ", a" + str(agent2)
-                if _conf_[-1] == "V":
+                if _conf_[-1] == "vertex conflict":
                     conf_str += ", v=" + str(self.agents[agent1].plan_path[timestep])
-                elif _conf_[-1] == "E":
+                elif _conf_[-1] == "edge conflict":
                     conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep]) + "," +\
                         str(self.agents[agent1].plan_path[timestep+1]) + ")"
                 conf_str += ", t=" + str(timestep)
@@ -323,12 +329,39 @@ class PlanVis:
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
+
+        # Show events
+        tmp_label3 = Label(self.frame, text="List of events", font=("Arial",ui_text_size))
+        tmp_label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        row_idx += 1
+
+        self.shown_events:Dict[str, List[List,bool]] = dict()
+        self.event_listbox = Listbox(self.frame,
+                                    width=28,
+                                    font=("Arial",ui_text_size),
+                                    selectmode=EXTENDED)
+        eve_id = 0
+        for _timestep_ in sorted(self.events.keys(), reverse=True):
+            for _eve_ in self.events[_timestep_]:
+                cur_task = self.tasks[_eve_[0]]
+                eve_str = str()
+                if _eve_[2] == "assigned":
+                    eve_str = "Assign task " + str(cur_task.idx) + " to a" + str(cur_task.assign["agent"]) + " at t=" + str(cur_task.assign["timestep"])
+                elif _eve_[2] == "finished":
+                    eve_str = "a" + str(cur_task.finish["agent"]) + " finishes task " + str(cur_task.idx) + " at t=" + str(cur_task.finish["timestep"])
+                
+                self.event_listbox.insert(eve_id, eve_str)
+                self.shown_events[eve_str] = [_eve_, False]
+        self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
+        self.event_listbox.bind('<Double-1>', self.move_to_event)
+
+        scrollbar = Scrollbar(self.frame, orient="vertical")
+        self.event_listbox.config(yscrollcommand = scrollbar.set)
+        scrollbar.config(command=self.event_listbox.yview)
+        scrollbar.grid(row=row_idx, column=5, sticky="w")
+        row_idx += 1
         print("Done!")
 
-        # Render instance on canvas
-        self.load_json()
-        self.render_env()
-        self.render_agents()
         self.show_static_loc()
         self.show_index()
         self.mark_conf_agents()
@@ -380,7 +413,20 @@ class PlanVis:
         self.change_ag_color(_conf_[0][0], "red")
         self.change_ag_color(_conf_[0][1], "red")
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-        self.new_time.set(int(_conf_[0][4])-1)
+        self.new_time.set(int(_conf_[0][2])-1)
+        self.update_curtime()
+
+    def move_to_event(self, event):
+        if self.is_run.get() is True:
+            return
+
+        for _eve_ in self.shown_events.values():
+            _eve_[1] = False
+        _sid_ = event.widget.curselection()[0]  # get all selected indices
+        _eve_ = self.shown_events[self.event_listbox.get(_sid_)]
+        self.shown_events[self.event_listbox.get(_sid_)][1] = True
+        new_t = max(int(_eve_[0][1])-1, 0)
+        self.new_time.set(new_t)
         self.update_curtime()
 
 
@@ -524,6 +570,15 @@ class PlanVis:
                                 state="disable",
                                 fill="black")
         print("Done!")
+
+
+    def render_tasks(self):
+        for (_, _task_) in self.tasks.items():
+            if self.cur_timestep >= _task_.finish["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["finish"])
+            elif self.cur_timestep >= _task_.assign["timestep"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS["assign"])
+
 
     @staticmethod
     def get_dir_loc(_loc_:Tuple[int]):
@@ -739,9 +794,6 @@ class PlanVis:
 
         print("Loading errors from "+str(self.plan_file), end="... ")
         for err in data["Errors"]:
-            # conf = err.split(",")
-            # for i in range(3):
-            #     conf[i] = int(conf[i])
             timestep = err[2]
             if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
                 self.conflicts[timestep] = []
@@ -761,18 +813,29 @@ class PlanVis:
         for _ag_ in range(self.num_of_agents):
             for _eve_ in data["Events"][_ag_]:
                 _tid_ = _eve_[0]
+                _timestep_ = _eve_[1]
                 if _eve_[2] == "assigned":
                     self.tasks[_tid_].assign["agent"] = _ag_
-                    self.tasks[_tid_].assign["timestep"] = _eve_[1]
-                    if _eve_[1] == 0:
+                    self.tasks[_tid_].assign["timestep"] = _timestep_
+                    if _timestep_ == 0:  # timestep at 0
                         self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
                                                fill=TASK_COLORS["assign"])
+
+                    if _timestep_ not in self.events.keys():
+                        self.events[_timestep_] = []
+                    self.events[_timestep_].append(_eve_)
+                        
                 elif _eve_[2] == "finished":
                     self.tasks[_tid_].finish["agent"] = _ag_
-                    self.tasks[_tid_].finish["timestep"] = _eve_[1]
-                    if _eve_[1] == 0:
+                    self.tasks[_tid_].finish["timestep"] = _timestep_
+                    if _timestep_ == 0:  # timestep at 0
                         self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
                                                fill=TASK_COLORS["finish"])
+
+                    if _timestep_ not in self.events.keys():
+                        self.events[_timestep_] = []
+                    self.events[_timestep_].append(_eve_)
+
         print("Done!")
 
 
@@ -877,25 +940,25 @@ class PlanVis:
     def get_rotation(self, cur_dir:int, next_dir:int):
         if cur_dir == next_dir:
             return 0
-        elif cur_dir == 0:
+        if cur_dir == 0:
             if next_dir == 1:
                 return 1  # Counter-clockwise 90 degrees
-            elif next_dir == 3:
+            if next_dir == 3:
                 return -1  # Clockwise 90 degrees
         elif cur_dir == 1:
             if next_dir == 2:
                 return 1
-            elif next_dir == 0:
+            if next_dir == 0:
                 return -1
         elif cur_dir == 2:
             if next_dir == 3:
                 return 1
-            elif next_dir == 1:
+            if next_dir == 1:
                 return -1
         elif cur_dir == 3:
             if next_dir == 0:
                 return 1
-            elif next_dir == 2:
+            if next_dir == 2:
                 return -1
 
 
@@ -1064,13 +1127,13 @@ class PlanVis:
 
             dir_loc = self.get_dir_loc(_agent_.path[_time_])
             _agent_.dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
-                                              dir_loc[1] * self.tile_size,
-                                              dir_loc[2] * self.tile_size,
-                                              dir_loc[3] * self.tile_size,
-                                              fill="navy",
-                                              tag="dir",
-                                              state="disable",
-                                              outline="")
+                                                      dir_loc[1] * self.tile_size,
+                                                      dir_loc[2] * self.tile_size,
+                                                      dir_loc[3] * self.tile_size,
+                                                      fill="navy",
+                                                      tag="dir",
+                                                      state="disable",
+                                                      outline="")
         self.show_index()
 
 
