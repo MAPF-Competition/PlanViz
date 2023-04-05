@@ -792,7 +792,7 @@ class PlanVis:
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
-            tmp_str = data["Planned Paths"][ag_idx].split(",")
+            tmp_str = data["Planner Paths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
                 self.plan_paths[ag_idx].append(next_state)
