@@ -14,7 +14,7 @@ import time
 import json
 import yaml
 import numpy as np
-
+from ast import literal_eval
 
 COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
                      "cyan", "brown", "olive", "gray", "crimson"]
@@ -26,9 +26,11 @@ MAP_CONFIG: Dict[str,Dict] = {
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
     "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
+    "ost003d": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
     "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
 }
 
+RESOLUTION=(1280,800)
 DIR_DIAMETER = 0.1
 DIR_OFFSET = 0.05
 
@@ -189,10 +191,14 @@ class PlanVis:
         self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
-        self.canvas = Canvas(width=(self.width+1) * self.tile_size,
-                             height=(self.height+1) * self.tile_size,
-                             bg="white")
-        self.canvas.grid(row=1, column=0)
+        self.canvas_width=int(RESOLUTION[0]*0.8)
+        self.canvas_height=RESOLUTION[1]
+        # self.canvas = Canvas(width=(self.width+1) * self.tile_size,
+        #                      height=(self.height+1) * self.tile_size,
+        #                      bg="white")
+        self.canvas = Canvas(width=self.canvas_width,height=self.canvas_height,
+                            bg="white")
+        self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
         # Render instance on canvas
@@ -215,56 +221,56 @@ class PlanVis:
         print("Rendering the pannel... ", end="")
         ui_text_size:int = 12
         self.frame = Frame(self.window)
-        self.frame.grid(row=1, column=1,sticky="n")
+        self.frame.grid(row=0, column=1,sticky="nsew")
         row_idx = 0
 
         self.timestep_label = Label(self.frame,
                               text = f"Timestep: {self.cur_timestep:03d}",
                               font=("Arial", ui_text_size + 10))
-        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="wn")
+        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="nsew")
         row_idx += 1
 
         self.run_button = Button(self.frame, text="Play", font=("Arial",ui_text_size),
                                  command=self.move_agents)
-        self.run_button.grid(row=row_idx, column=0, sticky="wn")
+        self.run_button.grid(row=row_idx, column=0, sticky="nsew")
         self.pause_button = Button(self.frame, text="Pause", font=("Arial",ui_text_size),
                                    command=self.pause_agents)
-        self.pause_button.grid(row=row_idx, column=1, sticky="wn")
+        self.pause_button.grid(row=row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
                                          command=self.resume_zoom)
-        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
+        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
         self.next_button = Button(self.frame, text="Next", font=("Arial",ui_text_size),
                                   command=self.move_agents_per_timestep)
-        self.next_button.grid(row=row_idx, column=0, sticky="w")
+        self.next_button.grid(row=row_idx, column=0, sticky="nsew")
         self.prev_button = Button(self.frame, text="Prev", font=("Arial",ui_text_size),
                                   command=self.back_agents_per_timestep)
-        self.prev_button.grid(row=row_idx, column=1, sticky="w")
+        self.prev_button.grid(row=row_idx, column=1, sticky="nsew")
         self.restart_button = Button(self.frame, text="Reset", font=("Arial",ui_text_size),
                                      command=self.restart_timestep)
-        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="wn")
+        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
         self.grid_button = Checkbutton(self.frame, text="Show grids",
                                        font=("Arial",ui_text_size),
                                        variable=self.is_grid, onvalue=True, offvalue=False,
                                        command=self.show_grid)
-        self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
         self.id_button = Checkbutton(self.frame, text="Show indices",
                                      font=("Arial",ui_text_size),
                                      variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                      command=self.show_index)
-        self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
         self.static_button = Checkbutton(self.frame, text="Show start/goal locations",
                                          font=("Arial",ui_text_size),
                                          variable=self.show_static, onvalue=True, offvalue=False,
                                          command=self.show_static_loc)
-        self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
         self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
@@ -272,30 +278,30 @@ class PlanVis:
                                                    variable=self.show_all_conf_ag,
                                                    onvalue=True, offvalue=False,
                                                    command=self.mark_conf_agents)
-        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
         tmp_label = Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
-        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
         self.new_time = IntVar()
         self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
                                       font=("Arial",ui_text_size),
                                       validatecommand=self.update_curtime)
-        self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
+        self.start_time_entry.grid(row=row_idx, column=2, sticky="nsew")
         self.update_button = Button(self.frame, text="Go", font=("Arial",ui_text_size),
                                     command=self.update_curtime)
-        self.update_button.grid(row=row_idx, column=3, sticky="w")
+        self.update_button.grid(row=row_idx, column=3, sticky="nsew")
         row_idx += 1
 
         self.is_move_plan = BooleanVar()
         self.is_move_plan.set(False)
         self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
                                           command=self.update_is_move_plan)
-        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
         row_idx += 1
 
         tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
-        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="nsew")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
@@ -367,16 +373,23 @@ class PlanVis:
         self.mark_conf_agents()
         self.resume_zoom()
 
+
+        self.window.rowconfigure(0, weight=1)
+        self.window.columnconfigure(0,weight=1)
+        self.window.columnconfigure(1,weight=1)
         # Adjust window size
         self.frame.update()
-        wd_width = str((self.width+1) * self.tile_size + 300)
-        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
-        self.window.geometry(wd_width + "x" + wd_height)
+        # wd_width = str((self.width+1) * self.tile_size + 300)
+        # wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
+        # self.window.geometry(wd_width + "x" + wd_height)
+        self.window.geometry(str(RESOLUTION[0]) + "x" + str(RESOLUTION[1]))
         self.window.title("MAPF Instance")
+        
         print("=====            DONE            =====")
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
+        # ag_idx=0
         self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=color)
         self.agents[ag_idx].agent_obj.color = color
 
@@ -773,11 +786,13 @@ class PlanVis:
             self.plan_paths[ag_idx] = []
             self.exec_paths[ag_idx] = []
             start = data["Start"][ag_idx]
+            # start=literal_eval(start)
+            # print(start,start[0],start[1],start[2])
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
-            tmp_str = data["Planner Paths"][ag_idx].split(",")
+            tmp_str = data["Planned Paths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
                 self.plan_paths[ag_idx].append(next_state)
