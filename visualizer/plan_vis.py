@@ -9,6 +9,9 @@ import logging
 import argparse
 from typing import List, Tuple, Dict
 from tkinter import *
+from tkinter import filedialog
+from datetime import datetime
+import subprocess
 import time
 import yaml
 import numpy as np
@@ -230,13 +233,6 @@ class PlanVis:
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.is_move_plan = BooleanVar()
-        self.is_move_plan.set(False)
-        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
-                                          command=self.update_is_move_plan)
-        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
-
         self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
                                                    font=("Arial",ui_text_size),
                                                    variable=self.show_all_conf_ag,
@@ -256,8 +252,43 @@ class PlanVis:
                                     command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
+        
+        self.is_move_plan = BooleanVar()
+        self.is_move_plan.set(False)
+        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
+                                          command=self.update_is_move_plan)
+        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
 
-        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
+        self.gen_cur_ins_but = Button(self.frame, text="Snapshot instance",
+                                      font=("Arial", ui_text_size),
+                                      command=self.generate_cur_instance)
+        self.gen_cur_ins_but.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        tmp_label3 = Label(self.frame, text="Invoke planner", font=("Arial", ui_text_size+5))
+        tmp_label3.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+        self.planner_label = Label(self.frame,text="Select a planner",font=("Arial", ui_text_size))
+        self.planner_label.grid(row=row_idx, column= 0, columnspan=3, sticky="w")
+        self.select_planner_button = Button(self.frame, text="Browse", font=("Arial", ui_text_size),
+                                            command=lambda: self.browseFiles(self.planner_label))
+        self.select_planner_button.grid(row=row_idx, column=3, columnspan=1, sticky="w")
+        row_idx += 1
+
+        self.ins_label = Label(self.frame,text="Select an instance",font=("Arial", ui_text_size))
+        self.ins_label.grid(row=row_idx, column= 0, columnspan=3, sticky="w")
+        self.select_ins_button = Button(self.frame, text="Browse", font=("Arial", ui_text_size),
+                                        command=lambda: self.browseFiles(self.ins_label))
+        self.select_ins_button.grid(row=row_idx, column=3, columnspan=1, sticky="w")
+        row_idx += 1
+
+        self.replan_button = Button(self.frame, text="Replan", font=("Arial", ui_text_size),
+                                    command=self.replan_instance)
+        self.replan_button.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        row_idx += 1
+
+        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size+5))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
@@ -875,6 +906,50 @@ class PlanVis:
                 _agent_.path = _agent_.plan_path
             else:
                 _agent_.path = _agent_.exec_path
+
+    def generate_cur_instance(self) -> None:
+        cur_time:str = datetime.now().strftime("%H_%M_%S")
+        out_fname = os.path.dirname(os.path.realpath(self.plan_file)) + "/ins_" + cur_time + ".scen"
+        with open(out_fname, mode="w", encoding="UTF-8") as fout:
+            fout.write("version 1\n")  # This is just to make the files consistent
+            for _aid_ in range(self.num_of_agents):
+                _line_ = str(_aid_) + "\t" + self.map_file + "\t"
+                _line_ += str(self.width) + "\t" + str(self.height) + "\t"
+                _line_ += str(self.agents[_aid_].agent_obj.loc[0]) + "\t"
+                _line_ += str(self.agents[_aid_].agent_obj.loc[1]) + "\t"
+                _line_ += str(self.agents[_aid_].goal_obj.loc[0])+ "\t"
+                _line_ += str(self.agents[_aid_].goal_obj.loc[1])+ "\t"
+                _line_ += str(0) + "\n"
+                fout.write(_line_)
+
+    def browseFiles(self, cur_label) -> None:
+        filename = filedialog.askopenfilename(title = "Select a File")
+        cur_label.configure(text=filename)  # Change label contents
+
+    def replan_instance(self) -> None:
+        out_dir = os.path.dirname(os.path.realpath(self.plan_file))
+        planner_str = self.planner_label.cget("text")
+        ins_str = self.ins_label.cget("text")
+        out_fname = ins_str.split(".")[0]
+        run_command = planner_str + " "
+        run_command += "-m " + self.map_file + " "
+        run_command += "-a " + ins_str + " "
+        run_command += "-k " + str(self.num_of_agents) + " "
+        run_command += "--outputPaths " + out_fname + ".path "
+        run_command += "--outputConf " + out_fname + ".conf "
+        run_command += "-t 60 "
+        run_command += "--solver PBS2 "
+        run_command += "-s 1"
+        subprocess.run(run_command, shell=True, check=True)
+
+        # if os.path.exists(out_fname + ".path"):
+        #     plan_paths = self.load_paths(out_fname + ".path")
+        #     exec_paths = self.load_paths(out_fname + ".path")
+        #     for _aid_ in range(self.num_of_agents):
+        #         self.agents[_aid_].agent_obj.loc = exec_paths[_aid_][0]
+        #         self.agents[_aid_].plan_path = plan_paths
+        #         self.agents[_aid_].exec_path = exec_paths
+        #         self.agents[_aid_].path = exec_paths
 
 
 def main() -> None:

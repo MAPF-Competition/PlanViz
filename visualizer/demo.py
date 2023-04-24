@@ -191,13 +191,16 @@ class PlanVis:
         self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
-        self.canvas_width=int(RESOLUTION[0]*0.8)
-        self.canvas_height=RESOLUTION[1]
+        # # Use width and height for scaling
         # self.canvas = Canvas(width=(self.width+1) * self.tile_size,
         #                      height=(self.height+1) * self.tile_size,
         #                      bg="white")
-        self.canvas = Canvas(width=self.canvas_width,height=self.canvas_height,
-                            bg="white")
+
+        # Use Resolution for scaling
+        self.canvas_width=int(RESOLUTION[0]*0.8)
+        self.canvas_height=RESOLUTION[1]
+        self.canvas = Canvas(width=self.canvas_width,height=self.canvas_height, bg="white")
+
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
@@ -352,12 +355,14 @@ class PlanVis:
                 cur_task = self.tasks[_eve_[0]]
                 eve_str = str()
                 if _eve_[2] == "assigned":
-                    eve_str = "Assign task " + str(cur_task.idx) + " to a" + str(cur_task.assign["agent"]) + " at t=" + str(cur_task.assign["timestep"])
+                    eve_str = "Assign task " + str(cur_task.idx) + " to a" +\
+                        str(cur_task.assign["agent"]) + " at t=" + str(cur_task.assign["timestep"])
                 elif _eve_[2] == "finished":
-                    eve_str = "a" + str(cur_task.finish["agent"]) + " finishes task " + str(cur_task.idx) + " at t=" + str(cur_task.finish["timestep"])
-                
+                    eve_str = "a" + str(cur_task.finish["agent"]) + " finishes task " +\
+                        str(cur_task.idx) + " at t=" + str(cur_task.finish["timestep"])
                 self.event_listbox.insert(eve_id, eve_str)
                 self.shown_events[eve_str] = [_eve_, False]
+
         self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind('<Double-1>', self.move_to_event)
 
@@ -373,18 +378,22 @@ class PlanVis:
         self.mark_conf_agents()
         self.resume_zoom()
 
-
+        # Use resolution for scaling
         self.window.rowconfigure(0, weight=1)
         self.window.columnconfigure(0,weight=1)
         self.window.columnconfigure(1,weight=1)
-        # Adjust window size
-        self.frame.update()
+
+        self.frame.update()  # Adjust window size
+
+        # # Use width and height for scaling
         # wd_width = str((self.width+1) * self.tile_size + 300)
         # wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
         # self.window.geometry(wd_width + "x" + wd_height)
+
+        # Use resolution for scaling
         self.window.geometry(str(RESOLUTION[0]) + "x" + str(RESOLUTION[1]))
+
         self.window.title("MAPF Instance")
-        
         print("=====            DONE            =====")
 
 
