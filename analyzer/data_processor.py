@@ -53,11 +53,6 @@ class DataProcessor:
 
         self.num_ins_per_file = -1
         self.result = {}
-        for _solver_ in self.config['solvers']:
-            self.result[_solver_['name']] = {}
-            for _map_ in self.config['maps']:
-                self.result[_solver_['name']][_map_['name']] = {'x':[], 'val':[], 'var':[]}
-
 
     def get_row_val(self, in_index:str='runtime'):
         """Compute the success rate versus the numbers of agents
@@ -70,21 +65,21 @@ class DataProcessor:
         """
 
         result: Dict = {}
-        for _solver_ in self.config['solvers']:
-            result[_solver_['name']] = {}
+        for _sol_ in self.config['solvers']:
+            result[_sol_['name']] = {}
 
             for _map_ in self.config['maps']:
-                result[_solver_['name']][_map_['name']] = {}
+                result[_sol_['name']][_map_['name']] = {}
 
                 for _num_ in _map_['num_of_agents']:
-                    result[_solver_['name']][_map_['name']][_num_] = {'ins':[], 'val':[], 'succ':[]}
+                    result[_sol_['name']][_map_['name']][_num_] = {'ins':[], 'val':[], 'succ':[]}
 
                     for scen in _map_['scens']:
                         data_frame = get_csv_instance(self.config['exp_path'],
                                                       _map_['name'],
                                                       scen,
                                                       _num_,
-                                                      _solver_['name'])
+                                                      _sol_['name'])
                         self.num_ins_per_file = data_frame.shape[0]
 
                         for i, row in data_frame.iterrows():
@@ -103,9 +98,9 @@ class DataProcessor:
                             else:
                                 curr_val = row[in_index]
 
-                            result[_solver_['name']][_map_['name']][_num_]['val'].append(curr_val)
-                            result[_solver_['name']][_map_['name']][_num_]['succ'].append(is_succ)
-                            result[_solver_['name']][_map_['name']][_num_]['ins'].append(i+1)
+                            result[_sol_['name']][_map_['name']][_num_]['val'].append(curr_val)
+                            result[_sol_['name']][_map_['name']][_num_]['succ'].append(is_succ)
+                            result[_sol_['name']][_map_['name']][_num_]['ins'].append(i+1)
         return result
 
 
@@ -115,17 +110,17 @@ class DataProcessor:
         Args:
             in_data1 (Dict): row data from the csv files
             in_data2 (Dict): row data from the csv files
-            in_op (str, optional): which operation to perform. Defaults to None.
+            in_op (str, optional): which operation to perform.
         """
         assert in_op in OPERATIONS
 
         result = in_data1
         for _map_ in self.config['maps']:
             for _num_ in _map_['num_of_agents']:
-                for _solver_ in self.config['solvers']:
+                for _sol_ in self.config['solvers']:
                     for idx in range(self.num_ins_per_file):
-                        val1 = in_data1[_solver_['name']][_map_['name']][_num_]['val'][idx]
-                        val2 = in_data2[_solver_['name']][_map_['name']][_num_]['val'][idx]
+                        val1 = in_data1[_sol_['name']][_map_['name']][_num_]['val'][idx]
+                        val2 = in_data2[_sol_['name']][_map_['name']][_num_]['val'][idx]
 
                         if in_op == 'add':
                             tmp_val = val1 + val2
@@ -140,7 +135,7 @@ class DataProcessor:
                         else:
                             logging.error("Invalid operator!")
                             sys.exit()
-                        result[_solver_['name']][_map_['name']][_num_]['val'][idx] = tmp_val
+                        result[_sol_['name']][_map_['name']][_num_]['val'][idx] = tmp_val
         return result
 
 
@@ -158,24 +153,24 @@ class DataProcessor:
         if in_filter == 'succ':  # Only want the successfully-solved instances
             for _map_ in self.config['maps']:
                 for _num_ in _map_['num_of_agents']:
-                    for _solver_ in self.config['solvers']:
+                    for _sol_ in self.config['solvers']:
                         for idx in range(self.num_ins_per_file):
-                            if not results[_solver_['name']][_map_['name']][_num_]['succ'][idx]:
-                                results[_solver_['name']][_map_['name']][_num_]['val'][idx] = np.inf
+                            if not results[_sol_['name']][_map_['name']][_num_]['succ'][idx]:
+                                results[_sol_['name']][_map_['name']][_num_]['val'][idx] = np.inf
 
         elif in_filter == 'common':
             for _map_ in self.config['maps']:
                 for _num_ in _map_['num_of_agents']:
                     for idx in range(self.num_ins_per_file):
                         all_succ = True
-                        for _solver_ in self.config['solvers']:
-                            if not results[_solver_['name']][_map_['name']][_num_]['succ'][idx]:
+                        for _sol_ in self.config['solvers']:
+                            if not results[_sol_['name']][_map_['name']][_num_]['succ'][idx]:
                                 all_succ = False
                                 break
 
                         if not all_succ:
-                            for _solver_ in self.config['solvers']:
-                                results[_solver_['name']][_map_['name']][_num_]['val'][idx] = np.inf
+                            for _sol_ in self.config['solvers']:
+                                results[_sol_['name']][_map_['name']][_num_]['val'][idx] = np.inf
 
         else:
             assert in_filter is None
@@ -184,18 +179,25 @@ class DataProcessor:
 
 
     def get_val(self, x_index:str='num', y_index1:str='succ', y_index2:str=None,
-                num_op:str='avg', ins_op:str=None, in_filter:str='none'):
+                ins_op:str=None, in_filter:str='none', num_op:str='avg'):
         """Get the value on the y axid
         Args:
             x_index (str, optional):   value of the x-axid. Defaults to 'num'.
             y_index (str, optional):   value of the y-axid. Defaults to 'succ'.
-            num_op (str, optional):    operation for number of agents (avg, sum). Defaults to 'avg'.
             ins_op (str, optional):    operation for instance. Defaults to None.
             in_filter (str, optional): what data to ignore (none, succ, common). Defaults to 'none'.
+            num_op (str, optional):    operation for number of agents (avg, sum). Defaults to 'avg'.
 
         Returns:
             Dict: the y value on the y axid
         """
+
+        result = {}
+        for _sol_ in self.config['solvers']:
+            result[_sol_['name']] = {}
+            for _map_ in self.config['maps']:
+                result[_sol_['name']][_map_['name']] = {'x':[], 'val':[], 'var':[]}
+
 
         row_data = self.get_row_val(y_index1)  # Get all the instances
         if y_index2 is not None:
@@ -204,7 +206,7 @@ class DataProcessor:
             row_data = self.operate_val(row_data, row_data2, ins_op)  # Operate the data
         row_data = self.filter_val(row_data, in_filter)  # Filter out the data
 
-        for _solver_ in self.config['solvers']:
+        for _sol_ in self.config['solvers']:
             for _map_ in self.config['maps']:
                 total_sum = 0.0
                 total_num = 0
@@ -214,10 +216,10 @@ class DataProcessor:
                     ins_sum = 0.0
                     ins_var = 0.0
                     ins_num = 0
-                    for _val_ in row_data[_solver_['name']][_map_['name']][_num_]['val']:
+                    for _val_ in row_data[_sol_['name']][_map_['name']][_num_]['val']:
                         if x_index == 'ins':  # instance-wise plot
-                            self.result[_solver_['name']][_map_['name']]['val'].append(_val_)
-                            self.result[_solver_['name']][_map_['name']]['x'].append(global_idx)
+                            result[_sol_['name']][_map_['name']]['val'].append(_val_)
+                            result[_sol_['name']][_map_['name']]['x'].append(global_idx)
                         ins_val.append(_val_)
                         ins_sum += _val_
                         ins_num += 1
@@ -236,17 +238,18 @@ class DataProcessor:
                         assert num_op == 'sum'
 
                     if x_index == 'num':  # number-of-agents-wise plot
-                        self.result[_solver_['name']][_map_['name']]['val'].append(ins_sum)
-                        self.result[_solver_['name']][_map_['name']]['var'].append(ins_var)
-                        self.result[_solver_['name']][_map_['name']]['x'].append(_num_)
+                        result[_sol_['name']][_map_['name']]['val'].append(ins_sum)
+                        result[_sol_['name']][_map_['name']]['var'].append(ins_var)
+                        result[_sol_['name']][_map_['name']]['x'].append(_num_)
 
                 if x_index == 'total':
                     if num_op == 'avg':
                         total_sum = total_sum / total_num if total_num > 0 else 0
                     else:
                         assert num_op == 'sum'
-                    self.result[_solver_['name']][_map_['name']]['val'].append(total_sum)
-                    self.result[_solver_['name']][_map_['name']]['x'].append(total_num)
+                    result[_sol_['name']][_map_['name']]['val'].append(total_sum)
+                    result[_sol_['name']][_map_['name']]['x'].append(total_num)
+        return result
 
 
     def get_subfig_position(self, f_idx:int):
@@ -386,8 +389,29 @@ class DataProcessor:
         in_axs.set_ylabel(shown_y_label, fontsize=self.config['text_size'])
 
 
+    def sort_data(self, sort_by:List[str]=None, in_filter:str=None, num_op:str='avg'):
+        """Sort the data in self.result according to properties in sort_y
+        """
+        _y2_ = sort_by['y_index2'] if 'y_index2' in sort_by else None
+        _op_ = sort_by['ins_op'] if 'ins_op' in sort_by else None
+        comp_data = self.get_val('ins', sort_by['y_index1'], _y2_, _op_, in_filter, num_op)
+
+        for _sol_ in self.config['solvers']:
+            for _map_ in self.config['maps']:
+                rst = [x for _,x in sorted(zip(comp_data[_sol_['name']][_map_['name']]['val'],
+                                               self.result[_sol_['name']][_map_['name']]['val']))]
+                self.result[_sol_['name']][_map_['name']]['val'] = rst
+
+                # Verify the code
+                sidx1 = [x for _,x in sorted(zip(comp_data[_sol_['name']][_map_['name']]['val'],
+                                                 comp_data[_sol_['name']][_map_['name']]['x']))]
+                sidx2 = [x for _,x in sorted(zip(comp_data[_sol_['name']][_map_['name']]['val'],
+                                                 self.result[_sol_['name']][_map_['name']]['x']))]
+                assert sidx1 == sidx2
+
+
     def plot_fig(self, x_index:str, y_index1:str, y_index2:str=None, y_label:str=None,
-                 num_op:str='avg', ins_op:str=None, in_filter:str=None):
+                 num_op:str='avg', ins_op:str=None, in_filter:str=None, sort_by:str=None):
         """Plot the figure
 
         Args:
@@ -401,8 +425,12 @@ class DataProcessor:
         """
         if x_index == 'ins':
             self.config['line_width'] = 0.0
+
         # Get the results
-        self.get_val(x_index, y_index1, y_index2, num_op, ins_op, in_filter)
+        self.result = self.get_val(x_index, y_index1, y_index2, ins_op, in_filter, num_op)
+
+        if x_index == "ins" and sort_by is not None:
+            self.sort_data(sort_by, in_filter, num_op)
 
         # Plot all the subplots on the figure
         plt.close('all')  # Initialize the plot
@@ -455,11 +483,13 @@ if __name__ == '__main__':
                   'y_label': None,
                   'num_op': 'avg',
                   'ins_op': None,
-                  'filter': None}
+                  'filter': None,
+                  'sort_by': None}
     with open(main_args.oper, mode='r', encoding='utf-8') as fin_op:
         operations.update(yaml.load(fin_op, Loader=yaml.FullLoader))
     assert 'x_index' in operations and 'y_index1' in operations
 
     data_proc.plot_fig(operations['x_index'], operations['y_index1'],
                        operations['y_index2'], operations['y_label'],
-                       operations['num_op'], operations['ins_op'], operations['filter'])
+                       operations['num_op'], operations['ins_op'],
+                       operations['filter'], operations['sort_by'])
