@@ -288,19 +288,10 @@ class DataProcessor:
 
 
     def subplot_fig(self, in_axs, in_map_idx:int, in_map:Dict,
-                    base_analysis:str, x_index:str, y_index:str, y_label:str=None,
+                    base_analysis:str, x_index:str, y_index:str,
+                    x_label:str=None, y_label:str=None,
                     num_op:str='avg', in_filter:str=None, sort_by:str=None):
         """Plot the sub-figure
-
-        Args:
-            in_axs (_type_): _description_
-            in_map_idx (int): _description_
-            in_map (Dict): _description_
-            base_analysis (str): _description_
-            y_index (str): _description_
-            x_index (str): _description_
-            num_op (str): _description_
-            y_label (str, optional): _description_. Defaults to None.
         """
 
         left_bd = -1 * self.config['set_shift']
@@ -392,14 +383,60 @@ class DataProcessor:
             in_axs.xaxis.grid()
 
         # Set the x-axis labels and positions
-        # TODO: Need to fix this part
-        if len(_num_) > MAX_X_NUM and base_analysis == 'ins':
+        if len(_num_) > MAX_X_NUM and x_index == 'ins':
             _num_ = list(range(len(_x_)//MAX_X_NUM, len(_x_)+1, len(_x_)//MAX_X_NUM))
             _num_.insert(0, 1)
             _x_ = [_x_[_nn_-1] for _nn_ in _num_]
-        in_axs.axes.set_xticks(_num_)
-        in_axs.axes.set_xticklabels(_x_, fontsize=self.config['text_size'])
-        in_axs.set_xlabel(X_LABELS[base_analysis], fontsize=self.config['text_size'])
+            in_axs.axes.set_xticks(_num_)
+            in_axs.axes.set_xticklabels(_x_, fontsize=self.config['text_size'])
+        else:
+            x_ticks = in_axs.axes.get_xticks()
+            shown_ticks = x_ticks
+            x_unit = 1
+            if x_index == 'succ':
+                x_ticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+                shown_ticks = x_ticks
+            elif x_index == 'runtime' and num_op != 'sum':
+                x_ticks = range(0, self.config['time_limit']+1, self.config['time_gap'])
+                shown_ticks = x_ticks
+            else:
+                max_x_ticks = max(x_ticks)
+                x_base = np.floor(np.log10(abs(max_x_ticks)))
+                x_unit = 1
+                if 2 < x_base <= 4:
+                    x_unit = 1000
+                elif 4 < x_base:
+                    x_unit = 1000000
+
+                x_gap = 1
+                x_num = 1
+                for _gap_ in Y_GAPS:
+                    x_gap = _gap_ *  x_unit
+                    x_num = int(np.ceil(max_x_ticks / x_gap))
+                    if 1 < x_num < MAX_Y_NUM:
+                        break
+
+                x_ticks = []
+                for _x_ in range(x_num+1):
+                    x_ticks.append(_x_ * x_gap)
+
+                if isinstance(x_gap, float):
+                    shown_ticks = [f"{_x_/x_unit:.1f}" if _x_ > 0 else "0" for _x_ in x_ticks]
+                elif isinstance(x_gap, int):
+                    shown_ticks = [str(int(_x_//x_unit)) for _x_ in x_ticks]
+
+            in_axs.axes.set_xticks(x_ticks)
+            in_axs.axes.set_xticklabels(shown_ticks, fontsize=self.config['text_size'])
+
+        if x_label is not None:
+            shown_x_label = x_label
+        elif x_index in Y_LABELS:
+            shown_x_label = Y_LABELS[x_index]
+            shown_x_label += UNITS[x_unit]
+        else:
+            logging.error("Missing x label text")
+            sys.exit()
+        in_axs.set_xlabel(Y_LABELS[x_index], fontsize=self.config['text_size'])
 
         # Set the y-axis labels and positions
         y_ticks = in_axs.axes.get_yticks()
@@ -460,7 +497,7 @@ class DataProcessor:
                 self.result[_sol_['name']][_map_['name']]['val'] = rst
                 self.result[_sol_['name']][_map_['name']]['x'] = sorted(tmp_x)
 
-                if isinstance(_sol_['color'], list):  # multiple colors in a solver
+                if isinstance(_sol_['color'], list):  # multiple colors in a solver (bug!)
                     _sol_['color'] = [x for _,x in sorted(zip(tmp_x, _sol_['color']))]
                 if isinstance(_sol_['marker'], list):  # multiple markers in a solver
                     _sol_['marker'] = [x for _,x in sorted(zip(tmp_x, _sol_['marker']))]
@@ -533,15 +570,18 @@ class DataProcessor:
             frow, fcol = self.get_subfig_position(_idx_)
             if len(self.config['maps']) == 1:
                 self.subplot_fig(axs, _idx_, _map_,
-                                 base, x_index1, y_index1, y_label,
+                                 base, x_index1, y_index1,
+                                 x_label, y_label,
                                  num_op, in_filter, sort_by)
             elif FIG_AXS[len(self.config['maps'])][0] == 1:
                 self.subplot_fig(axs[fcol], _idx_, _map_,
-                                 base, x_index1, y_index1, y_label,
+                                 base, x_index1, y_index1,
+                                 x_label, y_label,
                                  num_op, in_filter, sort_by)
             else:
                 self.subplot_fig(axs[frow,fcol], _idx_, _map_,
-                                 base, x_index1, y_index1, y_label,
+                                 base, x_index1, y_index1,
+                                 x_label, y_label,
                                  num_op, in_filter, sort_by)
 
         legend_ncols = len(self.config['solvers'])
