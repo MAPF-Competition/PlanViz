@@ -1,4 +1,3 @@
-#! /home/rdaneel/anaconda3/lib/python3.8
 # -*- coding: UTF-8 -*-
 """Utility functions"""
 
@@ -176,4 +175,3 @@ def random_walk(in_map:List[List[bool]], init_loc:Tuple, steps:int):
                 curr_loc = next_loc
                 break
     return curr_loc
-    
