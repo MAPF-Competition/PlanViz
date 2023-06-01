@@ -121,20 +121,32 @@ class BenchmarkConverter:
     def convert_to_tasks(self):
         all_locations:List[Tuple[int,int]] = self.load_locations()
         num_all_locs = len(all_locations)
+        agent_tasks:Dict[int,List[int]] = {}
 
         # Generate start locations and the initial tasks, one for each agent
         for aid in range(self.config["num_of_agents"]):
             cur_loc:Tuple[int,int] = all_locations.pop(0)
             self.start_loc[aid]:int = cur_loc[0]
-            self.tasks.append(cur_loc[1])
+            agent_tasks[aid] = [cur_loc[1]]
         assert len(all_locations) + self.config["num_of_agents"] == num_all_locs
 
         # Generate other tasks from all_locations
         ag_cnt = 0
         for (sloc, gloc) in all_locations:
             aid = ag_cnt % self.config["num_of_agents"]
-            self.tasks.append(sloc)
-            self.tasks.append(gloc)
+            agent_tasks[aid].append(sloc)
+            agent_tasks[aid].append(gloc)
+            ag_cnt += 1
+
+        # Collect the tasks in a round robin order
+        has_task:List[bool] = [True for _ in range(self.config["num_of_agents"])]
+        ag_cnt = 0
+        while any(has_task):
+            aid = ag_cnt % self.config["num_of_agents"]
+            if agent_tasks[aid]:  # There is still elements in the list
+                self.tasks.append(agent_tasks[aid].pop(0))
+            else:
+                has_task[aid] = False
             ag_cnt += 1
 
 
