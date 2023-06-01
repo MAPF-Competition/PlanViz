@@ -54,10 +54,10 @@ class BenchmarkConverter:
 
         if "agent_file" not in self.config.keys():
             self.config["agent_file"] = "./" + self.config["map_name"] + "_" +\
-                self.config["scen_name"] + "_agents.txt"
+                self.config["scen_name"] + "_" + str(self.config["num_of_agents"]) + "_agents.txt"
         if "task_file" not in self.config.keys():
             self.config["task_file"] = "./" + self.config["map_name"] + "_" +\
-                self.config["scen_name"] + "_tasks.txt"
+                self.config["scen_name"] + "_" + str(self.config["num_of_agents"]) + "_tasks.txt"
 
         assert self.config["num_of_agents"] > 0
         assert self.config["num_of_tasks"] > -2
