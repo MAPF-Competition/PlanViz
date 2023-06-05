@@ -1,0 +1,5 @@
+map_path: "/home/rdaneel/mapf_benchmark/mapf-map/Berlin_1_256.map"
+scen_path:
+  - "/home/rdaneel/mapf_benchmark/scen-random/Berlin_1_256-random-1.scen"
+  # - "/home/rdaneel/mapf_benchmark/scen-random/Berlin_1_256-random-2.scen"
+agent_num: 10
