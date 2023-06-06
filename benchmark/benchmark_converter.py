@@ -9,6 +9,7 @@ import logging
 import argparse
 from typing import List, Tuple, Dict
 import yaml
+import json
 
 
 class BenchmarkConverter:
@@ -30,26 +31,32 @@ class BenchmarkConverter:
             with open(config_dir, mode="r", encoding="utf-8") as fin:
                 self.config = yaml.load(fin, Loader=yaml.FullLoader)
         else:  #  Load the input arguments
-            self.config["map_path"]:str = input_arg.map_path
-            self.config["scen_path"]:List[str] = input_arg.scen_path
+            self.config["map_file"]:str = input_arg.map_file
+            self.config["scen_file"]:List[str] = input_arg.scen_file
             self.config["agent_num"] = input_arg.agent_num
             if input_arg.agent_file is not None:
                 self.config["agent_file"] = input_arg.agent_file
             if input_arg.task_file is not None:
                 self.config["task_file"]  = input_arg.task_file
+            if input_arg.prob_file is not None:
+                self.config["prob_file"] = input_arg.prob_file
             if input_arg.task_num is not None:
                 self.config["task_num"] = input_arg.task_num
+            if input_arg.reveal_num is not None:
+                self.config["reveal_num"] = input_arg.reveal_num
 
         assert self.config["agent_num"] is not None
-        assert self.config["map_path"] is not None
-        assert self.config["scen_path"] is not None
-        self.config["map_name"] = self.config["map_path"].split("/")[-1].split(".")[0]
-        self.config["scen_name"] = self.config["scen_path"][0].split("/")[-2].split("-")[-1]
+        assert self.config["map_file"] is not None
+        assert self.config["scen_file"] is not None
+        self.config["map_name"] = self.config["map_file"].split("/")[-1].split(".")[0]
+        self.config["scen_name"] = self.config["scen_file"][0].split("/")[-2].split("-")[-1]
         assert self.config["scen_name"] in ["even", "random"]
 
         # Set the default values in self.config
         if "task_num" not in self.config.keys():
             self.config["task_num"] = -1  # put all goal locations into the task
+        if "reveal_num"  not in self.config.keys():
+            self.config["reveal_num"] = 1
         if "ins_id" not in self.config.keys():
             self.config["ins_id"]:List[int] = [i+1 for i in range(25)]  # from 1 to 25
         if "agent_file" not in self.config.keys():
@@ -58,18 +65,23 @@ class BenchmarkConverter:
         if "task_file" not in self.config.keys():
             self.config["task_file"] = "./" + self.config["map_name"] + "_" +\
                 self.config["scen_name"] + "_" + str(self.config["agent_num"]) + "_tasks.txt"
+        if "prob_file" not in self.config.keys():
+            self.config["prob_file"] = "./" + self.config["map_name"] + "_" +\
+                self.config["scen_name"] + "_" + str(self.config["agent_num"]) + "_problem.json"
+
         assert self.config["agent_num"] > 0
         assert self.config["task_num"] > -2
-        assert len(self.config["scen_path"]) > 0
+        assert len(self.config["scen_file"]) > 0
+        assert self.config["prob_file"].split(".")[-1] == "json"
 
 
     def load_map_size(self):
-        print("Get the size of map " + self.config["map_path"])
-        if not os.path.exists(self.config["map_path"]):
+        print("Get the size of map " + self.config["map_file"])
+        if not os.path.exists(self.config["map_file"]):
             logging.error("\nNo map file is found!")
             sys.exit()
 
-        with open(self.config["map_path"], mode="r", encoding="utf-8") as fin:
+        with open(self.config["map_file"], mode="r", encoding="utf-8") as fin:
             fin.readline()  # ignore "type"
             self.config["height"] = int(fin.readline().strip().split(' ')[1])
             self.config["width"]  = int(fin.readline().strip().split(' ')[1])
@@ -81,7 +93,7 @@ class BenchmarkConverter:
         assert "width"  in self.config.keys() and self.config["width"] > 0
 
         output_loc:List[Tuple[int,int]] = []
-        for _scen_ in self.config["scen_path"]:
+        for _scen_ in self.config["scen_file"]:
             if not os.path.exists(_scen_):
                 logging.error("\nNo scen path is found!")
                 sys.exit()
@@ -110,6 +122,15 @@ class BenchmarkConverter:
             for cur_task in self.tasks:
                 fout.write(str(cur_task) + "\n")
 
+        problem_file = {
+            "map_file": self.config["map_file"],
+            "agent_file": self.config["agent_file"],
+            "task_file": self.config["task_file"],
+            "num_tasks_reveal": self.config["reveal_num"],
+            "task_assignment_strategy": "roundrobin"
+        }
+        with open(self.config["prob_file"], mode="w", encoding="utf-8") as fout:
+            json.dump(problem_file, fout, indent=4)
 
     def convert_to_tasks(self):
         all_locations:List[Tuple[int,int]] = self.load_locations()
@@ -163,7 +184,7 @@ class BenchmarkConverter:
             else:
                 debug_goal.append(_task_)
 
-        for _scen_ in self.config["scen_path"]:
+        for _scen_ in self.config["scen_file"]:
             with open(_scen_, mode="r", encoding="utf-8") as fin:
                 fin.readline()
                 for _line_ in fin.readlines():
@@ -179,14 +200,17 @@ class BenchmarkConverter:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Take config.yaml as input!")
     parser.add_argument("--config", type=str, help="path to the configuration file", default=None)
-    parser.add_argument("--map", dest="map_path", type=str, help="path to the map file",
+    parser.add_argument("--map", dest="map_file", type=str, help="path to the map file",
                         default="~/mapf_benchmark/mapf-map/random-32-32-20.map")
-    parser.add_argument("--scen", dest="scen_path", type=str, help="path to all the scen files",
+    parser.add_argument("--scen", dest="scen_file", type=str, help="path to all the scen files",
                         nargs="*", default="~/mapf_benchmark/scen-even/random-32-32-20-even-1.scen")
     parser.add_argument("--af", dest="agent_file", type=str, default=None, help="output agent file")
     parser.add_argument("--tf", dest="task_file", type=str, default=None, help="output task file")
+    parser.add_argument("--pf", dest="prob_file", type=str, default=None, help="problem file")
     parser.add_argument("--na", dest="agent_num", type=int, default=None, help="number of agents")
     parser.add_argument("--nt", dest="task_num", type=str, default=None, help="number of tasks")
+    parser.add_argument("--nr", dest="reveal_num", type=int, default=None,
+                        help="number of revealed tasks")
     args = parser.parse_args()
 
     benchmark_converter = BenchmarkConverter(input_arg=args)
