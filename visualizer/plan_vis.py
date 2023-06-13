@@ -8,8 +8,7 @@ import sys
 import logging
 import argparse
 from typing import List, Tuple, Dict
-from tkinter import *
-from tkinter import filedialog
+import tkinter as tk
 from datetime import datetime
 import subprocess
 import time
@@ -67,11 +66,11 @@ class PlanVis:
         print("===== Initialize MAPF visualizer =====")
 
         # Load the yaml file or the input arguments
-        tmp_config: Dict = dict()
+        tmp_config: Dict = {}
 
         if in_arg.config is not None:
             config_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), in_arg.config)
-            with open(config_dir, 'r') as fin:
+            with open(config_dir, mode="r", encoding="utf-8") as fin:
                 tmp_config = yaml.load(fin, Loader=yaml.FullLoader)
         else:
             tmp_config["map_file"] = in_arg.map
@@ -146,12 +145,12 @@ class PlanVis:
         self.conflicts:Dict = self.load_conflicts()
 
         # Initialize the window
-        self.window = Tk()
-        self.is_run = BooleanVar()
-        self.is_grid = BooleanVar()
-        self.show_ag_idx = BooleanVar()
-        self.show_static = BooleanVar()
-        self.show_all_conf_ag = BooleanVar()
+        self.window = tk.Tk()
+        self.is_run = tk.BooleanVar()
+        self.is_grid = tk.BooleanVar()
+        self.show_ag_idx = tk.BooleanVar()
+        self.show_static = tk.BooleanVar()
+        self.show_all_conf_ag = tk.BooleanVar()
 
         self.is_run.set(False)
         self.is_grid.set(tmp_config["show_grid"])
@@ -160,9 +159,9 @@ class PlanVis:
         self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
-        self.canvas = Canvas(width=(self.width+1) * self.tile_size,
-                             height=(self.height+1) * self.tile_size,
-                             bg="white")
+        self.canvas = tk.Canvas(width=(self.width+1) * self.tile_size,
+                                height=(self.height+1) * self.tile_size,
+                                bg="white")
         self.canvas.grid(row=1, column=0)
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
@@ -180,123 +179,123 @@ class PlanVis:
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
         ui_text_size:int = 12
-        self.frame = Frame(self.window)
+        self.frame = tk.Frame(self.window)
         self.frame.grid(row=1, column=1,sticky="n")
         row_idx = 0
 
-        self.timestep_label = Label(self.frame,
-                              text = f"Timestep: {self.cur_timestep:03d}",
-                              font=("Arial", ui_text_size + 10))
+        self.timestep_label = tk.Label(self.frame,
+                                       text = f"Timestep: {self.cur_timestep:03d}",
+                                       font=("Arial", ui_text_size + 10))
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="wn")
         row_idx += 1
 
-        self.run_button = Button(self.frame, text="Play", font=("Arial",ui_text_size),
-                                 command=self.move_agents)
+        self.run_button = tk.Button(self.frame, text="Play", font=("Arial",ui_text_size),
+                                    command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="wn")
-        self.pause_button = Button(self.frame, text="Pause", font=("Arial",ui_text_size),
-                                   command=self.pause_agents)
+        self.pause_button = tk.Button(self.frame, text="Pause", font=("Arial",ui_text_size),
+                                      command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="wn")
-        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
-                                         command=self.resume_zoom)
+        self.resume_zoom_button = tk.Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
+                                            command=self.resume_zoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.next_button = Button(self.frame, text="Next", font=("Arial",ui_text_size),
-                                  command=self.move_agents_per_timestep)
+        self.next_button = tk.Button(self.frame, text="Next", font=("Arial",ui_text_size),
+                                     command=self.move_agents_per_timestep)
         self.next_button.grid(row=row_idx, column=0, sticky="w")
-        self.prev_button = Button(self.frame, text="Prev", font=("Arial",ui_text_size),
-                                  command=self.back_agents_per_timestep)
+        self.prev_button = tk.Button(self.frame, text="Prev", font=("Arial",ui_text_size),
+                                     command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="w")
-        self.restart_button = Button(self.frame, text="Reset", font=("Arial",ui_text_size),
-                                     command=self.restart_timestep)
+        self.restart_button = tk.Button(self.frame, text="Reset", font=("Arial",ui_text_size),
+                                        command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="wn")
         row_idx += 1
 
-        self.grid_button = Checkbutton(self.frame, text="Show grids",
-                                       font=("Arial",ui_text_size),
-                                       variable=self.is_grid, onvalue=True, offvalue=False,
-                                       command=self.show_grid)
+        self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
+                                          font=("Arial",ui_text_size),
+                                          variable=self.is_grid, onvalue=True, offvalue=False,
+                                          command=self.show_grid)
         self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.id_button = Checkbutton(self.frame, text="Show indices",
-                                     font=("Arial",ui_text_size),
-                                     variable=self.show_ag_idx, onvalue=True, offvalue=False,
-                                     command=self.show_index)
+        self.id_button = tk.Checkbutton(self.frame, text="Show indices",
+                                        font=("Arial",ui_text_size),
+                                        variable=self.show_ag_idx, onvalue=True, offvalue=False,
+                                        command=self.show_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.static_button = Checkbutton(self.frame, text="Show start/goal locations",
-                                         font=("Arial",ui_text_size),
-                                         variable=self.show_static, onvalue=True, offvalue=False,
-                                         command=self.show_static_loc)
+        self.static_button = tk.Checkbutton(self.frame, text="Show start/goal locations",
+                                            font=("Arial",ui_text_size),
+                                            variable=self.show_static, onvalue=True, offvalue=False,
+                                            command=self.show_static_loc)
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
-                                                   font=("Arial",ui_text_size),
-                                                   variable=self.show_all_conf_ag,
-                                                   onvalue=True, offvalue=False,
-                                                   command=self.mark_conf_agents)
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
+                                                      font=("Arial",ui_text_size),
+                                                      variable=self.show_all_conf_ag,
+                                                      onvalue=True, offvalue=False,
+                                                      command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        tmp_label = Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
+        tmp_label = tk.Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        self.new_time = IntVar()
-        self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
-                                      font=("Arial",ui_text_size),
-                                      validatecommand=self.update_curtime)
+        self.new_time = tk.IntVar()
+        self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
+                                         font=("Arial",ui_text_size),
+                                         validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
-        self.update_button = Button(self.frame, text="Go", font=("Arial",ui_text_size),
-                                    command=self.update_curtime)
+        self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
+                                       command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
-        
-        self.is_move_plan = BooleanVar()
+
+        self.is_move_plan = tk.BooleanVar()
         self.is_move_plan.set(False)
-        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
-                                          command=self.update_is_move_plan)
+        self.is_move_plan_button = tk.Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
+                                             command=self.update_is_move_plan)
         self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.gen_cur_ins_but = Button(self.frame, text="Snapshot instance",
-                                      font=("Arial", ui_text_size),
-                                      command=self.generate_cur_instance)
+        self.gen_cur_ins_but = tk.Button(self.frame, text="Snapshot instance",
+                                         font=("Arial", ui_text_size),
+                                         command=self.generate_cur_instance)
         self.gen_cur_ins_but.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        tmp_label3 = Label(self.frame, text="Invoke planner", font=("Arial", ui_text_size+5))
+        tmp_label3 = tk.Label(self.frame, text="Invoke planner", font=("Arial", ui_text_size+5))
         tmp_label3.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
-        self.planner_label = Label(self.frame,text="Select a planner",font=("Arial", ui_text_size))
+        self.planner_label = tk.Label(self.frame,text="Select a planner",font=("Arial", ui_text_size))
         self.planner_label.grid(row=row_idx, column= 0, columnspan=3, sticky="w")
-        self.select_planner_button = Button(self.frame, text="Browse", font=("Arial", ui_text_size),
-                                            command=lambda: self.browseFiles(self.planner_label))
+        self.select_planner_button = tk.Button(self.frame, text="Browse", font=("Arial", ui_text_size),
+                                               command=lambda: self.browseFiles(self.planner_label))
         self.select_planner_button.grid(row=row_idx, column=3, columnspan=1, sticky="w")
         row_idx += 1
 
-        self.ins_label = Label(self.frame,text="Select an instance",font=("Arial", ui_text_size))
+        self.ins_label = tk.Label(self.frame,text="Select an instance",font=("Arial", ui_text_size))
         self.ins_label.grid(row=row_idx, column= 0, columnspan=3, sticky="w")
-        self.select_ins_button = Button(self.frame, text="Browse", font=("Arial", ui_text_size),
-                                        command=lambda: self.browseFiles(self.ins_label))
+        self.select_ins_button = tk.Button(self.frame, text="Browse", font=("Arial", ui_text_size),
+                                           command=lambda: self.browseFiles(self.ins_label))
         self.select_ins_button.grid(row=row_idx, column=3, columnspan=1, sticky="w")
         row_idx += 1
 
-        self.replan_button = Button(self.frame, text="Replan", font=("Arial", ui_text_size),
-                                    command=self.replan_instance)
+        self.replan_button = tk.Button(self.frame, text="Replan", font=("Arial", ui_text_size),
+                                       command=self.replan_instance)
         self.replan_button.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         row_idx += 1
 
-        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size+5))
+        tmp_label2 = tk.Label(self.frame, text="List of collisions", font=("Arial",ui_text_size+5))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = dict()
-        self.conflict_listbox = Listbox(self.frame,
-                                        width=28,
-                                        font=("Arial",ui_text_size),
-                                        selectmode=EXTENDED)
+        self.conflict_listbox = tk.Listbox(self.frame,
+                                           width=28,
+                                           font=("Arial",ui_text_size),
+                                           selectmode=tk.EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
             for _conf_ in self.conflicts[_timestep_]:
@@ -314,7 +313,7 @@ class PlanVis:
         self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
         self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
 
-        scrollbar = Scrollbar(self.frame, orient="vertical")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=row_idx, column=5, sticky="w")
@@ -637,7 +636,7 @@ class PlanVis:
             map_file = self.map_file
         print("Loading map from " + map_file, end = '... ')
 
-        with open(map_file, "r") as fin:
+        with open(map_file, mode="r", encoding="utf-8") as fin:
             fin.readline()  # ignore type
             self.height = int(fin.readline().strip().split(' ')[1])
             self.width  = int(fin.readline().strip().split(' ')[1])
@@ -661,11 +660,11 @@ class PlanVis:
         print("Loading scen from "+str(scen_file), end="... ")
         if not os.path.exists(scen_file):
             logging.warning("\nNo scen file is found!")
-            exit(1)
+            sys.exit()
 
-        start_loc = dict()
-        goal_loc = dict()
-        with open(scen_file, "r") as fin:
+        start_loc = {}
+        goal_loc = {}
+        with open(scen_file, "r", encoding="utf-8") as fin:
             head = fin.readline().rstrip('\n').split(" ")[0]  # ignore the first line 'version 1'
             if head == "version":  # load scen file in Nathan's format
                 ag_counter:int = 0
@@ -706,7 +705,7 @@ class PlanVis:
             return
 
         paths = dict()
-        with open(path_file, "r") as fin:
+        with open(path_file, mode="r", encoding="utf-8") as fin:
             ag_counter = 0
             for line in fin.readlines():
                 if line.split(" ")[0] != "Agent":
@@ -742,9 +741,9 @@ class PlanVis:
 
         conflicts = dict()
         last_line = str()
-        with open(in_file, "r") as fin:
+        with open(in_file, mode="r", encoding="utf-8") as fin:
             last_line = fin.readlines()[-1]
-        with open(in_file, "r") as fin:
+        with open(in_file, mode="r", encoding="utf-8") as fin:
             while True:
                 line = fin.readline()
                 if line.rstrip('\n') == "Conflicts":
@@ -923,11 +922,11 @@ class PlanVis:
                 fout.write(_line_)
 
     def browseFiles(self, cur_label) -> None:
-        filename = filedialog.askopenfilename(title = "Select a File")
+        filename = tk.filedialog.askopenfilename(title = "Select a File")
         cur_label.configure(text=filename)  # Change label contents
 
     def replan_instance(self) -> None:
-        out_dir = os.path.dirname(os.path.realpath(self.plan_file))
+        # out_dir = os.path.dirname(os.path.realpath(self.plan_file))
         planner_str = self.planner_label.cget("text")
         ins_str = self.ins_label.cget("text")
         out_fname = ins_str.split(".")[0]
@@ -978,7 +977,7 @@ def main() -> None:
     args = parser.parse_args()
 
     PlanVis(args)
-    mainloop()
+    tk.mainloop()
 
 
 if __name__ == "__main__":

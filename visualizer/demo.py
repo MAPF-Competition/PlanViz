@@ -9,12 +9,12 @@ import logging
 import argparse
 import math
 from typing import List, Tuple, Dict
-from tkinter import *
+import tkinter as tk
 import time
 import json
 import yaml
 import numpy as np
-from ast import literal_eval
+# from ast import literal_eval
 
 COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
                      "cyan", "brown", "olive", "gray", "crimson"]
@@ -99,7 +99,7 @@ class PlanVis:
         print("===== Initialize MAPF visualizer =====")
 
         # Load the yaml file or the input arguments
-        tmp_config: Dict = dict()
+        tmp_config: Dict = {}
 
         if in_arg.config is not None:
             config_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), in_arg.config)
@@ -161,15 +161,15 @@ class PlanVis:
 
         self.width:int = -1
         self.height:int = -1
-        self.env_map:List[List[bool]] = list()
-        self.grids:List = list()
-        self.tasks = dict()
-        self.events = dict()
+        self.env_map:List[List[bool]] = []
+        self.grids:List = []
+        self.tasks = {}
+        self.events = {}
 
-        self.plan_paths = dict()
-        self.exec_paths = dict()
-        self.conflicts = dict()
-        self.agents:Dict[int,Agent] = dict()
+        self.plan_paths = {}
+        self.exec_paths = {}
+        self.conflicts = {}
+        self.agents:Dict[int,Agent] = {}
         self.makespan:int = -1
         self.cur_timestep = 0
         self.shown_path_agents = set()
@@ -177,12 +177,12 @@ class PlanVis:
         self.load_map()  # Load from files
 
         # Initialize the window
-        self.window = Tk()
-        self.is_run = BooleanVar()
-        self.is_grid = BooleanVar()
-        self.show_ag_idx = BooleanVar()
-        self.show_static = BooleanVar()
-        self.show_all_conf_ag = BooleanVar()
+        self.window = tk.Tk()
+        self.is_run = tk.BooleanVar()
+        self.is_grid = tk.BooleanVar()
+        self.show_ag_idx = tk.BooleanVar()
+        self.show_static = tk.BooleanVar()
+        self.show_all_conf_ag = tk.BooleanVar()
 
         self.is_run.set(False)
         self.is_grid.set(tmp_config["show_grid"])
@@ -191,15 +191,14 @@ class PlanVis:
         self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
 
         # Show MAPF instance
-        # # Use width and height for scaling
-        # self.canvas = Canvas(width=(self.width+1) * self.tile_size,
-        #                      height=(self.height+1) * self.tile_size,
-        #                      bg="white")
-
+        # Use width and height for scaling
+        self.canvas = tk.Canvas(width=(self.width+1) * self.tile_size,
+                                height=(self.height+1) * self.tile_size,
+                                bg="white")
         # Use Resolution for scaling
-        self.canvas_width=int(RESOLUTION[0]*0.8)
-        self.canvas_height=RESOLUTION[1]
-        self.canvas = Canvas(width=self.canvas_width,height=self.canvas_height, bg="white")
+        # self.canvas_width=int(RESOLUTION[0]*0.8)
+        # self.canvas_height=RESOLUTION[1]
+        # self.canvas = tk.Canvas(width=self.canvas_width,height=self.canvas_height, bg="white")
 
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
@@ -223,95 +222,103 @@ class PlanVis:
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
         ui_text_size:int = 12
-        self.frame = Frame(self.window)
+        self.frame = tk.Frame(self.window)
         self.frame.grid(row=0, column=1,sticky="nsew")
         row_idx = 0
 
-        self.timestep_label = Label(self.frame,
-                              text = f"Timestep: {self.cur_timestep:03d}",
-                              font=("Arial", ui_text_size + 10))
+        self.timestep_label = tk.Label(self.frame,
+                                       text = f"Timestep: {self.cur_timestep:03d}",
+                                       font=("Arial", ui_text_size + 10))
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="nsew")
         row_idx += 1
 
-        self.run_button = Button(self.frame, text="Play", font=("Arial",ui_text_size),
-                                 command=self.move_agents)
+        self.run_button = tk.Button(self.frame, text="Play",
+                                    font=("Arial",ui_text_size),
+                                    command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="nsew")
-        self.pause_button = Button(self.frame, text="Pause", font=("Arial",ui_text_size),
-                                   command=self.pause_agents)
+        self.pause_button = tk.Button(self.frame, text="Pause",
+                                      font=("Arial",ui_text_size),
+                                      command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="nsew")
-        self.resume_zoom_button = Button(self.frame, text="Fullsize", font=("Arial",ui_text_size),
-                                         command=self.resume_zoom)
+        self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
+                                            font=("Arial",ui_text_size),
+                                            command=self.resume_zoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
-        self.next_button = Button(self.frame, text="Next", font=("Arial",ui_text_size),
-                                  command=self.move_agents_per_timestep)
+        self.next_button = tk.Button(self.frame, text="Next",
+                                     font=("Arial",ui_text_size),
+                                     command=self.move_agents_per_timestep)
         self.next_button.grid(row=row_idx, column=0, sticky="nsew")
-        self.prev_button = Button(self.frame, text="Prev", font=("Arial",ui_text_size),
-                                  command=self.back_agents_per_timestep)
+        self.prev_button = tk.Button(self.frame, text="Prev",
+                                     font=("Arial",ui_text_size),
+                                     command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="nsew")
-        self.restart_button = Button(self.frame, text="Reset", font=("Arial",ui_text_size),
-                                     command=self.restart_timestep)
+        self.restart_button = tk.Button(self.frame, text="Reset",
+                                        font=("Arial",ui_text_size),
+                                        command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
-        self.grid_button = Checkbutton(self.frame, text="Show grids",
-                                       font=("Arial",ui_text_size),
-                                       variable=self.is_grid, onvalue=True, offvalue=False,
-                                       command=self.show_grid)
+        self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
+                                          font=("Arial",ui_text_size),
+                                          variable=self.is_grid,
+                                          onvalue=True, offvalue=False,
+                                          command=self.show_grid)
         self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
-        self.id_button = Checkbutton(self.frame, text="Show indices",
-                                     font=("Arial",ui_text_size),
-                                     variable=self.show_ag_idx, onvalue=True, offvalue=False,
-                                     command=self.show_index)
+        self.id_button = tk.Checkbutton(self.frame, text="Show indices",
+                                        font=("Arial",ui_text_size),
+                                        variable=self.show_ag_idx, onvalue=True, offvalue=False,
+                                        command=self.show_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
-        self.static_button = Checkbutton(self.frame, text="Show start/goal locations",
-                                         font=("Arial",ui_text_size),
-                                         variable=self.show_static, onvalue=True, offvalue=False,
-                                         command=self.show_static_loc)
+        self.static_button = tk.Checkbutton(self.frame, text="Show start/goal locations",
+                                            font=("Arial",ui_text_size),
+                                            variable=self.show_static, onvalue=True, offvalue=False,
+                                            command=self.show_static_loc)
         self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
-        self.show_all_conf_ag_button = Checkbutton(self.frame, text="Show colliding agnets",
-                                                   font=("Arial",ui_text_size),
-                                                   variable=self.show_all_conf_ag,
-                                                   onvalue=True, offvalue=False,
-                                                   command=self.mark_conf_agents)
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
+                                                      font=("Arial",ui_text_size),
+                                                      variable=self.show_all_conf_ag,
+                                                      onvalue=True, offvalue=False,
+                                                      command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
         row_idx += 1
 
-        tmp_label = Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
+        tmp_label = tk.Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
         tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
-        self.new_time = IntVar()
-        self.start_time_entry = Entry(self.frame, width=5, textvariable=self.new_time,
-                                      font=("Arial",ui_text_size),
-                                      validatecommand=self.update_curtime)
+        self.new_time = tk.IntVar()
+        self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
+                                         font=("Arial",ui_text_size),
+                                         validatecommand=self.update_curtime)
         self.start_time_entry.grid(row=row_idx, column=2, sticky="nsew")
-        self.update_button = Button(self.frame, text="Go", font=("Arial",ui_text_size),
-                                    command=self.update_curtime)
+        self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
+                                       command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=3, sticky="nsew")
         row_idx += 1
 
-        self.is_move_plan = BooleanVar()
+        self.is_move_plan = tk.BooleanVar()
         self.is_move_plan.set(False)
-        self.is_move_plan_button = Button(self.frame, text="Exec mode", font=("Arial",ui_text_size),
-                                          command=self.update_is_move_plan)
+        self.is_move_plan_button = tk.Button(self.frame, text="Exec mode", 
+                                             font=("Arial",ui_text_size),
+                                             command=self.update_is_move_plan)
         self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
         row_idx += 1
 
-        tmp_label2 = Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
+        tmp_label2 = tk.Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="nsew")
         row_idx += 1
 
-        self.shown_conflicts:Dict[str, List[List,bool]] = dict()
-        self.conflict_listbox = Listbox(self.frame,
-                                        width=28,
-                                        font=("Arial",ui_text_size),
-                                        selectmode=EXTENDED)
+        self.shown_conflicts:Dict[str, List[List,bool]] = {}
+        self.conflict_listbox = tk.Listbox(self.frame,
+                                           width=28,
+                                           font=("Arial",ui_text_size),
+                                           selectmode=tk.EXTENDED)
         conf_id = 0
         for _timestep_ in sorted(self.conflicts.keys(), reverse=True):
             for _conf_ in self.conflicts[_timestep_]:
@@ -333,22 +340,22 @@ class PlanVis:
         self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
         self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
 
-        scrollbar = Scrollbar(self.frame, orient="vertical")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
 
         # Show events
-        tmp_label3 = Label(self.frame, text="List of events", font=("Arial",ui_text_size))
+        tmp_label3 = tk.Label(self.frame, text="List of events", font=("Arial",ui_text_size))
         tmp_label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
-        self.shown_events:Dict[str, List[List,bool]] = dict()
-        self.event_listbox = Listbox(self.frame,
-                                    width=28,
-                                    font=("Arial",ui_text_size),
-                                    selectmode=EXTENDED)
+        self.shown_events:Dict[str, List[List,bool]] = {}
+        self.event_listbox = tk.Listbox(self.frame,
+                                        width=28,
+                                        font=("Arial",ui_text_size),
+                                        selectmode=tk.EXTENDED)
         eve_id = 0
         for _timestep_ in sorted(self.events.keys(), reverse=True):
             for _eve_ in self.events[_timestep_]:
@@ -366,7 +373,7 @@ class PlanVis:
         self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind('<Double-1>', self.move_to_event)
 
-        scrollbar = Scrollbar(self.frame, orient="vertical")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.event_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.event_listbox.yview)
         scrollbar.grid(row=row_idx, column=5, sticky="w")
@@ -631,14 +638,14 @@ class PlanVis:
     def render_agents(self):
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
-        start_objs = list()
-        plan_path_objs = list()
+        start_objs = []
+        plan_path_objs = []
 
         for _ag_ in range(self.num_of_agents):
             start = self.render_obj(_ag_, self.plan_paths[_ag_][0],"oval","yellowgreen","disable")
             start_objs.append(start)
 
-            ag_path = list()
+            ag_path = []
             for _pid_ in range(len(self.plan_paths[_ag_])):
                 _p_loc_ = (self.plan_paths[_ag_][_pid_][0], self.plan_paths[_ag_][_pid_][1])
                 _p_obj = None
@@ -746,7 +753,7 @@ class PlanVis:
             self.width  = int(fin.readline().strip().split(' ')[1])
             fin.readline()  # ingmore 'map' line
             for line in fin.readlines():
-                out_line: List[bool] = list()
+                out_line: List[bool] = []
                 for word in list(line.strip()):
                     if word == '.':
                         out_line.append(True)
@@ -767,8 +774,8 @@ class PlanVis:
             logging.warning("\nNo scen file is found!")
             return (-1, -1)
 
-        start_loc = dict()
-        goal_loc = dict()
+        start_loc = {}
+        goal_loc = {}
         with open(file=scen_file, mode="r", encoding="UTF-8") as fin:
             fin.readline()  # ignore the first line 'version 1'
             ag_counter:int = 0
@@ -788,27 +795,27 @@ class PlanVis:
     def load_json(self):
         fin = open(file=self.plan_file, mode="r", encoding="UTF-8")
         data = json.load(fin)
-        self.num_of_agents = len(data["Start"])
+        self.num_of_agents = len(data["start"])
 
         print("Loading paths from "+str(self.plan_file), end="... ")
         for ag_idx in range(self.num_of_agents):
             self.plan_paths[ag_idx] = []
             self.exec_paths[ag_idx] = []
-            start = data["Start"][ag_idx]
+            start = data["start"][ag_idx]
             # start=literal_eval(start)
             # print(start,start[0],start[1],start[2])
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
-            tmp_str = data["Planner Paths"][ag_idx].split(",")
+            tmp_str = data["plannerPaths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
                 self.plan_paths[ag_idx].append(next_state)
             if self.makespan < max(len(self.plan_paths[ag_idx])-1, 0):
                 self.makespan = max(len(self.plan_paths[ag_idx])-1, 0)
 
-            tmp_str = data["Actual Paths"][ag_idx].split(",")
+            tmp_str = data["actualPaths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.exec_paths[ag_idx][-1], _motion_)
                 self.exec_paths[ag_idx].append(next_state)
@@ -817,7 +824,7 @@ class PlanVis:
         print("Done!")
 
         print("Loading errors from "+str(self.plan_file), end="... ")
-        for err in data["Errors"]:
+        for err in data["errors"]:
             timestep = err[2]
             if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
                 self.conflicts[timestep] = []
@@ -825,7 +832,7 @@ class PlanVis:
         print("Done!")
 
         print("Loading tasks from "+str(self.plan_file), end="... ")
-        for _task_ in data["Task Pool"]:
+        for _task_ in data["tasks"]:
             _tid_ = _task_[0]
             _tloc_ = (_task_[1], _task_[2])
             _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle", TASK_COLORS["init"])
@@ -835,7 +842,7 @@ class PlanVis:
 
         print("Loading events from "+str(self.plan_file), end="... ")
         for _ag_ in range(self.num_of_agents):
-            for _eve_ in data["Events"][_ag_]:
+            for _eve_ in data["events"][_ag_]:
                 _tid_ = _eve_[0]
                 _timestep_ = _eve_[1]
                 if _eve_[2] == "assigned":
@@ -848,7 +855,7 @@ class PlanVis:
                     if _timestep_ not in self.events.keys():
                         self.events[_timestep_] = []
                     self.events[_timestep_].append(_eve_)
-                        
+
                 elif _eve_[2] == "finished":
                     self.tasks[_tid_].finish["agent"] = _ag_
                     self.tasks[_tid_].finish["timestep"] = _timestep_
@@ -867,11 +874,11 @@ class PlanVis:
         if motion == "F":  # Forward
             if cur_state[-1] == 0:  # Right
                 return (cur_state[0], cur_state[1]+1, cur_state[2])
-            elif cur_state[-1] == 1:  # Up
+            if cur_state[-1] == 1:  # Up
                 return (cur_state[0]-1, cur_state[1], cur_state[2])
-            elif cur_state[-1] == 2:  # Left
+            if cur_state[-1] == 2:  # Left
                 return (cur_state[0], cur_state[1]-1, cur_state[2])
-            elif cur_state[-1] == 3:  # Down
+            if cur_state[-1] == 3:  # Down
                 return (cur_state[0]+1, cur_state[1], cur_state[2])
         elif motion == "R":  # Clockwise
             return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
@@ -893,14 +900,14 @@ class PlanVis:
             logging.warning("\nNo path file is found!")
             return
 
-        paths = dict()
+        paths = {}
         with open(file=path_file, mode="r", encoding='UTF-8') as fin:
             ag_counter = 0
             for line in fin.readlines():
                 if line.split(" ")[0] != "Agent":
                     break
                 ag_idx = int(line.split(" ")[1].split(":")[0])
-                paths[ag_idx] = list()
+                paths[ag_idx] = []
                 for cur_loc in line.split(" ")[-1].split("->"):
                     if cur_loc == "\n":
                         continue
@@ -925,7 +932,7 @@ class PlanVis:
         if not os.path.exists(in_file):
             logging.warning("No conflict file is found!")
             return
-        conflicts = dict()
+        conflicts = {}
         last_line = str()
         with open(file=in_file, mode="r", encoding="UTF-8") as fin:
             last_line = fin.readlines()[-1]
@@ -943,7 +950,7 @@ class PlanVis:
                             conf[i] = int(conf[i])
                         timestep = conf[4]
                         if timestep not in conflicts.keys():
-                            conflicts[timestep] = list()
+                            conflicts[timestep] = []
                         conflicts[timestep].append(conf)
                     break
                 if line == last_line:
@@ -1043,7 +1050,7 @@ class PlanVis:
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.tile_size/2
 
         prev_timestep = max(self.cur_timestep-1, 0)
-        prev_loc:Dict[int, Tuple[int, int]] = dict()
+        prev_loc:Dict[int, Tuple[int, int]] = {}
         for (ag_idx, agent) in self.agents.items():
             if prev_timestep > len(agent.path)-1:
                 prev_loc[ag_idx] = (agent.path[-1][0], agent.path[-1][1], agent.path[-1][2])
@@ -1203,7 +1210,7 @@ def main() -> None:
     args = parser.parse_args()
 
     PlanVis(args)
-    mainloop()
+    tk.mainloop()
 
 
 if __name__ == "__main__":

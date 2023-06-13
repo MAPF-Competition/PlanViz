@@ -1,6 +1,7 @@
+base_analysis: "num"  # "ins", "num", "total"
 x_index: "num"  # "ins", "num", "total"
-y_index1: "#high-level expanded"  # "runtime", "#low-level expanded", "#high-level expanded", etc.
-num_op: "avg"  # "avg", "sum"
+y_index1: "succ"  # "succ", "runtime", "#low-level expanded", "#high-level expanded", etc.
+num_operation: "avg"  # "avg", "sum"
 # y_index2:
 # y_label: "testing"
 # ins_op:  # "add", "sub", "mul", "div", "mod"

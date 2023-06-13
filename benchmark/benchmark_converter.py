@@ -132,6 +132,7 @@ class BenchmarkConverter:
         with open(self.config["prob_file"], mode="w", encoding="utf-8") as fout:
             json.dump(problem_file, fout, indent=4)
 
+
     def convert_to_tasks(self):
         all_locations:List[Tuple[int,int]] = self.load_locations()
         num_all_locs = len(all_locations)
@@ -165,10 +166,8 @@ class BenchmarkConverter:
 
 
     def verify(self):
-        debug_agent_num:int = -1
         debug_tasks:List[int] = []
         with open(self.config["agent_file"], mode="r", encoding="utf-8") as fin:
-            debug_agent_num = int(fin.readline().rstrip())
             for _line_ in fin.readlines():
                 debug_tasks.append(int(_line_.rstrip()))
         with open(self.config["task_file"], mode="r", encoding="utf-8") as fin:

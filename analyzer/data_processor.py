@@ -15,7 +15,7 @@ MAX_X_NUM:int = 5
 MAX_Y_NUM:int = 6
 NUM_SOLVERS_PER_ROW:int = 7
 
-Y_GAPS:List = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
+UNIT_GAPS:List = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
 LARGE_MAPS:List[str] = ['den520d',
                         'warehouse-10-20-10-2-1',
                         'warehouse-20-40-10-2-1',
@@ -383,7 +383,11 @@ class DataProcessor:
             in_axs.xaxis.grid()
 
         # Set the x-axis labels and positions
-        if len(_num_) > MAX_X_NUM and x_index == 'ins':
+        x_unit = 1
+        if x_index == 'num':
+            in_axs.axes.set_xticks(_num_)
+            in_axs.axes.set_xticklabels(_x_, fontsize=self.config['text_size'])
+        elif len(_num_) > MAX_X_NUM and x_index == 'ins':
             _num_ = list(range(len(_x_)//MAX_X_NUM, len(_x_)+1, len(_x_)//MAX_X_NUM))
             _num_.insert(0, 1)
             _x_ = [_x_[_nn_-1] for _nn_ in _num_]
@@ -392,7 +396,6 @@ class DataProcessor:
         else:
             x_ticks = in_axs.axes.get_xticks()
             shown_ticks = x_ticks
-            x_unit = 1
             if x_index == 'succ':
                 x_ticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
                 shown_ticks = x_ticks
@@ -410,7 +413,7 @@ class DataProcessor:
 
                 x_gap = 1
                 x_num = 1
-                for _gap_ in Y_GAPS:
+                for _gap_ in UNIT_GAPS:
                     x_gap = _gap_ *  x_unit
                     x_num = int(np.ceil(max_x_ticks / x_gap))
                     if 1 < x_num < MAX_Y_NUM:
@@ -430,40 +433,40 @@ class DataProcessor:
 
         if x_label is not None:
             shown_x_label = x_label
+        elif x_index in X_LABELS:
+            shown_x_label = X_LABELS[x_index]
+            shown_x_label += UNITS[x_unit]
         elif x_index in Y_LABELS:
             shown_x_label = Y_LABELS[x_index]
             shown_x_label += UNITS[x_unit]
         else:
             logging.error("Missing x label text")
             sys.exit()
-        in_axs.set_xlabel(Y_LABELS[x_index], fontsize=self.config['text_size'])
+        in_axs.set_xlabel(shown_x_label, fontsize=self.config['text_size'])
 
         # Set the y-axis labels and positions
         y_ticks = in_axs.axes.get_yticks()
         shown_ticks = y_ticks
         y_unit = 1
         if y_index == 'succ':
-            y_ticks = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+            y_ticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
             shown_ticks = y_ticks
         elif y_index == 'runtime' and num_op != 'sum':
             y_ticks = range(0, self.config['time_limit']+1, self.config['time_gap'])
             shown_ticks = y_ticks
         else:
             max_y_ticks = max(y_ticks)
-            y_base = np.floor(np.log10(abs(max_y_ticks)))
-            y_unit = 1
-            if 2 < y_base <= 4:
-                y_unit = 1000
-            elif 4 < y_base:
-                y_unit = 1000000
-
-            y_gap = 1
-            y_num = 1
-            for _gap_ in Y_GAPS:
-                y_gap = _gap_ *  y_unit
-                y_num = int(np.ceil(max_y_ticks / y_gap))
+            y_gap = -1
+            y_num = -1
+            for y_unit in UNITS:
+                for _gap_ in UNIT_GAPS:
+                    y_gap = _gap_ *  y_unit
+                    y_num = int(np.ceil(max_y_ticks / y_gap))
+                    if 1 < y_num < MAX_Y_NUM:
+                        break
                 if 1 < y_num < MAX_Y_NUM:
                     break
+            assert y_gap > 0 and y_num > 0
 
             y_ticks = []
             for _y_ in range(y_num+1):
@@ -481,10 +484,10 @@ class DataProcessor:
             shown_y_label = y_label
         elif y_index in Y_LABELS:
             shown_y_label = Y_LABELS[y_index]
-            shown_y_label += UNITS[y_unit]
         else:
             logging.error("Missing y label text")
             sys.exit()
+        shown_y_label += UNITS[y_unit]
         in_axs.set_ylabel(shown_y_label, fontsize=self.config['text_size'])
 
 
