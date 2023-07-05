@@ -3,7 +3,6 @@
 This is a script for visualizing the plan for MAPF.
 """
 
-import os
 import sys
 import logging
 import argparse
@@ -12,25 +11,20 @@ from typing import List, Tuple, Dict
 import tkinter as tk
 import time
 import json
-import yaml
 import numpy as np
-# from ast import literal_eval
 
-COLORS: List[str] = ["purple", "pink", "yellow", "blue", "violet", "tomato", "green",
-                     "cyan", "brown", "olive", "gray", "crimson"]
 TASK_COLORS: Dict[str, str] = {"init": "orange", "assign": "pink", "finish": "grey"}
 DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
+OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {
-    "maze-32-32-2": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
+    "Paris_1_256": {"pixel_per_move": 2, "moves": 2, "delay": 0.08},
+    "brc202d": {"pixel_per_move": 3, "moves": 3, "delay": 0.08},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "room-32-32-4": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "kiva": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
-    "ost003d": {"pixel_per_move": 5, "moves": 5, "delay": 0.05},
-    "warehouse-10-20-10-2-1": {"pixel_per_move": 3, "moves": 3, "delay": 0.08}
+    "warehouse-large": {"pixel_per_move": 2, "moves": 2, "delay": 0.08},
+    "warehouse-small": {"pixel_per_move": 5, "moves": 5, "delay": 0.08}
 }
 
-RESOLUTION=(1280,800)
 DIR_DIAMETER = 0.1
 DIR_OFFSET = 0.05
 
@@ -99,69 +93,37 @@ class PlanVis:
         print("===== Initialize MAPF visualizer =====")
 
         # Load the yaml file or the input arguments
-        tmp_config: Dict = {}
+        self.map_file:str = in_arg.map
+        map_name = get_map_name(self.map_file)
+        self.plan_file:str = in_arg.plan
+        self.num_of_agents:int = in_arg.num_of_agents
 
-        if in_arg.config is not None:
-            config_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), in_arg.config)
-            with open(file=config_dir, mode='r', encoding="UTF-8") as fin:
-                tmp_config = yaml.load(fin, Loader=yaml.FullLoader)
-        else:
-            tmp_config["map_file"] = in_arg.map
-            tmp_config["scen_file"] = in_arg.scen
-            tmp_config["task_file"] = in_arg.task
-            tmp_config["plan_file"] = in_arg.plan
-            tmp_config["num_of_agents"] = in_arg.num_of_agents
-            tmp_config["show_grid"] = in_arg.show_grid
-            tmp_config["show_ag_idx"] = in_arg.show_ag_idx
-            tmp_config["show_static"] = in_arg.show_static
-            tmp_config["show_conf_ag"] = in_arg.show_conf_ag
+        self.ppm = in_arg.pixel_per_move
+        if self.ppm is None:
+            if map_name in MAP_CONFIG.keys():
+                self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
+            else:
+                logging.error("Missing variable: pixel_per_move.")
+                sys.exit()
+        self.moves = in_arg.moves
+        if self.moves is None:
+            if map_name in MAP_CONFIG.keys():
+                self.moves = MAP_CONFIG[map_name]["moves"]
+            else:
+                logging.error("Missing variable: moves.")
+                sys.exit()
+        self.delay:int = in_arg.delay
+        if self.delay is None:
+            if map_name in MAP_CONFIG.keys():
+                self.delay = MAP_CONFIG[map_name]["delay"]
+            else:
+                logging.error("Missing variable: delay.")
+                sys.exit()
 
-            if in_arg.pixel_per_move is not None:
-                tmp_config["pixel_per_move"] = in_arg.pixel_per_move
-            if in_arg.moves is not None:
-                tmp_config["moves"] = in_arg.moves
-            if in_arg.delay is not None:
-                tmp_config["delay"] = in_arg.delay
-
-        if "pixel_per_move" not in tmp_config.keys():
-            map_name = get_map_name(tmp_config["map_file"])
-            assert map_name in MAP_CONFIG.keys()
-            tmp_config["pixel_per_move"] = MAP_CONFIG[map_name]["pixel_per_move"]
-
-        if "moves" not in tmp_config.keys():
-            map_name = get_map_name(tmp_config["map_file"])
-            assert map_name in MAP_CONFIG.keys()
-            tmp_config["moves"] = MAP_CONFIG[map_name]["moves"]
-
-        if "delay" not in tmp_config.keys():
-            map_name = get_map_name(tmp_config["map_file"])
-            assert map_name in MAP_CONFIG.keys()
-            tmp_config["delay"] = MAP_CONFIG[map_name]["delay"]
-
-        assert "map_file" in tmp_config.keys()
-        assert "scen_file" in tmp_config.keys()
-        assert "task_file" in tmp_config.keys()
-        assert "plan_file" in tmp_config.keys()
-        assert "num_of_agents" in tmp_config.keys()
-        assert "delay" in tmp_config.keys()
-        assert "pixel_per_move" in tmp_config.keys()
-        assert "moves" in tmp_config.keys()
-
-        # Assign configuration to the variable
-        self.map_file:str = tmp_config["map_file"]
-        self.scen_file:str = tmp_config["scen_file"]
-        self.task_file:str = tmp_config["task_file"]
-        self.plan_file:str = tmp_config["plan_file"]
-        self.num_of_agents:int = tmp_config["num_of_agents"]
-
-        self.moves:int = tmp_config["moves"]
-        self.ppm:int = tmp_config["pixel_per_move"]
         self.tile_size:int = self.ppm * self.moves
-        self.delay:int = tmp_config["delay"]
-
         self.width:int = -1
         self.height:int = -1
-        self.env_map:List[List[bool]] = []
+        self.env_map:List[List[int]] = []
         self.grids:List = []
         self.tasks = {}
         self.events = {}
@@ -185,21 +147,16 @@ class PlanVis:
         self.show_all_conf_ag = tk.BooleanVar()
 
         self.is_run.set(False)
-        self.is_grid.set(tmp_config["show_grid"])
-        self.show_ag_idx.set(tmp_config["show_ag_idx"])
-        self.show_static.set(tmp_config["show_static"])
-        self.show_all_conf_ag.set(tmp_config["show_conf_ag"])
+        self.is_grid.set(in_arg.show_grid)
+        self.show_ag_idx.set(in_arg.show_ag_idx)
+        self.show_static.set(in_arg.show_static)
+        self.show_all_conf_ag.set(in_arg.show_conf_ag)
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(width=(self.width+1) * self.tile_size,
                                 height=(self.height+1) * self.tile_size,
                                 bg="white")
-        # Use Resolution for scaling
-        # self.canvas_width=int(RESOLUTION[0]*0.8)
-        # self.canvas_height=RESOLUTION[1]
-        # self.canvas = tk.Canvas(width=self.canvas_width,height=self.canvas_height, bg="white")
-
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
@@ -229,13 +186,13 @@ class PlanVis:
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.cur_timestep:03d}",
                                        font=("Arial", ui_text_size + 10))
-        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="nsew")
+        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
 
         self.run_button = tk.Button(self.frame, text="Play",
                                     font=("Arial",ui_text_size),
                                     command=self.move_agents)
-        self.run_button.grid(row=row_idx, column=0, sticky="nsew")
+        self.run_button.grid(row=row_idx, column=0, sticky="w")
         self.pause_button = tk.Button(self.frame, text="Pause",
                                       font=("Arial",ui_text_size),
                                       command=self.pause_agents)
@@ -243,7 +200,7 @@ class PlanVis:
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
                                             font=("Arial",ui_text_size),
                                             command=self.resume_zoom)
-        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
+        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
         self.next_button = tk.Button(self.frame, text="Next",
@@ -257,7 +214,7 @@ class PlanVis:
         self.restart_button = tk.Button(self.frame, text="Reset",
                                         font=("Arial",ui_text_size),
                                         command=self.restart_timestep)
-        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
+        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
         row_idx += 1
 
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
@@ -265,21 +222,21 @@ class PlanVis:
                                           variable=self.is_grid,
                                           onvalue=True, offvalue=False,
                                           command=self.show_grid)
-        self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
+        self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.id_button = tk.Checkbutton(self.frame, text="Show indices",
                                         font=("Arial",ui_text_size),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                         command=self.show_index)
-        self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
+        self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
-        self.static_button = tk.Checkbutton(self.frame, text="Show start/goal locations",
+        self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",ui_text_size),
                                             variable=self.show_static, onvalue=True, offvalue=False,
                                             command=self.show_static_loc)
-        self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
+        self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
@@ -287,19 +244,19 @@ class PlanVis:
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
                                                       command=self.mark_conf_agents)
-        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="nsew")
+        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
         row_idx += 1
 
         tmp_label = tk.Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
-        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
+        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
                                          font=("Arial",ui_text_size),
                                          validatecommand=self.update_curtime)
-        self.start_time_entry.grid(row=row_idx, column=2, sticky="nsew")
+        self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
         self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
                                        command=self.update_curtime)
-        self.update_button.grid(row=row_idx, column=3, sticky="nsew")
+        self.update_button.grid(row=row_idx, column=3, sticky="w")
         row_idx += 1
 
         self.is_move_plan = tk.BooleanVar()
@@ -307,11 +264,11 @@ class PlanVis:
         self.is_move_plan_button = tk.Button(self.frame, text="Exec mode", 
                                              font=("Arial",ui_text_size),
                                              command=self.update_is_move_plan)
-        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="nsew")
+        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         tmp_label2 = tk.Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
-        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="nsew")
+        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
@@ -326,12 +283,17 @@ class PlanVis:
                 agent2 = _conf_[1]
                 timestep = _conf_[2]
                 conf_str = str()
-                conf_str = "a" + str(agent1) + ", a" + str(agent2)
+                if agent1 != -1:
+                    conf_str += "a" + str(agent1)
+                if agent2 != -1:
+                    conf_str += ", a" + str(agent2)
                 if _conf_[-1] == "vertex conflict":
                     conf_str += ", v=" + str(self.agents[agent1].plan_path[timestep])
                 elif _conf_[-1] == "edge conflict":
                     conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep]) + "," +\
                         str(self.agents[agent1].plan_path[timestep+1]) + ")"
+                else:
+                    conf_str += _conf_[-1]
                 conf_str += ", t=" + str(timestep)
 
                 self.conflict_listbox.insert(conf_id, conf_str)
@@ -385,27 +347,16 @@ class PlanVis:
         self.mark_conf_agents()
         self.resume_zoom()
 
-        # Use resolution for scaling
-        self.window.rowconfigure(0, weight=1)
-        self.window.columnconfigure(0,weight=1)
-        self.window.columnconfigure(1,weight=1)
-
         self.frame.update()  # Adjust window size
-
-        # # Use width and height for scaling
-        # wd_width = str((self.width+1) * self.tile_size + 300)
-        # wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
-        # self.window.geometry(wd_width + "x" + wd_height)
-
-        # Use resolution for scaling
-        self.window.geometry(str(RESOLUTION[0]) + "x" + str(RESOLUTION[1]))
-
+        # Use width and height for scaling
+        wd_width = str((self.width+1) * self.tile_size + 300)
+        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
+        self.window.geometry(wd_width + "x" + wd_height)
         self.window.title("MAPF Instance")
         print("=====            DONE            =====")
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
-        # ag_idx=0
         self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=color)
         self.agents[ag_idx].agent_obj.color = color
 
@@ -414,14 +365,18 @@ class PlanVis:
         selected_indices = event.widget.curselection()  # get all selected indices
 
         for _conf_ in self.shown_conflicts.values():
-            self.change_ag_color(_conf_[0][0], "deepskyblue")
-            self.change_ag_color(_conf_[0][1], "deepskyblue")
             _conf_[1] = False
+            if _conf_[0][0] != -1:
+                self.change_ag_color(_conf_[0][0], "deepskyblue")
+            if _conf_[0][1] != -1:
+                self.change_ag_color(_conf_[0][1], "deepskyblue")
         for _sid_ in selected_indices:
             _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-            self.change_ag_color(_conf_[0][0], "red")
-            self.change_ag_color(_conf_[0][1], "red")
             self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+            if _conf_[0][0] != -1:
+                self.change_ag_color(_conf_[0][0], "red")
+            if _conf_[0][1] != -1:
+                self.change_ag_color(_conf_[0][1], "red")
 
 
     def restart_timestep(self):
@@ -434,13 +389,17 @@ class PlanVis:
             return
 
         for _conf_ in self.shown_conflicts.values():
-            self.change_ag_color(_conf_[0][0], "deepskyblue")
-            self.change_ag_color(_conf_[0][1], "deepskyblue")
+            if _conf_[0][0] != -1:
+                self.change_ag_color(_conf_[0][0], "deepskyblue")
+            if _conf_[0][1] != -1:
+                self.change_ag_color(_conf_[0][1], "deepskyblue")
             _conf_[1] = False
         _sid_ = event.widget.curselection()[0]  # get all selected indices
         _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-        self.change_ag_color(_conf_[0][0], "red")
-        self.change_ag_color(_conf_[0][1], "red")
+        if _conf_[0][0] != -1:
+            self.change_ag_color(_conf_[0][0], "red")
+        if _conf_[0][1] != -1:
+            self.change_ag_color(_conf_[0][1], "red")
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
         self.new_time.set(int(_conf_[0][2])-1)
         self.update_curtime()
@@ -470,8 +429,6 @@ class PlanVis:
 
     def __wheel(self, event):
         """ Zoom with mouse wheel """
-        # x = self.canvas.canvasx(event.x)  # get coordinates of the event on the canvas
-        # y = self.canvas.canvasy(event.y)
         scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
@@ -563,16 +520,24 @@ class PlanVis:
                                              fill="grey")
             self.grids.append(_line_)
 
-        # Render obstacles
+        # Render features
         for rid, _cur_row_ in enumerate(self.env_map):
             for cid, _cur_ele_ in enumerate(_cur_row_):
-                if _cur_ele_ is False:
+                if _cur_ele_ == 0:  # obstacles
                     self.canvas.create_rectangle(cid * self.tile_size,
                                                  rid * self.tile_size,
                                                  (cid+1)*self.tile_size,
                                                  (rid+1)*self.tile_size,
                                                  state="disable",
                                                  fill="black")
+                # elif _cur_ele_ == 2:  # emitter
+                #     self.canvas.create_rectangle(cid * self.tile_size,
+                #                                  rid * self.tile_size,
+                #                                  (cid+1)*self.tile_size,
+                #                                  (rid+1)*self.tile_size,
+                #                                  state="disable",
+                #                                  fill="violet")
+
         # Render coordinates
         for cid in range(self.width):
             self.canvas.create_text((cid+0.5)*self.tile_size,
@@ -710,8 +675,10 @@ class PlanVis:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
         _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
         for _conf_ in self.shown_conflicts.values():
-            self.change_ag_color(_conf_[0][0], _color_)
-            self.change_ag_color(_conf_[0][1], _color_)
+            if _conf_[0][0] != -1:
+                self.change_ag_color(_conf_[0][0], _color_)
+            if _conf_[0][1] != -1:
+                self.change_ag_color(_conf_[0][1], _color_)
             _conf_[1] = False
 
 
@@ -751,51 +718,29 @@ class PlanVis:
             fin.readline()  # ignore type
             self.height = int(fin.readline().strip().split(' ')[1])
             self.width  = int(fin.readline().strip().split(' ')[1])
-            fin.readline()  # ingmore 'map' line
+            fin.readline()  # ignore 'map' line
             for line in fin.readlines():
                 out_line: List[bool] = []
                 for word in list(line.strip()):
-                    if word == '.':
-                        out_line.append(True)
-                    else:
-                        out_line.append(False)
+                    if word in OBSTACLES:
+                        out_line.append(0)
+                    elif word in [".", "S"]:
+                        out_line.append(1)
+                    elif word == "E":
+                        out_line.append(2)
+
                 assert len(out_line) == self.width
                 self.env_map.append(out_line)
         assert len(self.env_map) == self.height
         print("Done!")
 
 
-    def load_init_loc(self, scen_file:str = None) -> Tuple[Dict]:
-        if scen_file is None:
-            scen_file = self.scen_file
-
-        print("Loading scen from "+str(scen_file), end="... ")
-        if not os.path.exists(scen_file):
-            logging.warning("\nNo scen file is found!")
-            return (-1, -1)
-
-        start_loc = {}
-        goal_loc = {}
-        with open(file=scen_file, mode="r", encoding="UTF-8") as fin:
-            fin.readline()  # ignore the first line 'version 1'
-            ag_counter:int = 0
-            for line in fin.readlines():
-                line_seg = line.split('\t')
-                start_loc[ag_counter] = (int(line_seg[4]), int(line_seg[5]))
-                goal_loc[ag_counter] = (int(line_seg[6]), int(line_seg[7]))
-
-                ag_counter += 1
-                if ag_counter == self.num_of_agents:
-                    break
-
-        print("Done!")
-        return (start_loc, goal_loc)
-
-
     def load_json(self):
         fin = open(file=self.plan_file, mode="r", encoding="UTF-8")
         data = json.load(fin)
-        self.num_of_agents = len(data["start"])
+
+        if self.num_of_agents == np.inf:
+            self.num_of_agents = data["teamSize"]
 
         print("Loading paths from "+str(self.plan_file), end="... ")
         for ag_idx in range(self.num_of_agents):
@@ -884,88 +829,11 @@ class PlanVis:
             return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
         elif motion == "C":  # Counter-clockwise
             return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
-        elif motion == "W":
+        elif motion == "W" or motion == "T":
             return cur_state
         else:
             logging.error("Invalid motion")
             sys.exit()
-
-
-    def load_paths(self, path_file:str = None) -> List[List[Tuple[int]]]:
-        if path_file is None:
-            path_file = self.plan_file
-
-        print("Loading paths from "+str(path_file), end="... ")
-        if not os.path.exists(path_file):
-            logging.warning("\nNo path file is found!")
-            return
-
-        paths = {}
-        with open(file=path_file, mode="r", encoding='UTF-8') as fin:
-            ag_counter = 0
-            for line in fin.readlines():
-                if line.split(" ")[0] != "Agent":
-                    break
-                ag_idx = int(line.split(" ")[1].split(":")[0])
-                paths[ag_idx] = []
-                for cur_loc in line.split(" ")[-1].split("->"):
-                    if cur_loc == "\n":
-                        continue
-                    cur_x = int(cur_loc.split(",")[1])
-                    cur_y = int(cur_loc.split(",")[0].split("(")[1])
-                    cur_theta = int(cur_loc.split(",")[2].split(")")[0])
-                    paths[ag_idx].append((cur_x, cur_y, cur_theta))
-                ag_counter += 1
-
-            self.num_of_agents = ag_counter
-
-        for ag_idx in range(self.num_of_agents):
-            if self.makespan < max(len(paths[ag_idx])-1, 0):
-                self.makespan = max(len(paths[ag_idx])-1, 0)
-
-        print("Done!")
-        return paths
-
-
-    @staticmethod
-    def load_conflicts(in_file:str):
-        if not os.path.exists(in_file):
-            logging.warning("No conflict file is found!")
-            return
-        conflicts = {}
-        last_line = str()
-        with open(file=in_file, mode="r", encoding="UTF-8") as fin:
-            last_line = fin.readlines()[-1]
-        with open(file=in_file, mode="r", encoding="UTF-8") as fin:
-            while True:
-                line = fin.readline()
-                if line.rstrip('\n') == "Conflicts":
-                    line = fin.readline()
-                    while True:
-                        line = fin.readline().rstrip('\n')
-                        if line.rstrip('\n') == "---":
-                            break
-                        conf = line.split(",")
-                        for i in range(5):
-                            conf[i] = int(conf[i])
-                        timestep = conf[4]
-                        if timestep not in conflicts.keys():
-                            conflicts[timestep] = []
-                        conflicts[timestep].append(conf)
-                    break
-                if line == last_line:
-                    break
-        return conflicts
-
-
-    @staticmethod
-    def get_conflict_agents(conflicts:Dict):
-        conf_ags = set()
-        for (_, conf_list) in conflicts.items():
-            for conf in conf_list:
-                conf_ags.add(conf[0])
-                conf_ags.add(conf[1])
-        return conf_ags
 
 
     def get_rotation(self, cur_dir:int, next_dir:int):
@@ -1189,10 +1057,7 @@ def main() -> None:
     """The main function of the visualizer.
     """
     parser = argparse.ArgumentParser(description='Plan visualizer for a MAPF instance')
-    parser.add_argument('--config', type=str, help="use a yaml file as input")
     parser.add_argument('--map', type=str, help="Path to the map file")
-    parser.add_argument('--scen', type=str, help="Path to the scen file")
-    parser.add_argument('--task', type=str, help="Path to the task file")
     parser.add_argument('--plan', type=str, help="Path to the planned path file")
     parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
@@ -1204,7 +1069,7 @@ def main() -> None:
     parser.add_argument('--aid', type=bool, default=False, dest="show_ag_idx",
                         help="Show agent indices or not")
     parser.add_argument('--static', type=bool, default=False, dest="show_static",
-                        help="Show start/goal locations or not")
+                        help="Show start locations or not")
     parser.add_argument('--ca', type=bool, default=False, dest="show_conf_ag",
                         help="Show all colliding agents")
     args = parser.parse_args()
