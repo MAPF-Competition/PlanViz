@@ -18,11 +18,11 @@ DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
 OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {
-    "Paris_1_256": {"pixel_per_move": 2, "moves": 2, "delay": 0.08},
-    "brc202d": {"pixel_per_move": 3, "moves": 3, "delay": 0.08},
-    "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.08},
-    "warehouse-large": {"pixel_per_move": 2, "moves": 2, "delay": 0.08},
-    "warehouse-small": {"pixel_per_move": 5, "moves": 5, "delay": 0.08}
+    "Paris_1_256": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "brc202d": {"pixel_per_move": 3, "moves": 3, "delay": 0.06},
+    "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.06},
+    "warehouse-large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "warehouse-small": {"pixel_per_move": 5, "moves": 5, "delay": 0.06}
 }
 
 DIR_DIAMETER = 0.1
@@ -189,10 +189,11 @@ class PlanVis:
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
 
+        # List of buttons
         self.run_button = tk.Button(self.frame, text="Play",
                                     font=("Arial",ui_text_size),
                                     command=self.move_agents)
-        self.run_button.grid(row=row_idx, column=0, sticky="w")
+        self.run_button.grid(row=row_idx, column=0, sticky="nsew")
         self.pause_button = tk.Button(self.frame, text="Pause",
                                       font=("Arial",ui_text_size),
                                       command=self.pause_agents)
@@ -200,7 +201,7 @@ class PlanVis:
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
                                             font=("Arial",ui_text_size),
                                             command=self.resume_zoom)
-        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
+        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
         self.next_button = tk.Button(self.frame, text="Next",
@@ -214,29 +215,30 @@ class PlanVis:
         self.restart_button = tk.Button(self.frame, text="Reset",
                                         font=("Arial",ui_text_size),
                                         command=self.restart_timestep)
-        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="w")
+        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
+        # List of checkboxes
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
                                           font=("Arial",ui_text_size),
                                           variable=self.is_grid,
                                           onvalue=True, offvalue=False,
                                           command=self.show_grid)
-        self.grid_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.grid_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.id_button = tk.Checkbutton(self.frame, text="Show indices",
+        self.id_button = tk.Checkbutton(self.frame, text="Show agent indices",
                                         font=("Arial",ui_text_size),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                         command=self.show_index)
-        self.id_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",ui_text_size),
                                             variable=self.show_static, onvalue=True, offvalue=False,
                                             command=self.show_static_loc)
-        self.static_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
@@ -244,27 +246,29 @@ class PlanVis:
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
                                                       command=self.mark_conf_agents)
-        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=4, sticky="w")
+        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        tmp_label = tk.Label(self.frame, text="Start timestep: ", font=("Arial",ui_text_size))
-        tmp_label.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        tmp_label = tk.Label(self.frame, text="Start timestep", font=("Arial",ui_text_size))
+        tmp_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
                                          font=("Arial",ui_text_size),
                                          validatecommand=self.update_curtime)
-        self.start_time_entry.grid(row=row_idx, column=2, sticky="w")
+        self.start_time_entry.grid(row=row_idx, column=1, sticky="w")
         self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
                                        command=self.update_curtime)
-        self.update_button.grid(row=row_idx, column=3, sticky="w")
+        self.update_button.grid(row=row_idx, column=2, sticky="w")
         row_idx += 1
 
+        tmp_label1 = tk.Label(self.frame, text="Current mode", font=("Arial",ui_text_size))
+        tmp_label1.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.is_move_plan = tk.BooleanVar()
         self.is_move_plan.set(False)
-        self.is_move_plan_button = tk.Button(self.frame, text="Exec mode", 
+        self.is_move_plan_button = tk.Button(self.frame, text="Exec",
                                              font=("Arial",ui_text_size),
                                              command=self.update_is_move_plan)
-        self.is_move_plan_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        self.is_move_plan_button.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
 
         tmp_label2 = tk.Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
@@ -403,6 +407,7 @@ class PlanVis:
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
         self.new_time.set(int(_conf_[0][2])-1)
         self.update_curtime()
+
 
     def move_to_event(self, event):
         if self.is_run.get() is True:
@@ -1041,10 +1046,10 @@ class PlanVis:
             return
         if self.is_move_plan.get() is False:
             self.is_move_plan.set(True)
-            self.is_move_plan_button.configure(text="Plan mode")
+            self.is_move_plan_button.configure(text="Plan")
         else:
             self.is_move_plan.set(False)
-            self.is_move_plan_button.configure(text="Exec mode")
+            self.is_move_plan_button.configure(text="Exec")
 
         for (_, _agent_) in self.agents.items():
             if self.is_move_plan.get() is True:
@@ -1064,13 +1069,13 @@ def main() -> None:
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
     parser.add_argument('--mv', type=int, dest="moves", help="Number of moves per action")
     parser.add_argument('--delay', type=float, help="Wait time between timesteps")
-    parser.add_argument('--grid', type=bool, default=False, dest="show_grid",
+    parser.add_argument('--grid', action='store_true', dest="show_grid",
                         help="Show grid on the environment or not")
-    parser.add_argument('--aid', type=bool, default=False, dest="show_ag_idx",
+    parser.add_argument('--aid', action='store_true', dest="show_ag_idx",
                         help="Show agent indices or not")
-    parser.add_argument('--static', type=bool, default=False, dest="show_static",
+    parser.add_argument('--static', action='store_true', dest="show_static",
                         help="Show start locations or not")
-    parser.add_argument('--ca', type=bool, default=False, dest="show_conf_ag",
+    parser.add_argument('--ca', action='store_true', dest="show_conf_ag",
                         help="Show all colliding agents")
     args = parser.parse_args()
 
