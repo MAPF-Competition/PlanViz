@@ -11,13 +11,13 @@ with `tkinter` that contains the scenario and the GUI, as shown in the video.
 - Agents are in blue circle, with a darkblue dot representing their headings. 
 - Squares are the tasks, which are initially marked in orange. Each task turns pink
 when it is assigned to an agent and grey when is completed.
+- The `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an
+error to move all the agents to one timestep before such error occurs.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep
 $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in the 
-list of errors can mark the colliding agents in red, and
-press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
-- `The list of errors` contains collisions and timeout issues from the Start-Kit. Double-click an
-error to move all the agents to one timestep before such error occurs.
-- `The list of events` contains information of task assignments and task completion. Double-click an
+`List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions.
+See agents 19 and 22 in the following figure for example.
+- The `List of events` contains information of task assignments and task completion. Double-click an
 event to move all the agents to one timestep before such event occurs.
 - When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a
 sequence of purple squares, with the locations where the agent rotates or waits being larger.
