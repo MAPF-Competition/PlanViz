@@ -143,6 +143,7 @@ class PlanVis:
         self.is_run = tk.BooleanVar()
         self.is_grid = tk.BooleanVar()
         self.show_ag_idx = tk.BooleanVar()
+        self.show_task_idx = tk.BooleanVar()
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
 
@@ -230,8 +231,15 @@ class PlanVis:
         self.id_button = tk.Checkbutton(self.frame, text="Show agent indices",
                                         font=("Arial",ui_text_size),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
-                                        command=self.show_index)
+                                        command=self.show_agent_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+        
+        self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
+                                        font=("Arial",ui_text_size),
+                                        variable=self.show_task_idx, onvalue=True, offvalue=False,
+                                        command=self.show_task_index)
+        self.id_button2.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
@@ -294,8 +302,8 @@ class PlanVis:
                 if _conf_[-1] == "vertex conflict":
                     conf_str += ", v=" + str(self.agents[agent1].plan_path[timestep])
                 elif _conf_[-1] == "edge conflict":
-                    conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep]) + "," +\
-                        str(self.agents[agent1].plan_path[timestep+1]) + ")"
+                    conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep-1]) + "," +\
+                        str(self.agents[agent1].plan_path[timestep]) + ")"
                 else:
                     conf_str += _conf_[-1]
                 conf_str += ", t=" + str(timestep)
@@ -347,7 +355,8 @@ class PlanVis:
         print("Done!")
 
         self.show_static_loc()
-        self.show_index()
+        self.show_agent_index()
+        self.show_task_index()
         self.mark_conf_agents()
         self.resume_zoom()
 
@@ -696,13 +705,19 @@ class PlanVis:
                 self.canvas.itemconfig(_line_, state="hidden")
 
 
-    def show_index(self) -> None:
+    def show_agent_index(self) -> None:
         _state_ = "disable" if self.show_ag_idx.get() is True else "hidden"
         _ts_ = "disable" if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else "hidden"
         for (_, _agent_) in self.agents.items():
             self.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
+
+
+    def show_task_index(self) -> None:
+        _state_ = "disable" if self.show_task_idx.get() is True else "hidden"
+        for (_, _task_) in self.tasks.items():
+            self.canvas.itemconfig(_task_.task_obj.text, state=_state_)
 
 
     def show_static_loc(self) -> None:
@@ -758,6 +773,8 @@ class PlanVis:
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
+            if "plannerPaths" not in data.keys():
+                raise KeyError("Missing plannerPaths.")
             tmp_str = data["plannerPaths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
@@ -765,6 +782,8 @@ class PlanVis:
             if self.makespan < max(len(self.plan_paths[ag_idx])-1, 0):
                 self.makespan = max(len(self.plan_paths[ag_idx])-1, 0)
 
+            if "actualPaths" not in data.keys():
+                raise KeyError("Missing actualPaths.")
             tmp_str = data["actualPaths"][ag_idx].split(",")
             for _motion_ in tmp_str:
                 next_state = self.state_transition(self.exec_paths[ag_idx][-1], _motion_)
@@ -774,48 +793,51 @@ class PlanVis:
         print("Done!")
 
         print("Loading errors from "+str(self.plan_file), end="... ")
-        for err in data["errors"]:
-            timestep = err[2]
-            if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
-                self.conflicts[timestep] = []
-            self.conflicts[timestep].append(err)
+        if "errors" in data:
+            for err in data["errors"]:
+                timestep = err[2]
+                if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
+                    self.conflicts[timestep] = []
+                self.conflicts[timestep].append(err)
         print("Done!")
 
         print("Loading tasks from "+str(self.plan_file), end="... ")
-        for _task_ in data["tasks"]:
-            _tid_ = _task_[0]
-            _tloc_ = (_task_[1], _task_[2])
-            _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle", TASK_COLORS["init"])
-            new_task = Task(_tid_, _tloc_, _tobj_)
-            self.tasks[_tid_] = new_task
+        if "tasks" in data.keys() and data["tasks"]:
+            for _task_ in data["tasks"]:
+                _tid_ = _task_[0]
+                _tloc_ = (_task_[1], _task_[2])
+                _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle", TASK_COLORS["init"])
+                new_task = Task(_tid_, _tloc_, _tobj_)
+                self.tasks[_tid_] = new_task
         print("Done!")
 
         print("Loading events from "+str(self.plan_file), end="... ")
-        for _ag_ in range(self.num_of_agents):
-            for _eve_ in data["events"][_ag_]:
-                _tid_ = _eve_[0]
-                _timestep_ = _eve_[1]
-                if _eve_[2] == "assigned":
-                    self.tasks[_tid_].assign["agent"] = _ag_
-                    self.tasks[_tid_].assign["timestep"] = _timestep_
-                    if _timestep_ == 0:  # timestep at 0
-                        self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                               fill=TASK_COLORS["assign"])
+        if "events" in data.keys() and data["events"]:
+            for _ag_ in range(self.num_of_agents):
+                for _eve_ in data["events"][_ag_]:
+                    _tid_ = _eve_[0]
+                    _timestep_ = _eve_[1]
+                    if _eve_[2] == "assigned":
+                        self.tasks[_tid_].assign["agent"] = _ag_
+                        self.tasks[_tid_].assign["timestep"] = _timestep_
+                        if _timestep_ == 0:  # timestep at 0
+                            self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
+                                                fill=TASK_COLORS["assign"])
 
-                    if _timestep_ not in self.events.keys():
-                        self.events[_timestep_] = []
-                    self.events[_timestep_].append(_eve_)
+                        if _timestep_ not in self.events.keys():
+                            self.events[_timestep_] = []
+                        self.events[_timestep_].append(_eve_)
 
-                elif _eve_[2] == "finished":
-                    self.tasks[_tid_].finish["agent"] = _ag_
-                    self.tasks[_tid_].finish["timestep"] = _timestep_
-                    if _timestep_ == 0:  # timestep at 0
-                        self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                               fill=TASK_COLORS["finish"])
+                    elif _eve_[2] == "finished":
+                        self.tasks[_tid_].finish["agent"] = _ag_
+                        self.tasks[_tid_].finish["timestep"] = _timestep_
+                        if _timestep_ == 0:  # timestep at 0
+                            self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
+                                                fill=TASK_COLORS["finish"])
 
-                    if _timestep_ not in self.events.keys():
-                        self.events[_timestep_] = []
-                    self.events[_timestep_].append(_eve_)
+                        if _timestep_ not in self.events.keys():
+                            self.events[_timestep_] = []
+                        self.events[_timestep_].append(_eve_)
 
         print("Done!")
 
@@ -1038,7 +1060,8 @@ class PlanVis:
                                                       tag="dir",
                                                       state="disable",
                                                       outline="")
-        self.show_index()
+        self.show_agent_index()
+        self.show_task_index()
 
 
     def update_is_move_plan(self) -> None:
@@ -1056,6 +1079,7 @@ class PlanVis:
                 _agent_.path = _agent_.plan_path
             else:
                 _agent_.path = _agent_.exec_path
+        self.update_curtime()
 
 
 def main() -> None:
@@ -1073,6 +1097,8 @@ def main() -> None:
                         help="Show grid on the environment or not")
     parser.add_argument('--aid', action='store_true', dest="show_ag_idx",
                         help="Show agent indices or not")
+    parser.add_argument('--tid', action='store_true', dest="show_task_idx",
+                        help="Show task indices or not")
     parser.add_argument('--static', action='store_true', dest="show_static",
                         help="Show start locations or not")
     parser.add_argument('--ca', action='store_true', dest="show_conf_ag",
