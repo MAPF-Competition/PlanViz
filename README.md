@@ -1,26 +1,17 @@
 # PlanViz
-Welcome to PlanViz! This is an offline visualization tool that shows not only the agents' movements
-but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit).
-PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders
-with `tkinter` that contains the scenario and the GUI, as shown in the video.
+Welcome to PlanViz! This is an **offline** visualization tool that shows not only the agents' movements but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). We hope that PlanViz
+PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders with `tkinter` that contains the scenario and the GUI, as shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
 
-## Setup
+## Properties
 - Agents are in blue circle, with a darkblue dot representing their headings. 
-- Squares are the tasks, which are initially marked in orange. Each task turns pink
-when it is assigned to an agent and grey when is completed.
-- The `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an
-error to move all the agents to one timestep before such error occurs.
-- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep
-$T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in the 
-`List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions.
-See agents 19 and 22 in the following figure for example.
-- The `List of events` contains information of task assignments and task completion. Double-click an
-event to move all the agents to one timestep before such event occurs.
-- When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a
-sequence of purple squares, with the locations where the agent rotates or waits being larger.
+- The largest squares in the scenario are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
+- `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to move all the agents to one timestep before such error occurs.
+- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
+- `List of events` contains information of task assignments and task completion. Double-click an event to move all the agents to one timestep before such event occurs.
+- When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
 
 ![scenario](images/scenario.png)
 
@@ -42,7 +33,7 @@ If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problem
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
 
 ## Run
-To run the visualizer, open a terminal under the directory `MAPF_analysis/visualizer and type the following command as an example:
+To run PlanViz, open a terminal under the directory `MAPF_analysis/visualizer and type the following example command:
 ```bash
 python plan_viz.py --map ./warehouse-small.map --plan ./warehouse-small-60.json --grid --aid --static --ca
 ```
