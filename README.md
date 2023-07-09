@@ -1,11 +1,12 @@
 # PlanViz
-Welcome to PlanViz! This is an **offline** visualization tool that shows not only the agents' movements but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). We hope that PlanViz
-PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders with `tkinter` that contains the scenario and the GUI, as shown in the following video.
+Welcome to PlanViz! This is an **offline** visualization tool for analysing solutions to multi-robot and multi-agent coordination problems. It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition but it can also be used for a variety of similar problems which are outside the scope of the competition. 
+
+The primary purpose of PlanViz is to better understand how agents move across the map and to offer insights into the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). Being an offline tool, PlanViz takes as input a grid map and a log file (in `JSON` format) produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result with [`tkinter`](https://docs.python.org/3/library/tkinter.html), a pyton interface for the Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
 
-## Properties
+## Visual markers
 - Agents are in blue circle, with a darkblue dot representing their headings. 
 - The largest squares in the scenario are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
 - `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to move all the agents to one timestep before such error occurs.
