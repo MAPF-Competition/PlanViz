@@ -1,14 +1,24 @@
 # PlanViz
 Welcome to PlanViz! This is an offline visualization tool that shows not only the agents' movements
 but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit).
-PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders with `tkinter` that contains the scenario and the GUI, as shown in the following figure.
+PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders
+with `tkinter` that contains the scenario and the GUI, as shown in the following figure.
 
 ![planViz_2](https://github.com/MAPF-Competition/MAPF_analysis/assets/32032876/a1de576a-3310-40d5-8181-f514a4a45f95)
 
 ## Setup
-- Squares with numbers are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
-- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai aj v=V/e=(U,V) t=T`.
-- The list of errors contains collisions and timeout issues from the Start-Kit.
+- Squares with numbers are the tasks, which are initially marked in orange. Each task turns pink
+when it is assigned to an agent and grey when is completed.
+- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep
+$T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in the 
+list of errors can mark the colliding agents in red, and
+press `ctrl` while clicking to select multiple collisions.
+- `The list of errors` contains collisions and timeout issues from the Start-Kit. Double-click an
+error to move all the agents to one timestep before such error occurs.
+- `The list of events` contains information of task assignments and task completion. Double-click an
+event to move all the agents to one timestep before such event occurs.
+- When PlanViz is paused, right-click an agent to see/hide its path. The paths are presented with a
+sequence of purple squares, with the locations where the agent rotates or waits being larger.
 
 ## Arguments
 - `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/maze-32-32-2.map` for more details.
