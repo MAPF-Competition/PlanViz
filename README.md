@@ -3,7 +3,7 @@ Welcome to PlanViz! This is an offline visualization tool that shows not only th
 but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit).
 PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders with `tkinter` that contains the scenario and the GUI, as shown in the following figure.
 
-![planViz](https://github.com/MAPF-Competition/MAPF_analysis/assets/32032876/6a90c8e4-d901-4d96-acf8-2324ff39e0df)
+![planViz_2](https://github.com/MAPF-Competition/MAPF_analysis/assets/32032876/a1de576a-3310-40d5-8181-f514a4a45f95)
 
 ## Setup
 - Squares with numbers are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
