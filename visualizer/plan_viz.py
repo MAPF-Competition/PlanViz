@@ -97,6 +97,7 @@ class PlanVis:
         self.is_run.set(False)
         self.is_grid.set(in_arg.show_grid)
         self.show_ag_idx.set(in_arg.show_ag_idx)
+        self.show_task_idx.set(in_arg.show_task_idx)
         self.show_static.set(in_arg.show_static)
         self.show_all_conf_ag.set(in_arg.show_conf_ag)
 
@@ -109,7 +110,7 @@ class PlanVis:
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
         # Render instance on canvas
-        self.load_json()  # Load the results
+        self.load_plan()  # Load the results
         self.render_env()
         self.render_agents()
 
@@ -183,9 +184,9 @@ class PlanVis:
         row_idx += 1
 
         self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
-                                        font=("Arial",ui_text_size),
-                                        variable=self.show_task_idx, onvalue=True, offvalue=False,
-                                        command=self.show_task_index)
+                                         font=("Arial",ui_text_size),
+                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
+                                         command=self.show_task_index)
         self.id_button2.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
@@ -226,13 +227,14 @@ class PlanVis:
         self.is_move_plan_button.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
 
-        tmp_label2 = tk.Label(self.frame, text="List of collisions", font=("Arial",ui_text_size))
+        tmp_label2 = tk.Label(self.frame, text="List of errors", font=("Arial",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
-                                           width=28,
+                                           width=30,
+                                           height=12,
                                            font=("Arial",ui_text_size),
                                            selectmode=tk.EXTENDED)
         conf_id = 0
@@ -249,13 +251,20 @@ class PlanVis:
                 if agent2 != -1:
                     conf_str += ", a" + str(agent2)
                 if _conf_[-1] == "vertex conflict":
-                    conf_str += ", v=" + str(self.agents[agent1].plan_path[timestep])
+                    _loc = "("+ str(self.agents[agent1].plan_path[timestep][0]) + "," +\
+                        str(self.agents[agent1].plan_path[timestep][1]) +")"
+                    conf_str += ", v: " + _loc
                 elif _conf_[-1] == "edge conflict":
-                    conf_str += ", e=(" + str(self.agents[agent1].plan_path[timestep-1]) + "," +\
-                        str(self.agents[agent1].plan_path[timestep]) + ")"
+                    _loc1 = "(" + str(self.agents[agent1].plan_path[timestep-1][0]) + "," +\
+                        str(self.agents[agent1].plan_path[timestep-1][1]) + ")"
+                    _loc2 = "(" + str(self.agents[agent1].plan_path[timestep-1][0]) + "," +\
+                        str(self.agents[agent1].plan_path[timestep-1][1]) + ")"
+                    conf_str += ", e: " + _loc1 + "->" + _loc2
+                elif _conf_[-1] == 'incorrect vector size':
+                    conf_str += 'Planner timeout'
                 else:
                     conf_str += _conf_[-1]
-                conf_str += ", t=" + str(timestep)
+                conf_str += ", t: " + str(timestep)
 
                 self.conflict_listbox.insert(conf_id, conf_str)
                 self.shown_conflicts[conf_str] = [_conf_, False]
@@ -276,22 +285,25 @@ class PlanVis:
 
         self.shown_events:Dict[str, List[List,bool]] = {}
         self.event_listbox = tk.Listbox(self.frame,
-                                        width=28,
+                                        width=30,
+                                        height=12,
                                         font=("Arial",ui_text_size),
                                         selectmode=tk.EXTENDED)
         eve_id = 0
         for _timestep_ in sorted(self.events.keys(), reverse=True):
-            for _eve_ in self.events[_timestep_]:
-                cur_task = self.tasks[_eve_[0]]
-                eve_str = str()
-                if _eve_[2] == "assigned":
-                    eve_str = "Assign task " + str(cur_task.idx) + " to a" +\
-                        str(cur_task.assign["agent"]) + " at t=" + str(cur_task.assign["timestep"])
-                elif _eve_[2] == "finished":
-                    eve_str = "a" + str(cur_task.finish["agent"]) + " finishes task " +\
-                        str(cur_task.idx) + " at t=" + str(cur_task.finish["timestep"])
-                self.event_listbox.insert(eve_id, eve_str)
-                self.shown_events[eve_str] = [_eve_, False]
+            for _tid_ in sorted(self.events[_timestep_].keys(), reverse=True):
+                for _eve_ in self.events[_timestep_][_tid_]["assigned"]:
+                    cur_task = self.tasks[_eve_[0]]
+                    eve_str = "task " + str(cur_task.idx) + " assigned to a" +\
+                        str(cur_task.assign["agent"]) + " at t: " + str(cur_task.assign["timestep"])
+                    self.event_listbox.insert(eve_id, eve_str)
+                    self.shown_events[eve_str] = [_eve_, False]
+                for _eve_ in self.events[_timestep_][_tid_]["finished"]:
+                    cur_task = self.tasks[_eve_[0]]
+                    eve_str = "task " + str(cur_task.idx) + " is done by a" +\
+                        str(cur_task.finish["agent"]) + " at t: " + str(cur_task.finish["timestep"])
+                    self.event_listbox.insert(eve_id, eve_str)
+                    self.shown_events[eve_str] = [_eve_, False]
 
         self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind('<Double-1>', self.move_to_event)
@@ -697,7 +709,7 @@ class PlanVis:
         print("Done!")
 
 
-    def load_json(self):
+    def load_plan(self):
         fin = open(file=self.plan_file, mode="r", encoding="UTF-8")
         data = json.load(fin)
 
@@ -759,27 +771,27 @@ class PlanVis:
                 for _eve_ in data["events"][_ag_]:
                     _tid_ = _eve_[0]
                     _timestep_ = _eve_[1]
+
+                    if  _timestep_ not in self.events.keys():
+                        self.events[_timestep_] = {}
+                    if _tid_ not in self.events[_timestep_].keys():
+                        self.events[_timestep_][_tid_] = {"assigned":[], "finished":[]}
+
                     if _eve_[2] == "assigned":
                         self.tasks[_tid_].assign["agent"] = _ag_
                         self.tasks[_tid_].assign["timestep"] = _timestep_
                         if _timestep_ == 0:  # timestep at 0
                             self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                                fill=TASK_COLORS["assign"])
-
-                        if _timestep_ not in self.events.keys():
-                            self.events[_timestep_] = []
-                        self.events[_timestep_].append(_eve_)
+                                                   fill=TASK_COLORS["assign"])
+                        self.events[_timestep_][_tid_]["assigned"].append(_eve_)
 
                     elif _eve_[2] == "finished":
                         self.tasks[_tid_].finish["agent"] = _ag_
                         self.tasks[_tid_].finish["timestep"] = _timestep_
                         if _timestep_ == 0:  # timestep at 0
                             self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                                fill=TASK_COLORS["finish"])
-
-                        if _timestep_ not in self.events.keys():
-                            self.events[_timestep_] = []
-                        self.events[_timestep_].append(_eve_)
+                                                   fill=TASK_COLORS["finish"])
+                        self.events[_timestep_][_tid_]["finished"].append(_eve_)
 
         print("Done!")
 
