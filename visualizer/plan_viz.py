@@ -12,6 +12,7 @@ import tkinter as tk
 import time
 import json
 import numpy as np
+from util import *
 
 TASK_COLORS: Dict[str, str] = {"init": "orange", "assign": "pink", "finish": "grey"}
 DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
@@ -30,60 +31,6 @@ DIR_OFFSET = 0.05
 
 sin = lambda degs: math.sin(math.radians(degs))
 cos = lambda degs: math.cos(math.radians(degs))
-
-def get_map_name(in_file:str) -> str:
-    """Get the map name from the file name
-
-    Args:
-        in_file (str): the path of the map file
-
-    Returns:
-        str: the name of the map
-    """
-    return in_file.split("/")[-1].split(".")[0]
-
-def get_angle(glob_dir:int):
-    out_angle = 0
-    if glob_dir == 0:
-        out_angle = 0
-    elif glob_dir == 1:
-        out_angle = math.pi / 2.
-    elif glob_dir == 2:
-        out_angle = math.pi
-    elif glob_dir == 3:
-        out_angle = -1 * math.pi / 2.
-    return out_angle
-
-
-class BaseObj:
-    def __init__(self, _obj_, _text_, _loc_, _color_) -> None:
-        self.obj = _obj_
-        self.text = _text_
-        self.loc = _loc_
-        self.color = _color_
-
-class Agent:
-    def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj,
-                 _plan_path_:List, _plan_path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
-        self.idx = _idx_
-        self.agent_obj = _ag_obj_
-        self.start_obj = _start_
-        self.dir_obj = _dir_obj_  # oval on canvas
-        self.plan_path = _plan_path_
-        self.exec_path = _exec_path_
-        self.plan_path_objs = _plan_path_objs_
-        self.path = self.exec_path  # Set execution path as default
-
-
-class Task:
-    def __init__(self, _idx_:int, _loc_:Tuple[int,int], _task_obj_: BaseObj,
-                  _assign_:Tuple[int,int]=(math.inf,math.inf),
-                  _finish_:Tuple[int,int]=(math.inf,math.inf)):
-        self.idx = _idx_
-        self.loc = _loc_
-        self.assign = {"agent": _assign_[0], "timestep":_assign_[1]}
-        self.finish = {"agent": _finish_[0], "timestep":_finish_[1]}
-        self.task_obj = _task_obj_
 
 
 class PlanVis:
@@ -234,7 +181,7 @@ class PlanVis:
                                         command=self.show_agent_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
-        
+
         self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
                                         font=("Arial",ui_text_size),
                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
@@ -293,6 +240,8 @@ class PlanVis:
             for _conf_ in self.conflicts[_timestep_]:
                 agent1 = _conf_[0]
                 agent2 = _conf_[1]
+                if agent1 > (self.num_of_agents-1) or agent2 > (self.num_of_agents-1):
+                    continue
                 timestep = _conf_[2]
                 conf_str = str()
                 if agent1 != -1:
@@ -365,7 +314,7 @@ class PlanVis:
         wd_width = str((self.width+1) * self.tile_size + 300)
         wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
         self.window.geometry(wd_width + "x" + wd_height)
-        self.window.title("MAPF Instance")
+        self.window.title("PlanViz")
         print("=====            DONE            =====")
 
 
@@ -544,13 +493,6 @@ class PlanVis:
                                                  (rid+1)*self.tile_size,
                                                  state="disable",
                                                  fill="black")
-                # elif _cur_ele_ == 2:  # emitter
-                #     self.canvas.create_rectangle(cid * self.tile_size,
-                #                                  rid * self.tile_size,
-                #                                  (cid+1)*self.tile_size,
-                #                                  (rid+1)*self.tile_size,
-                #                                  state="disable",
-                #                                  fill="violet")
 
         # Render coordinates
         for cid in range(self.width):
