@@ -24,7 +24,7 @@ The user interface provides operations for user to control the scenario.
     - `Next`: Move the scenario to the next timestep
     - `Prev`: Move the scenario to the previous timestep
     - `Reset`: Reset the scenario to timestep 0
-- The checkbox controls what to be shown in the scenario:
+- The checkbox controls what to be shown in the scenario.
 - `Start timestep`: Input the desire start timestep and move the scenario to that.
 - `Current mode`: Switch the path between the planner (i.e., the plan from the Start-Kit) and the executer (i.e., the simulator).
 <!-- =======
