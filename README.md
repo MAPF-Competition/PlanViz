@@ -6,15 +6,14 @@ The primary purpose of PlanViz is to better understand how robots/agents move ac
 ![plan_viz_gif](images/plan_viz.gif)
 
 
-## Properties
-### Scenario and Visual Markers
+## Scenario and Visual Markers
 The scenario on the left of PlanViz shows how the agents move in the environment and how the tasks are allocated at each timestep.
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
 - A task is plotted in a colored square with a number being the task index. Each task is initially marked in orange, and turns pink when it is assigned to an agent and grey when it is completed.
 - When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
 
-### User Interface
+## User Interface
 The user interface provides operations for user to control the scenario.
 - `Timestep` shows the current timestep.
 - The buttons controls the progress of the plan/execution:
