@@ -26,11 +26,6 @@ The user interface provides operations for user to control the scenario.
 - The checkbox controls what to be shown in the scenario.
 - `Start timestep`: Input the desire start timestep and move the scenario to that.
 - `Current mode`: Switch the path between the planner (i.e., the plan from the Start-Kit) and the executer (i.e., the simulator).
-<!-- =======
-## Visual markers
-- Agents are in blue circle, with a darkblue dot representing their headings. 
-- The largest squares in the scenario are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
->>>>>>> 6a82ffffab29354f61cb5332e3b5fc468f397b11 -->
 - `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to move all the agents to one timestep before such error occurs.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
 - `List of events` contains information of task assignments and task completion. Double-click an event to move all the agents to one timestep before such event occurs.
@@ -55,8 +50,8 @@ If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problem
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
 
 ## Run
-To run PlanViz, open a terminal under the directory `MAPF_analysis/visualizer and type the following example command:
+To run PlanViz, open a terminal under the directory `PlanViz/script and type the following example command:
 ```bash
-python plan_viz.py --map ./warehouse-small.map --plan ./warehouse-small-60.json --grid --aid --static --ca
+python3 plan_viz.py --map ../example/warehouse-small.map --plan ../example/warehouse-small-60.json --grid --aid --static --ca
 ```
 

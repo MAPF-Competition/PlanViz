@@ -103,7 +103,8 @@ class PlanVis:
 
         # Show MAPF instance
         # Use width and height for scaling
-        self.canvas = tk.Canvas(width=(self.width+1) * self.tile_size,
+        self.canvas = tk.Canvas(self.window,
+                                width=(self.width+1) * self.tile_size,
                                 height=(self.height+1) * self.tile_size,
                                 bg="white")
         self.canvas.grid(row=0, column=0,sticky="nsew")
