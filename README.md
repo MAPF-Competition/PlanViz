@@ -36,9 +36,9 @@ The user interface provides operations for user to control the scenario.
 
 
 ## Arguments
-- `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/maze-32-32-2.map` for more details.
-- `--plan` (type: *str*): Path to the planned path file (ends with `.path`). See `example/result.path` for more details.
-- `--n` (type: *int*): Number of agents need to show (*default*: All agents in the path file)
+- `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/warehouse-small.map` for more details.
+- `--plan` (type: *str*): Path to the planned path file (ends with `.path`). See `example/warehouse-small-60.json` for more details.
+- `--n` (type: *int*): Number of agents need to show, starting from index 0 (*default*: All agents in the path file)
 - `--grid`: Whether to show the grids on the map. Set to True if specified.
 - `--aid`: Whether to show the agent indices. Set to True if specified.
 - `--tid`: Whether to show the task indices. Set to True if specified.
@@ -52,7 +52,7 @@ If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problem
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
 
 ## Run
-To run PlanViz, open a terminal under the directory `PlanViz/script and type the following example command:
+To run PlanViz, open a terminal under the directory `PlanViz/script` and type the following example command:
 ```bash
 python3 plan_viz.py --map ../example/warehouse-small.map --plan ../example/warehouse-small-60.json --grid --aid --static --ca
 ```
