@@ -1,12 +1,13 @@
 # PlanViz
-Welcome to PlanViz! This is an **offline** visualization tool that shows not only the agents' movements but also the errors and events given by the [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). Our goal is to use PlanViz for not only visualization but also debugging.
-PlanViz takes the map and the output file (in `JSON` format) from the Start-Kit as inputs and renders with `tkinter` that contains the scenario and the user interface, as shown in the following video.
+Welcome to PlanViz! This is an **offline** visualization tool for analysing solutions to multi-robot and multi-agent coordination problems. It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition, however it can also be used for a variety of similar problems which are outside the scope of the competition. 
+
+The primary purpose of PlanViz is to better understand how robots/agents move across the map and to offer insights into the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). Being an offline tool, PlanViz takes as input a grid map and a log file (in `JSON` format) produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result with [`tkinter`](https://docs.python.org/3/library/tkinter.html), a pyton interface for the Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
 
 ## Properties
-### Scenario
+### Visual Markers
 The scenario on the right of PlanViz shows how the agents move in the environment and how the tasks are allocated at each timestep.
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
@@ -26,6 +27,11 @@ The user interface provides operations for user to control the scenario.
 - The checkbox controls what to be shown in the scenario:
 - `Start timestep`: Input the desire start timestep and move the scenario to that.
 - `Current mode`: Switch the path between the planner (i.e., the plan from the Start-Kit) and the executer (i.e., the simulator).
+<!-- =======
+## Visual markers
+- Agents are in blue circle, with a darkblue dot representing their headings. 
+- The largest squares in the scenario are the tasks, which are initially marked in orange. Each task turns pink when it is assigned to an agent and grey when is completed.
+>>>>>>> 6a82ffffab29354f61cb5332e3b5fc468f397b11 -->
 - `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to move all the agents to one timestep before such error occurs.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
 - `List of events` contains information of task assignments and task completion. Double-click an event to move all the agents to one timestep before such event occurs.
