@@ -1,7 +1,9 @@
 # PlanViz
-Welcome to PlanViz! This is an **offline** visualization tool for analysing solutions to multi-robot and multi-agent coordination problems. It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition, however it can also be used for a variety of similar problems which are outside the scope of the competition. 
+Welcome to PlanViz! This is an **offline** visualization tool for analysing solutions to multi-robot and multi-agent coordination problems.
+It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition.
+However, PlanViz can also be used for a variety of similar problems which are outside the scope of the competition. 
 
-The primary purpose of PlanViz is to better understand how robots/agents move across the map and to offer insights into the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). Being an offline tool, PlanViz takes as input a grid map and a log file (in `JSON` format) produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result with [`tkinter`](https://docs.python.org/3/library/tkinter.html), a pyton interface for the Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
+The primary purpose of PlanViz is to better understand how robots/agents move across the map and to offer insights into the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). Being an offline tool, PlanViz takes as input a grid map and a log file (in `JSON` format) produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result with [`tkinter`](https://docs.python.org/3/library/tkinter.html), a pyton interface for the Tcl/Tk GUI toolkit (see the `example/warehouse-small.map` and `example/warehouse-small-60.json` for example). An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
