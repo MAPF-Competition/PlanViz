@@ -27,8 +27,7 @@ The user interface provides operations for user to control the scenario.
     - `Reset`: Reset the scenario to timestep 0
 - The checkbox controls what to be shown in the scenario.
 - `Start timestep`: Input the desire start timestep and move the scenario to that.
-- `Current mode`: Switch the path between the planner (i.e., the plan from the Start-Kit) and the executer (i.e., the simulator).
-- `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to move all the agents to one timestep before such error occurs.
+- `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to see the invalid movements.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
 - `List of events` contains information of task assignments and task completion. Double-click an event to move all the agents to one timestep before such event occurs.
 

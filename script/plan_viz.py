@@ -218,15 +218,15 @@ class PlanVis:
         self.update_button.grid(row=row_idx, column=2, sticky="w")
         row_idx += 1
 
-        tmp_label1 = tk.Label(self.frame, text="Current mode", font=("Arial",ui_text_size))
-        tmp_label1.grid(row=row_idx, column=0, columnspan=1, sticky="w")
-        self.is_move_plan = tk.BooleanVar()
-        self.is_move_plan.set(False)
-        self.is_move_plan_button = tk.Button(self.frame, text="Exec",
-                                             font=("Arial",ui_text_size),
-                                             command=self.update_is_move_plan)
-        self.is_move_plan_button.grid(row=row_idx, column=1, sticky="w")
-        row_idx += 1
+        # tmp_label1 = tk.Label(self.frame, text="Current mode", font=("Arial",ui_text_size))
+        # tmp_label1.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        # self.is_move_plan = tk.BooleanVar()
+        # self.is_move_plan.set(False)
+        # self.is_move_plan_button = tk.Button(self.frame, text="Exec",
+        #                                      font=("Arial",ui_text_size),
+        #                                      command=self.update_is_move_plan)
+        # self.is_move_plan_button.grid(row=row_idx, column=1, sticky="w")
+        # row_idx += 1
 
         tmp_label2 = tk.Label(self.frame, text="List of errors", font=("Arial",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
@@ -376,6 +376,16 @@ class PlanVis:
         if _conf_[0][1] != -1:
             self.change_ag_color(_conf_[0][1], "red")
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        self.new_time.set(int(_conf_[0][2])-1)
+        self.update_curtime()
+
+        for (_, _agent_) in self.agents.items():
+            _agent_.path = _agent_.plan_path
+        self.move_agents_per_timestep()
+        time.sleep(1.5)
+
+        for (_, _agent_) in self.agents.items():
+            _agent_.path = _agent_.exec_path
         self.new_time.set(int(_conf_[0][2])-1)
         self.update_curtime()
 
@@ -728,15 +738,6 @@ class PlanVis:
             self.plan_paths[ag_idx].append(start)
             self.exec_paths[ag_idx].append(start)
 
-            if "plannerPaths" not in data.keys():
-                raise KeyError("Missing plannerPaths.")
-            tmp_str = data["plannerPaths"][ag_idx].split(",")
-            for _motion_ in tmp_str:
-                next_state = self.state_transition(self.plan_paths[ag_idx][-1], _motion_)
-                self.plan_paths[ag_idx].append(next_state)
-            if self.makespan < max(len(self.plan_paths[ag_idx])-1, 0):
-                self.makespan = max(len(self.plan_paths[ag_idx])-1, 0)
-
             if "actualPaths" not in data.keys():
                 raise KeyError("Missing actualPaths.")
             tmp_str = data["actualPaths"][ag_idx].split(",")
@@ -745,6 +746,16 @@ class PlanVis:
                 self.exec_paths[ag_idx].append(next_state)
             if self.makespan < max(len(self.exec_paths[ag_idx])-1, 0):
                 self.makespan = max(len(self.exec_paths[ag_idx])-1, 0)
+
+            if "plannerPaths" not in data.keys():
+                raise KeyError("Missing plannerPaths.")
+            tmp_str = data["plannerPaths"][ag_idx].split(",")
+            for _timestep_, _motion_ in enumerate(tmp_str):
+                next_state = self.state_transition(self.exec_paths[ag_idx][_timestep_], _motion_)
+                self.plan_paths[ag_idx].append(next_state)
+            if self.makespan < max(len(self.plan_paths[ag_idx])-1, 0):
+                self.makespan = max(len(self.plan_paths[ag_idx])-1, 0)
+
         print("Done!")
 
         print("Loading errors from "+str(self.plan_file), end="... ")
@@ -1019,22 +1030,22 @@ class PlanVis:
         self.show_task_index()
 
 
-    def update_is_move_plan(self) -> None:
-        if self.is_run.get() is True:
-            return
-        if self.is_move_plan.get() is False:
-            self.is_move_plan.set(True)
-            self.is_move_plan_button.configure(text="Plan")
-        else:
-            self.is_move_plan.set(False)
-            self.is_move_plan_button.configure(text="Exec")
+    # def update_is_move_plan(self) -> None:
+    #     if self.is_run.get() is True:
+    #         return
+    #     if self.is_move_plan.get() is False:
+    #         self.is_move_plan.set(True)
+    #         self.is_move_plan_button.configure(text="Plan")
+    #     else:
+    #         self.is_move_plan.set(False)
+    #         self.is_move_plan_button.configure(text="Exec")
 
-        for (_, _agent_) in self.agents.items():
-            if self.is_move_plan.get() is True:
-                _agent_.path = _agent_.plan_path
-            else:
-                _agent_.path = _agent_.exec_path
-        self.update_curtime()
+    #     for (_, _agent_) in self.agents.items():
+    #         if self.is_move_plan.get() is True:
+    #             _agent_.path = _agent_.plan_path
+    #         else:
+    #             _agent_.path = _agent_.exec_path
+    #     self.update_curtime()
 
 
 def main() -> None:
