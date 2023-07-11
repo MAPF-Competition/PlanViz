@@ -49,9 +49,11 @@ class Agent:
 class Task:
     def __init__(self, _idx_:int, _loc_:Tuple[int,int], _task_obj_: BaseObj,
                   _assign_:Tuple[int,int]=(math.inf,math.inf),
-                  _finish_:Tuple[int,int]=(math.inf,math.inf)):
+                  _finish_:Tuple[int,int]=(math.inf,math.inf),
+                  _state_:str="unassigned"):
         self.idx = _idx_
         self.loc = _loc_
         self.assign = {"agent": _assign_[0], "timestep":_assign_[1]}
         self.finish = {"agent": _finish_[0], "timestep":_finish_[1]}
         self.task_obj = _task_obj_
+        self.state = _state_
