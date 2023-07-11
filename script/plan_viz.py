@@ -21,10 +21,11 @@ OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {
     "Paris_1_256": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
-    "brc202d": {"pixel_per_move": 3, "moves": 3, "delay": 0.06},
+    "brc202d": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
     "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.06},
-    "warehouse-large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
-    "warehouse-small": {"pixel_per_move": 5, "moves": 5, "delay": 0.06}
+    "warehouse_large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "warehouse_small": {"pixel_per_move": 5, "moves": 5, "delay": 0.06},
+    "sortation_large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06}
 }
 
 DIR_DIAMETER = 0.1
@@ -210,8 +211,8 @@ class PlanVis:
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", ui_text_size))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-                                       values=["all", "unassigned", "assigned", "finished"])
-        self.task_shown.current(0)
+                                       values=["all", "unassigned", "assigned", "finished", "none"])
+        self.task_shown.current(4)
         self.task_shown.bind('<<ComboboxSelected>>', self.show_tasks_by_click)
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
@@ -605,15 +606,13 @@ class PlanVis:
                 ag_path.append(_p_obj)
             plan_path_objs.append(ag_path)
 
-        shown_paths = None
         if len(self.exec_paths) == 0:
-            shown_paths = self.plan_paths
-        else:
-            shown_paths = self.exec_paths
+            raise ValueError("Missing actual paths!")
+        shown_paths = self.exec_paths
 
         for _ag_ in range(self.num_of_agents):
             agent_obj = self.render_obj(_ag_, shown_paths[_ag_][0], "oval",
-                                        "deepskyblue", "normal", 0.05, str(_ag_))
+                                        "deepskyblue", "hidden", 0.05, str(_ag_))
             dir_loc = self.get_dir_loc(shown_paths[_ag_][0])
             dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -621,7 +620,7 @@ class PlanVis:
                                               dir_loc[3] * self.tile_size,
                                               fill="navy",
                                               tag="dir",
-                                              state="disable",
+                                              state="hidden",
                                               outline="")
 
             agent = Agent(_ag_, agent_obj, start_objs[_ag_], self.plan_paths[_ag_],

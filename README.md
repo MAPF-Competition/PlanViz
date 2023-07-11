@@ -53,6 +53,6 @@ then we have default values for `ppm`, `mv`, and `delay`, so the user does not n
 ## Run
 To run PlanViz, open a terminal under the directory `PlanViz/script` and type the following example command:
 ```bash
-python3 plan_viz.py --map ../example/warehouse-small.map --plan ../example/warehouse-small-60.json --grid --aid --static --ca
+python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/warehouse_small.json --grid --aid --static --ca
 ```
 
