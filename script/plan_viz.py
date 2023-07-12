@@ -698,7 +698,14 @@ class PlanVis:
 
     def show_task_index(self) -> None:
         for (_, _task_) in self.tasks.items():
-            if self.task_shown.get() in [_task_.state, "all"] and self.show_task_idx.get():
+            if not self.show_task_idx.get():
+                self.canvas.itemconfig(_task_.task_obj.text, state="hidden")
+            elif self.task_shown.get() == "all":
+                self.canvas.itemconfig(_task_.task_obj.text, state="disable")
+            elif self.task_shown.get() == "assigned" and \
+                _task_.state in ["assigned", "newlyassigned"]:
+                self.canvas.itemconfig(_task_.task_obj.text, state="disable")
+            elif self.task_shown.get() == _task_.state:
                 self.canvas.itemconfig(_task_.task_obj.text, state="disable")
             else:
                 self.canvas.itemconfig(_task_.task_obj.text, state="hidden")
@@ -706,7 +713,12 @@ class PlanVis:
 
     def show_tasks(self) -> None:
         for (_, _task_) in self.tasks.items():
-            if self.task_shown.get() in [ _task_.state, "all"]:
+            if self.task_shown.get() == "all":
+                self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
+            elif self.task_shown.get() == "assigned" and \
+                _task_.state in ["assigned", "newlyassigned"]:
+                self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
+            elif self.task_shown.get() == _task_.state:
                 self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
             else:
                 self.canvas.itemconfig(_task_.task_obj.obj, state="hidden")
