@@ -659,7 +659,8 @@ class PlanVis:
 
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
-        _color_ = AGENT_COLORS["collide"] if self.show_all_conf_ag.get() else AGENT_COLORS["assigned"]
+        _color_ = AGENT_COLORS["collide"] if self.show_all_conf_ag.get() \
+            else AGENT_COLORS["assigned"]
         for _conf_ in self.shown_conflicts.values():
             if _conf_[0][0] != -1:
                 self.change_ag_color(_conf_[0][0], _color_)

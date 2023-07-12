@@ -12,7 +12,7 @@ The primary purpose of PlanViz is to better understand how robots/agents move ac
 The scenario on the left of PlanViz shows how the agents move in the environment and how the tasks are allocated at each timestep.
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
-- A task is plotted in a colored square with a number being the task index. Each task is initially marked in orange, and turns pink when it is assigned to an agent and grey when it is completed.
+- A task is plotted in a colored square with a number being the task index. Each task is initially marked in pink, and turns orange when it is assigned to an agent and grey when it is completed.
 - When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
 
 ## User Interface
@@ -26,10 +26,10 @@ The user interface provides operations for user to control the scenario.
     - `Prev`: Move the scenario to the previous timestep
     - `Reset`: Reset the scenario to timestep 0
 - The checkbox controls what to be shown in the scenario.
-- `Start timestep`: Input the desire start timestep and move the scenario to that.
-- `List of errors` contains collisions and timeout issues from the Start-Kit. Double-click an error to see the invalid movements.
+- `Start timestep`: Input the desire start timestep and move the scenario to.
+- `List of errors` contains collisions and timeout issues from the Start-Kit. When the scenario is paused, you can double-click an error to see the invalid movements.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
-- `List of events` contains information of task assignments and task completion. Double-click an event to move all the agents to one timestep before such event occurs.
+- `List of events` contains information of task assignments and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to one timestep before such event occurs.
 
 ![scenario](images/scenario.png)
 
