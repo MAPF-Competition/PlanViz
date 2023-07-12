@@ -90,6 +90,7 @@ class PlanVis:
         self.makespan:int = -1
         self.cur_timestep = 0
         self.shown_path_agents = set()
+        self.conflict_agents = set()
 
         self.load_map()  # Load from files
 
@@ -354,8 +355,11 @@ class PlanVis:
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
-        self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=color)
-        self.agents[ag_idx].agent_obj.color = color
+        ag_color = color
+        if self.show_all_conf_ag.get() and ag_idx in self.conflict_agents:
+            ag_color = AGENT_COLORS["collide"]
+        self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=ag_color)
+        self.agents[ag_idx].agent_obj.color = ag_color
 
 
     def select_conflict(self, event):
@@ -789,6 +793,8 @@ class PlanVis:
         print("Loading errors from "+str(self.plan_file), end="... ")
         if "errors" in data:
             for err in data["errors"]:
+                self.conflict_agents.add(err[0])
+                self.conflict_agents.add(err[1])
                 timestep = err[2]
                 if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
                     self.conflicts[timestep] = []
