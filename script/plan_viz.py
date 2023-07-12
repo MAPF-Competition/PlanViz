@@ -15,7 +15,13 @@ import json
 import numpy as np
 from util import *
 
-TASK_COLORS: Dict[str, str] = {"unassigned": "orange", "assigned": "pink", "finished": "grey"}
+TASK_COLORS: Dict[str, str] = {"unassigned": "pink",
+                               "newlyassigned": "gold",
+                               "assigned": "orange",
+                               "finished": "grey"}
+AGENT_COLORS: Dict[str, str] = {"collide": "red",
+                                "assigned": "deepskyblue",
+                                "newlyassigned": "yellowgreen"}
 DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
 OBSTACLES: List[str] = ['@', 'T']
 
@@ -212,7 +218,7 @@ class PlanVis:
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
                                        values=["all", "unassigned", "assigned", "finished", "none"])
-        self.task_shown.current(4)
+        self.task_shown.current(0)
         self.task_shown.bind('<<ComboboxSelected>>', self.show_tasks_by_click)
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
@@ -353,16 +359,16 @@ class PlanVis:
         for _conf_ in self.shown_conflicts.values():
             _conf_[1] = False
             if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], "deepskyblue")
+                self.change_ag_color(_conf_[0][0], AGENT_COLORS["assigned"])
             if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], "deepskyblue")
+                self.change_ag_color(_conf_[0][1], AGENT_COLORS["assigned"])
         for _sid_ in selected_indices:
             _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
             self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
             if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], "red")
+                self.change_ag_color(_conf_[0][0], AGENT_COLORS["collide"])
             if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], "red")
+                self.change_ag_color(_conf_[0][1], AGENT_COLORS["collide"])
 
 
     def restart_timestep(self):
@@ -376,16 +382,16 @@ class PlanVis:
 
         for _conf_ in self.shown_conflicts.values():
             if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], "deepskyblue")
+                self.change_ag_color(_conf_[0][0], AGENT_COLORS["assigned"])
             if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], "deepskyblue")
+                self.change_ag_color(_conf_[0][1], AGENT_COLORS["assigned"])
             _conf_[1] = False
         _sid_ = event.widget.curselection()[0]  # get all selected indices
         _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
         if _conf_[0][0] != -1:
-            self.change_ag_color(_conf_[0][0], "red")
+            self.change_ag_color(_conf_[0][0], AGENT_COLORS["collide"])
         if _conf_[0][1] != -1:
-            self.change_ag_color(_conf_[0][1], "red")
+            self.change_ag_color(_conf_[0][1], AGENT_COLORS["collide"])
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
         self.new_time.set(int(_conf_[0][2])-1)
         self.update_curtime()
@@ -586,33 +592,33 @@ class PlanVis:
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         start_objs = []
-        plan_path_objs = []
+        path_objs = []
 
         for _ag_ in range(self.num_of_agents):
-            start = self.render_obj(_ag_, self.plan_paths[_ag_][0],"oval","yellowgreen","disable")
+            start = self.render_obj(_ag_, self.exec_paths[_ag_][0],"oval","grey","disable")
             start_objs.append(start)
 
-            ag_path = []
-            for _pid_ in range(len(self.plan_paths[_ag_])):
-                _p_loc_ = (self.plan_paths[_ag_][_pid_][0], self.plan_paths[_ag_][_pid_][1])
+            ag_path = []  # Render paths as purple rectangles
+            for _pid_ in range(len(self.exec_paths[_ag_])):
+                _p_loc_ = (self.exec_paths[_ag_][_pid_][0], self.exec_paths[_ag_][_pid_][1])
                 _p_obj = None
-                if _pid_ > 0 and _p_loc_ == (self.plan_paths[_ag_][_pid_-1][0],
-                                             self.plan_paths[_ag_][_pid_-1][1]):
+                if _pid_ > 0 and _p_loc_ == (self.exec_paths[_ag_][_pid_-1][0],
+                                             self.exec_paths[_ag_][_pid_-1][1]):
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.25)
                 else:  # non=wait action, smaller rectangle
                     _p_obj = self.render_obj(_ag_, _p_loc_, "rectangle", "purple", "disable", 0.4)
                 self.canvas.itemconfigure(_p_obj.obj, state="hidden")
                 self.canvas.delete(_p_obj.text)
                 ag_path.append(_p_obj)
-            plan_path_objs.append(ag_path)
+            path_objs.append(ag_path)
 
         if len(self.exec_paths) == 0:
             raise ValueError("Missing actual paths!")
         shown_paths = self.exec_paths
 
-        for _ag_ in range(self.num_of_agents):
+        for _ag_ in range(self.num_of_agents):  # Render the actual agents
             agent_obj = self.render_obj(_ag_, shown_paths[_ag_][0], "oval",
-                                        "deepskyblue", "hidden", 0.05, str(_ag_))
+                                        AGENT_COLORS["assigned"], "disable", 0.05, str(_ag_))
             dir_loc = self.get_dir_loc(shown_paths[_ag_][0])
             dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
                                               dir_loc[1] * self.tile_size,
@@ -620,11 +626,11 @@ class PlanVis:
                                               dir_loc[3] * self.tile_size,
                                               fill="navy",
                                               tag="dir",
-                                              state="hidden",
+                                              state="disable",
                                               outline="")
 
             agent = Agent(_ag_, agent_obj, start_objs[_ag_], self.plan_paths[_ag_],
-                          plan_path_objs[_ag_], self.exec_paths[_ag_], dir_obj)
+                          path_objs[_ag_], self.exec_paths[_ag_], dir_obj)
             self.agents[_ag_] = agent
         print("Done!")
 
@@ -642,18 +648,18 @@ class PlanVis:
 
         if ag_idx in self.shown_path_agents:
             self.shown_path_agents.remove(ag_idx)
-            for _p_ in self.agents[ag_idx].plan_path_objs:
+            for _p_ in self.agents[ag_idx].path_objs:
                 self.canvas.itemconfigure(_p_.obj, state="hidden")
         else:
             self.shown_path_agents.add(ag_idx)
-            for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].plan_path_objs)):
-                self.canvas.itemconfigure(self.agents[ag_idx].plan_path_objs[_pid_].obj,
+            for _pid_ in range(self.cur_timestep+1, len(self.agents[ag_idx].path_objs)):
+                self.canvas.itemconfigure(self.agents[ag_idx].path_objs[_pid_].obj,
                                           state="disable")
 
 
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
-        _color_ = "red" if self.show_all_conf_ag.get() else "deepskyblue"
+        _color_ = AGENT_COLORS["collide"] if self.show_all_conf_ag.get() else AGENT_COLORS["assigned"]
         for _conf_ in self.shown_conflicts.values():
             if _conf_[0][0] != -1:
                 self.change_ag_color(_conf_[0][0], _color_)
@@ -904,11 +910,16 @@ class PlanVis:
             self.canvas.update()
             time.sleep(self.delay)
 
+        # Change tasks' states
         for (_, _task_) in self.tasks.items():
             if self.cur_timestep+1 >= _task_.finish["timestep"]:
                 _task_.state = "finished"
-            elif self.cur_timestep+1 >= _task_.assign["timestep"]:
+            elif self.cur_timestep+1 == _task_.assign["timestep"]:
+                _task_.state = "newlyassigned"
+                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["newlyassigned"])
+            elif self.cur_timestep+1 > _task_.assign["timestep"]:
                 _task_.state = "assigned"
+                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["assigned"])
             else:
                 _task_.state = "unassigned"
             self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS[_task_.state])
@@ -966,11 +977,16 @@ class PlanVis:
             self.canvas.update()
             time.sleep(self.delay)
 
+        # Change tasks' states
         for (_, _task_) in self.tasks.items():
             if prev_timestep >= _task_.finish["timestep"]:
                 _task_.state = "finished"
-            elif prev_timestep >= _task_.assign["timestep"]:
+            elif prev_timestep == _task_.assign["timestep"]:
+                _task_.state = "newlyassigned"
+                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["newlyassigned"])
+            elif prev_timestep > _task_.assign["timestep"]:
                 _task_.state = "assigned"
+                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["assigned"])
             else:
                 _task_.state = "unassigned"
             self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS[_task_.state])
@@ -1022,6 +1038,7 @@ class PlanVis:
         self.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
 
+        # Change tasks' states
         for (_, _task_) in self.tasks.items():
             if self.cur_timestep >= _task_.finish["timestep"]:
                 _task_.state = "finished"

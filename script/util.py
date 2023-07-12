@@ -35,14 +35,15 @@ class BaseObj:
 
 class Agent:
     def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj,
-                 _plan_path_:List, _plan_path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
+                 _plan_path_:List, _path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
         self.idx = _idx_
+        self.task_idx = -1
         self.agent_obj = _ag_obj_
         self.start_obj = _start_
         self.dir_obj = _dir_obj_  # oval on canvas
         self.plan_path = _plan_path_
         self.exec_path = _exec_path_
-        self.plan_path_objs = _plan_path_objs_
+        self.path_objs = _path_objs_
         self.path = self.exec_path  # Set execution path as default
 
 
