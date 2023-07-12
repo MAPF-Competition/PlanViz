@@ -16,7 +16,7 @@ import numpy as np
 from util import *
 
 TASK_COLORS: Dict[str, str] = {"unassigned": "pink",
-                               "newlyassigned": "gold",
+                               "newlyassigned": "yellowgreen",
                                "assigned": "orange",
                                "finished": "grey"}
 AGENT_COLORS: Dict[str, str] = {"collide": "red",
@@ -217,7 +217,12 @@ class PlanVis:
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", ui_text_size))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-                                       values=["all", "unassigned", "assigned", "finished", "none"])
+                                       values=["all",
+                                               "unassigned",
+                                               "newlyassigned",
+                                               "assigned",
+                                               "finished",
+                                               "none"])
         self.task_shown.current(0)
         self.task_shown.bind('<<ComboboxSelected>>', self.show_tasks_by_click)
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
