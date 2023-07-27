@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 import math
+from enum import Enum
 from typing import List, Tuple
 
 def get_map_name(in_file:str) -> str:
@@ -48,13 +49,13 @@ class Agent:
 
 
 class Task:
-    def __init__(self, _idx_:int, _loc_:Tuple[int,int], _task_obj_: BaseObj,
-                  _assign_:Tuple[int,int]=(math.inf,math.inf),
-                  _finish_:Tuple[int,int]=(math.inf,math.inf),
-                  _state_:str="unassigned"):
-        self.idx = _idx_
-        self.loc = _loc_
-        self.assign = {"agent": _assign_[0], "timestep":_assign_[1]}
-        self.finish = {"agent": _finish_[0], "timestep":_finish_[1]}
-        self.task_obj = _task_obj_
-        self.state = _state_
+    def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,
+                 assigned:Tuple[int,int]=(math.inf,math.inf),
+                 finished:Tuple[int,int]=(math.inf,math.inf),
+                 state:str="unassigned"):
+        self.idx = idx
+        self.loc = loc
+        self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
+                       "finished": {"agent": finished[0], "timestep": finished[1]}}
+        self.task_obj = task_obj
+        self.state = state

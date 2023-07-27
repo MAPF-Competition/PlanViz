@@ -55,21 +55,21 @@ class PlanVis:
 
         self.ppm = in_arg.pixel_per_move
         if self.ppm is None:
-            if map_name in MAP_CONFIG.keys():
+            if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
                 logging.error("Missing variable: pixel_per_move.")
                 sys.exit()
         self.moves = in_arg.moves
         if self.moves is None:
-            if map_name in MAP_CONFIG.keys():
+            if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
                 logging.error("Missing variable: moves.")
                 sys.exit()
         self.delay:int = in_arg.delay
         if self.delay is None:
-            if map_name in MAP_CONFIG.keys():
+            if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
                 logging.error("Missing variable: delay.")
@@ -233,23 +233,12 @@ class PlanVis:
         tmp_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
-                                         font=("Arial",ui_text_size),
-                                         validatecommand=self.update_curtime)
+                                         font=("Arial",ui_text_size))
         self.start_time_entry.grid(row=row_idx, column=1, sticky="w")
         self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
                                        command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=2, sticky="w")
         row_idx += 1
-
-        # tmp_label1 = tk.Label(self.frame, text="Current mode", font=("Arial",ui_text_size))
-        # tmp_label1.grid(row=row_idx, column=0, columnspan=1, sticky="w")
-        # self.is_move_plan = tk.BooleanVar()
-        # self.is_move_plan.set(False)
-        # self.is_move_plan_button = tk.Button(self.frame, text="Exec",
-        #                                      font=("Arial",ui_text_size),
-        #                                      command=self.update_is_move_plan)
-        # self.is_move_plan_button.grid(row=row_idx, column=1, sticky="w")
-        # row_idx += 1
 
         tmp_label2 = tk.Label(self.frame, text="List of errors", font=("Arial",ui_text_size))
         tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
@@ -289,9 +278,9 @@ class PlanVis:
                 else:
                     conf_str += _conf_[-1]
                 conf_str += ", t: " + str(timestep)
-
                 self.conflict_listbox.insert(conf_id, conf_str)
                 self.shown_conflicts[conf_str] = [_conf_, False]
+
         self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
         self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
@@ -307,27 +296,27 @@ class PlanVis:
         tmp_label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
-        self.shown_events:Dict[str, List[List,bool]] = {}
+        self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
                                         width=30,
                                         height=12,
                                         font=("Arial",ui_text_size),
                                         selectmode=tk.EXTENDED)
         eve_id = 0
-        for _timestep_ in sorted(self.events.keys(), reverse=True):
-            for _tid_ in sorted(self.events[_timestep_].keys(), reverse=True):
-                for _eve_ in self.events[_timestep_][_tid_]["assigned"]:
-                    cur_task = self.tasks[_eve_[0]]
-                    eve_str = "task " + str(cur_task.idx) + " assigned to a" +\
-                        str(cur_task.assign["agent"]) + " at t: " + str(cur_task.assign["timestep"])
-                    self.event_listbox.insert(eve_id, eve_str)
-                    self.shown_events[eve_str] = [_eve_, False]
-                for _eve_ in self.events[_timestep_][_tid_]["finished"]:
-                    cur_task = self.tasks[_eve_[0]]
-                    eve_str = "task " + str(cur_task.idx) + " is done by a" +\
-                        str(cur_task.finish["agent"]) + " at t: " + str(cur_task.finish["timestep"])
-                    self.event_listbox.insert(eve_id, eve_str)
-                    self.shown_events[eve_str] = [_eve_, False]
+        for tstep in sorted(self.events.keys(), reverse=True):
+            cur_events = self.events[tstep]
+            for tid in sorted(cur_events["assigned"].keys(), reverse=True):
+                cur_ag = cur_events["assigned"][tid]
+                eve_str = "task " + str(tid) + " assigned to a" + str(cur_ag) + "at t:" + str(tstep)
+                self.shown_events[eve_str] = (tstep, tid, cur_ag, "assigned")
+                self.event_listbox.insert(eve_id, eve_str)
+                eve_id += 1
+            for tid in sorted(cur_events["finished"].keys(), reverse=True):
+                cur_ag = cur_events["finished"][tid]
+                eve_str = "task " + str(tid) + "  is done by a" + str(cur_ag) + "at t:" + str(tstep)
+                self.shown_events[eve_str] = (tstep, tid, cur_ag, "finished")
+                self.event_listbox.insert(eve_id, eve_str)
+                eve_id += 1
 
         self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind('<Double-1>', self.move_to_event)
@@ -419,16 +408,12 @@ class PlanVis:
     def move_to_event(self, event):
         if self.is_run.get() is True:
             return
-
-        for _eve_ in self.shown_events.values():
-            _eve_[1] = False
         _sid_ = event.widget.curselection()[0]  # get all selected indices
-        _eve_ = self.shown_events[self.event_listbox.get(_sid_)]
-        self.shown_events[self.event_listbox.get(_sid_)][1] = True
-        new_t = max(int(_eve_[0][1])-1, 0)
+        eve_str:str = self.event_listbox.get(_sid_)
+        cur_eve:Tuple[int,int,int,str] = self.shown_events[eve_str]
+        new_t = max(cur_eve[0]-1, 0)  # move to one timestep ahead the event
         self.new_time.set(new_t)
         self.update_curtime()
-
 
     def __move_from(self, event):
         """ Remember previous coordinates for scrolling with the mouse """
@@ -697,35 +682,35 @@ class PlanVis:
 
 
     def show_task_index(self) -> None:
-        for (_, _task_) in self.tasks.items():
+        for (_, task) in self.tasks.items():
             if not self.show_task_idx.get():
-                self.canvas.itemconfig(_task_.task_obj.text, state="hidden")
+                self.canvas.itemconfig(task.task_obj.text, state="hidden")
             elif self.task_shown.get() == "all":
-                self.canvas.itemconfig(_task_.task_obj.text, state="disable")
+                self.canvas.itemconfig(task.task_obj.text, state="disable")
             elif self.task_shown.get() == "assigned" and \
-                _task_.state in ["assigned", "newlyassigned"]:
-                self.canvas.itemconfig(_task_.task_obj.text, state="disable")
-            elif self.task_shown.get() == _task_.state:
-                self.canvas.itemconfig(_task_.task_obj.text, state="disable")
+                task.state in ["assigned", "newlyassigned"]:
+                self.canvas.itemconfig(task.task_obj.text, state="disable")
+            elif self.task_shown.get() == task.state:
+                self.canvas.itemconfig(task.task_obj.text, state="disable")
             else:
-                self.canvas.itemconfig(_task_.task_obj.text, state="hidden")
+                self.canvas.itemconfig(task.task_obj.text, state="hidden")
 
 
     def show_tasks(self) -> None:
-        for (_, _task_) in self.tasks.items():
+        for (_, task) in self.tasks.items():
             if self.task_shown.get() == "all":
-                self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
+                self.canvas.itemconfig(task.task_obj.obj, state="disable")
             elif self.task_shown.get() == "assigned" and \
-                _task_.state in ["assigned", "newlyassigned"]:
-                self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
-            elif self.task_shown.get() == _task_.state:
-                self.canvas.itemconfig(_task_.task_obj.obj, state="disable")
+                task.state in ["assigned", "newlyassigned"]:
+                self.canvas.itemconfig(task.task_obj.obj, state="disable")
+            elif self.task_shown.get() == task.state:
+                self.canvas.itemconfig(task.task_obj.obj, state="disable")
             else:
-                self.canvas.itemconfig(_task_.task_obj.obj, state="hidden")
+                self.canvas.itemconfig(task.task_obj.obj, state="hidden")
         self.show_task_index()
 
 
-    def show_tasks_by_click(self, event) -> None:
+    def show_tasks_by_click(self, _) -> None:
         self.show_tasks()
 
 
@@ -808,7 +793,7 @@ class PlanVis:
                 self.conflict_agents.add(err[0])
                 self.conflict_agents.add(err[1])
                 timestep = err[2]
-                if timestep not in self.conflicts.keys():  # Sort errors according to the timestep
+                if timestep not in self.conflicts:  # Sort errors according to the timestep
                     self.conflicts[timestep] = []
                 self.conflicts[timestep].append(err)
         print("Done!")
@@ -825,34 +810,22 @@ class PlanVis:
 
         print("Loading events from "+str(self.plan_file), end="... ")
         if "events" in data.keys() and data["events"]:
-            for _ag_ in range(self.num_of_agents):
-                for _eve_ in data["events"][_ag_]:
-                    _tid_ = _eve_[0]
-                    _timestep_ = _eve_[1]
+            for ag in range(self.num_of_agents):
+                for _eve_ in data["events"][ag]:
+                    tid:int   = _eve_[0]
+                    tstep:int = _eve_[1]
+                    state:str = _eve_[2]
 
-                    if  _timestep_ not in self.events.keys():
-                        self.events[_timestep_] = {}
-                    if _tid_ not in self.events[_timestep_].keys():
-                        self.events[_timestep_][_tid_] = {"assigned":[], "finished":[]}
+                    if tstep not in self.events:
+                        self.events[tstep] = {"assigned":{}, "finished":{}}
+                    self.events[tstep][state][tid] = ag
 
-                    if _eve_[2] == "assigned":
-                        self.tasks[_tid_].assign["agent"] = _ag_
-                        self.tasks[_tid_].assign["timestep"] = _timestep_
-                        if _timestep_ == 0:  # timestep at 0
-                            self.tasks[_tid_].state = "assigned"
-                            self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                                   fill=TASK_COLORS["assigned"])
-                        self.events[_timestep_][_tid_]["assigned"].append(_eve_)
-
-                    elif _eve_[2] == "finished":
-                        self.tasks[_tid_].finish["agent"] = _ag_
-                        self.tasks[_tid_].finish["timestep"] = _timestep_
-                        if _timestep_ == 0:  # timestep at 0
-                            self.tasks[_tid_].state = "finished"
-                            self.canvas.itemconfig(self.tasks[_tid_].task_obj.obj,
-                                                   fill=TASK_COLORS["finished"])
-                        self.events[_timestep_][_tid_]["finished"].append(_eve_)
-
+                    self.tasks[tid].events[state]["agent"] = ag
+                    self.tasks[tid].events[state]["timestep"] = tstep
+                    if tstep == 0:
+                        self.tasks[_tid_].state = state
+                        self.canvas.itemconfig(self.tasks[tid].task_obj.obj,
+                                               fill=TASK_COLORS[state])
         print("Done!")
 
 
@@ -935,18 +908,18 @@ class PlanVis:
             time.sleep(self.delay)
 
         # Change tasks' states
-        for (_, _task_) in self.tasks.items():
-            if self.cur_timestep+1 >= _task_.finish["timestep"]:
-                _task_.state = "finished"
-            elif self.cur_timestep+1 == _task_.assign["timestep"]:
-                _task_.state = "newlyassigned"
-                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["newlyassigned"])
-            elif self.cur_timestep+1 > _task_.assign["timestep"]:
-                _task_.state = "assigned"
-                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["assigned"])
+        for (_, task) in self.tasks.items():
+            if self.cur_timestep+1 >= task.events["finished"]["timestep"]:
+                task.state = "finished"
+            elif self.cur_timestep+1 == task.events["assigned"]["timestep"]:
+                task.state = "newlyassigned"
+                self.change_ag_color(task.events["assigned"]["agent"], AGENT_COLORS["newlyassigned"])
+            elif self.cur_timestep+1 > task.events["assigned"]["timestep"]:
+                task.state = "assigned"
+                self.change_ag_color(task.events["assigned"]["agent"], AGENT_COLORS["assigned"])
             else:
-                _task_.state = "unassigned"
-            self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS[_task_.state])
+                task.state = "unassigned"
+            self.canvas.itemconfig(task.task_obj.obj, fill=TASK_COLORS[task.state])
         self.show_tasks()
 
         for (_, agent) in self.agents.items():
@@ -1002,18 +975,18 @@ class PlanVis:
             time.sleep(self.delay)
 
         # Change tasks' states
-        for (_, _task_) in self.tasks.items():
-            if prev_timestep >= _task_.finish["timestep"]:
-                _task_.state = "finished"
-            elif prev_timestep == _task_.assign["timestep"]:
-                _task_.state = "newlyassigned"
-                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["newlyassigned"])
-            elif prev_timestep > _task_.assign["timestep"]:
-                _task_.state = "assigned"
-                self.change_ag_color(_task_.assign["agent"], AGENT_COLORS["assigned"])
+        for (_, task) in self.tasks.items():
+            if prev_timestep >= task.finish["timestep"]:
+                task.state = "finished"
+            elif prev_timestep == task.assign["timestep"]:
+                task.state = "newlyassigned"
+                self.change_ag_color(task.assign["agent"], AGENT_COLORS["newlyassigned"])
+            elif prev_timestep > task.assign["timestep"]:
+                task.state = "assigned"
+                self.change_ag_color(task.assign["agent"], AGENT_COLORS["assigned"])
             else:
-                _task_.state = "unassigned"
-            self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS[_task_.state])
+                task.state = "unassigned"
+            self.canvas.itemconfig(task.task_obj.obj, fill=TASK_COLORS[task.state])
         self.show_tasks()
 
         self.cur_timestep = prev_timestep
@@ -1063,14 +1036,14 @@ class PlanVis:
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
 
         # Change tasks' states
-        for (_, _task_) in self.tasks.items():
-            if self.cur_timestep >= _task_.finish["timestep"]:
-                _task_.state = "finished"
-            elif self.cur_timestep >= _task_.assign["timestep"]:
-                _task_.state = "assigned"
+        for (_, task) in self.tasks.items():
+            if self.cur_timestep >= task.events["finished"]["timestep"]:
+                task.state = "finished"
+            elif self.cur_timestep >= task.events["assigned"]["timestep"]:
+                task.state = "assigned"
             else:
-                _task_.state = "unassigned"
-            self.canvas.itemconfig(_task_.task_obj.obj, fill=TASK_COLORS[_task_.state])
+                task.state = "unassigned"
+            self.canvas.itemconfig(task.task_obj.obj, fill=TASK_COLORS[task.state])
         self.show_tasks()
 
         for (_idx_, _agent_) in self.agents.items():
@@ -1092,24 +1065,6 @@ class PlanVis:
                                                       state="disable",
                                                       outline="")
         self.show_agent_index()
-
-
-    # def update_is_move_plan(self) -> None:
-    #     if self.is_run.get() is True:
-    #         return
-    #     if self.is_move_plan.get() is False:
-    #         self.is_move_plan.set(True)
-    #         self.is_move_plan_button.configure(text="Plan")
-    #     else:
-    #         self.is_move_plan.set(False)
-    #         self.is_move_plan_button.configure(text="Exec")
-
-    #     for (_, _agent_) in self.agents.items():
-    #         if self.is_move_plan.get() is True:
-    #             _agent_.path = _agent_.plan_path
-    #         else:
-    #             _agent_.path = _agent_.exec_path
-    #     self.update_curtime()
 
 
 def main() -> None:
