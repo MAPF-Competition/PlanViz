@@ -34,22 +34,19 @@ class PlanViz:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
-                logging.error("Missing variable: pixel_per_move.")
-                sys.exit()
+                raise TypeError("Missing variable: pixel_per_move.")
         self.moves = in_arg.moves
         if self.moves is None:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                logging.error("Missing variable: moves.")
-                sys.exit()
+                raise TypeError("Missing variable: moves.")
         self.delay:int = in_arg.delay
         if self.delay is None:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                logging.error("Missing variable: delay.")
-                sys.exit()
+                raise TypeError("Missing variable: delay.")
 
         self.tile_size:int = self.ppm * self.moves
         self.width:int = -1
@@ -116,8 +113,16 @@ class PlanViz:
         # Generate the GUI pannel
         print("Rendering the pannel... ", end="")
         ui_text_size:int = 12
-        self.frame = tk.Frame(self.window)
-        self.frame.grid(row=0, column=1,sticky="nsew")
+
+        gui_window = self.window
+        gui_column = 1
+        if (self.width+1) * self.tile_size > 0.52 * self.window.winfo_screenwidth():
+            gui_window = tk.Toplevel()
+            gui_window.title("UI Pannel")
+            gui_window.config(width=300, height=(self.height+1) * self.tile_size)
+            gui_column = 0
+        self.frame = tk.Frame(gui_window)
+        self.frame.grid(row=0, column=gui_column,sticky="nsew")
         row_idx = 0
 
         self.timestep_label = tk.Label(self.frame,
@@ -346,8 +351,14 @@ class PlanViz:
 
         self.frame.update()  # Adjust window size
         # Use width and height for scaling
-        wd_width = str((self.width+1) * self.tile_size + 300)
-        wd_height = str(max((self.height+1) * self.tile_size, self.frame.winfo_height()) + 5)
+        wd_width  = min((self.width+1) * self.tile_size + 2, 
+                        self.window.winfo_screenwidth())
+        wd_height = (self.height+1) * self.tile_size + 1
+        if gui_column == 1:
+            wd_width += self.frame.winfo_width() + 3
+            wd_height = max(wd_height, self.frame.winfo_height()) + 5
+        wd_width = str(wd_width)
+        wd_height = str(wd_height)
         self.window.geometry(wd_width + "x" + wd_height)
         self.window.title("PlanViz")
         print("=====            DONE            =====")
@@ -357,7 +368,7 @@ class PlanViz:
         ag_color = color
         if self.show_all_conf_ag.get() and ag_idx in self.conflict_agents:
             ag_color = AGENT_COLORS["collide"]
-        else:
+        if ag_color != AGENT_COLORS["collide"]:
             self.agents[ag_idx].agent_obj.color = ag_color
         self.canvas.itemconfig(self.agents[ag_idx].agent_obj.obj, fill=ag_color)
 
@@ -432,12 +443,6 @@ class PlanViz:
         if self.is_run.get() is True:
             return
 
-        for _conf_ in self.shown_conflicts.values():
-            if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], AGENT_COLORS["assigned"])
-            if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], AGENT_COLORS["assigned"])
-            _conf_[1] = False
         _sid_ = event.widget.curselection()[0]  # get all selected indices
         _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
         if _conf_[0][0] != -1:
@@ -961,7 +966,7 @@ class PlanViz:
         self.next_button.config(state="normal")
 
         # Change tasks' states after cur_timestep += 1
-        if self.cur_timestep-1 == self.event_tracker["aTime"][self.event_tracker["aid"]-1]:
+        if self.cur_timestep-1 == self.event_tracker["aTime"][max(self.event_tracker["aid"]-1, 0)]:
             # from newly assigned to assigned
             for (tid, ag_id) in self.events[TaskStates["assigned"]][self.cur_timestep-1].items():
                 self.tasks[tid].state = TaskStates["assigned"]
@@ -1110,6 +1115,7 @@ class PlanViz:
         # Change tasks' and agents' colors according to assigned timesteps
         for a_id, a_time in enumerate(self.event_tracker["aTime"]):
             if a_time == -1:
+                self.event_tracker["aid"] = a_id
                 break
             if a_time < self.cur_timestep:
                 for (tid, ag_id) in self.events[TaskStates["assigned"]][a_time].items():
@@ -1121,11 +1127,11 @@ class PlanViz:
                     self.tasks[tid].state = TaskStates["newlyassigned"]
                     self.change_task_color(tid, TASK_COLORS[TaskStates["newlyassigned"]])
                     self.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
-            else:
+            else:  # a_time > self.cur_timestep
                 self.event_tracker["aid"] = a_id
                 break
 
-        # Change tasks' and agents' colors according to finished timesteps
+        # Change tasks' colors according to finished timesteps
         for f_id, f_time in enumerate(self.event_tracker["fTime"]):
             if f_time == -1:
                 break
@@ -1171,7 +1177,7 @@ def main() -> None:
     parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
                         help="Number of agents")
     parser.add_argument('--start', type=int, default=0, help="Starting timestep")
-    parser.add_argument('--end', type=int, default=np.inf, help="Ending timestep")
+    parser.add_argument('--end', type=int, default=100, help="Ending timestep")
     parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
     parser.add_argument('--mv', type=int, dest="moves", help="Number of moves per action")
     parser.add_argument('--delay', type=float, help="Wait time between timesteps")
