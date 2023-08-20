@@ -1,7 +1,30 @@
 # -*- coding: UTF-8 -*-
 import math
-from enum import Enum
-from typing import List, Tuple
+from typing import List, Tuple, Dict
+
+TaskStates = {"unassigned": 0, "newlyassigned": 1, "assigned": 2, "finished": 3}
+TASK_COLORS: Dict[int, str] = {TaskStates["unassigned"]: "pink",
+                               TaskStates["newlyassigned"]: "yellowgreen",
+                               TaskStates["assigned"]: "orange",
+                               TaskStates["finished"]: "grey"}
+AGENT_COLORS: Dict[str, str] = {"newlyassigned": "yellowgreen",
+                                "assigned": "deepskyblue",
+                                "collide": "red"}
+DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
+OBSTACLES: List[str] = ['@', 'T']
+
+MAP_CONFIG: Dict[str,Dict] = {
+    "Paris_1_256": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "brc202d": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "random-32-32-20": {"pixel_per_move": 5, "moves": 5, "delay": 0.06},
+    "warehouse_large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06},
+    "warehouse_small": {"pixel_per_move": 5, "moves": 5, "delay": 0.06},
+    "sortation_large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06}
+}
+
+DIR_DIAMETER = 0.1
+DIR_OFFSET = 0.05
+
 
 def get_map_name(in_file:str) -> str:
     """Get the map name from the file name
@@ -26,6 +49,55 @@ def get_angle(glob_dir:int):
         out_angle = -1 * math.pi / 2.
     return out_angle
 
+
+def get_dir_loc(_loc_:Tuple[int]):
+    dir_loc = [0.0, 0.0, 0.0, 0.0]
+    if _loc_[2] == 0:  # Right
+        dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
+        dir_loc[0] = _loc_[1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+        dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
+        dir_loc[2] = _loc_[1] + 1 - DIR_OFFSET
+    elif _loc_[2] == 1:  # Up
+        dir_loc[1] = _loc_[0] + DIR_OFFSET
+        dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
+        dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
+        dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+    elif _loc_[2] == 2:  # Left
+        dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
+        dir_loc[0] = _loc_[1] + DIR_OFFSET
+        dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
+        dir_loc[2] = _loc_[1] + DIR_OFFSET + DIR_DIAMETER*2
+    elif _loc_[2] == 3:  # Down
+        dir_loc[1] = _loc_[0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+        dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
+        dir_loc[3] = _loc_[0] + 1 - DIR_OFFSET
+        dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+    return dir_loc
+
+
+def get_rotation(cur_dir:int, next_dir:int):
+    if cur_dir == next_dir:
+        return 0
+    if cur_dir == 0:
+        if next_dir == 1:
+            return 1  # Counter-clockwise 90 degrees
+        if next_dir == 3:
+            return -1  # Clockwise 90 degrees
+    elif cur_dir == 1:
+        if next_dir == 2:
+            return 1
+        if next_dir == 0:
+            return -1
+    elif cur_dir == 2:
+        if next_dir == 3:
+            return 1
+        if next_dir == 1:
+            return -1
+    elif cur_dir == 3:
+        if next_dir == 0:
+            return 1
+        if next_dir == 2:
+            return -1
 
 class BaseObj:
     def __init__(self, _obj_, _text_, _loc_, _color_) -> None:
@@ -52,10 +124,10 @@ class Task:
     def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,
                  assigned:Tuple[int,int]=(math.inf,math.inf),
                  finished:Tuple[int,int]=(math.inf,math.inf),
-                 state:str="unassigned"):
+                 state:int=0):
         self.idx = idx
         self.loc = loc
-        self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
-                       "finished": {"agent": finished[0], "timestep": finished[1]}}
+        self.events = {TaskStates["assigned"]: {"agent": assigned[0], "timestep": assigned[1]},
+                       TaskStates["finished"]: {"agent": finished[0], "timestep": finished[1]}}
         self.task_obj = task_obj
         self.state = state
