@@ -392,28 +392,38 @@ class PlanViz:
                 self.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
                 if self.show_task_idx.get():
                     self.canvas.itemconfig(tsk.task_obj.text, state="disabled")
+                else:
+                    self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
 
-        elif self.task_shown.get() == "none":
+        if self.task_shown.get() == "none":
             if self.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
                 self.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
                 self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
 
-        elif self.task_shown.get() == "assigned":
-            if self.canvas.itemcget(tsk.task_obj.obj, "state") == "hidden" and \
-                tsk.state in [TaskStates["assigned"], TaskStates["newlyassigned"]]:
+        if self.task_shown.get() == "assigned":
+            if tsk.state in [TaskStates["assigned"], TaskStates["newlyassigned"]]:
                 self.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
                 if self.show_task_idx.get():
                     self.canvas.itemconfig(tsk.task_obj.text, state="disabled")
-
-        elif tsk.state == TaskStates[self.task_shown.get()]:
-            if self.canvas.itemcget(tsk.task_obj.obj, "state") == "hidden":
-                self.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
-                if self.show_task_idx.get():
-                    self.canvas.itemconfig(tsk.task_obj.text, state="disabled")
+                else:
+                    self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
             else:
-                assert self.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled"
                 self.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
                 self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
+
+        if tsk.state == TaskStates[self.task_shown.get()]:
+            self.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
+            if self.show_task_idx.get():
+                self.canvas.itemconfig(tsk.task_obj.text, state="disabled")
+            else:
+                self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+        else:
+            self.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
+            self.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+        return
 
 
     def select_conflict(self, event):
@@ -1007,20 +1017,25 @@ class PlanViz:
                 self.change_task_color(tid, TASK_COLORS[TaskStates["assigned"]])
             self.event_tracker["fid"] = max(self.event_tracker["fid"]-1, 0)
 
+        if self.cur_timestep == prev_agn_time:  # from newly assigned to unassigned
+            for (tid, ag_id) in self.events[TaskStates["assigned"]][prev_agn_time].items():
+                if self.tasks[tid].state != TaskStates["newlyassigned"]:
+                    print("self.tasks[tid].state: ", self.tasks[tid].state)
+                    print("TaskStates: ", TaskStates["newlyassigned"])
+                    print("********")
+                assert self.tasks[tid].state == TaskStates["newlyassigned"]
+                self.tasks[tid].state = TaskStates["unassigned"]
+                self.change_task_color(tid, TASK_COLORS[TaskStates["unassigned"]])
+                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
+            self.event_tracker["aid"] = max(self.event_tracker["aid"]-1, 0)
+
+        prev_agn_time = self.event_tracker["aTime"][max(self.event_tracker["aid"]-1, 0)]
         if prev_timestep == prev_agn_time:  # from assigned to newly assigned
             for (tid, ag_id) in self.events[TaskStates["assigned"]][prev_agn_time].items():
                 assert self.tasks[tid].state == TaskStates["assigned"]
                 self.tasks[tid].state = TaskStates["newlyassigned"]
-                self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
                 self.change_task_color(tid, TASK_COLORS[TaskStates["newlyassigned"]])
-
-        if self.cur_timestep == prev_agn_time:  # from newly assigned to unassigned
-            for (tid, ag_id) in self.events[TaskStates["assigned"]][prev_agn_time].items():
-                assert self.tasks[tid].state == TaskStates["newlyassigned"]
-                self.tasks[tid].state = TaskStates["unassigned"]
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
-                self.change_task_color(tid, TASK_COLORS[TaskStates["unassigned"]])
-            self.event_tracker["aid"] = max(self.event_tracker["aid"]-1, 0)
+                self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
 
         # self.show_tasks()
 
@@ -1078,6 +1093,7 @@ class PlanViz:
         self.prev_button.config(state="disable")
         self.update_button.config(state="disable")
         self.restart_button.config(state="disable")
+        self.task_shown.config(state="disable")
 
         self.is_run.set(True)
         while self.cur_timestep < min(self.makespan, self.end_timestep):
@@ -1093,6 +1109,7 @@ class PlanViz:
         self.prev_button.config(state="normal")
         self.update_button.config(state="normal")
         self.restart_button.config(state="normal")
+        self.task_shown.config(state="normal")
 
 
     def pause_agents(self) -> None:

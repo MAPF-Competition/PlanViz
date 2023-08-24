@@ -10,7 +10,7 @@ TASK_COLORS: Dict[int, str] = {TaskStates["unassigned"]: "pink",
 AGENT_COLORS: Dict[str, str] = {"newlyassigned": "yellowgreen",
                                 "assigned": "deepskyblue",
                                 "collide": "red"}
-DIRECTION: Dict[str,int] = {"E":0, "S":1, "W":2, "N":3}
+DIRECTION: Dict[str,int] = {"E":0, "N":1, "W":2, "S":3}
 OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {
@@ -57,7 +57,7 @@ def get_dir_loc(_loc_:Tuple[int]):
         dir_loc[0] = _loc_[1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
         dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
         dir_loc[2] = _loc_[1] + 1 - DIR_OFFSET
-    elif _loc_[2] == 1:  # South
+    elif _loc_[2] == 3:  # South
         dir_loc[1] = _loc_[0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
         dir_loc[3] = _loc_[0] + 1 - DIR_OFFSET
@@ -67,7 +67,7 @@ def get_dir_loc(_loc_:Tuple[int]):
         dir_loc[0] = _loc_[1] + DIR_OFFSET
         dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
         dir_loc[2] = _loc_[1] + DIR_OFFSET + DIR_DIAMETER*2
-    elif _loc_[2] == 3:  # North
+    elif _loc_[2] == 1:  # North
         dir_loc[1] = _loc_[0] + DIR_OFFSET
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
         dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
