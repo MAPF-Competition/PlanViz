@@ -52,25 +52,25 @@ def get_angle(glob_dir:int):
 
 def get_dir_loc(_loc_:Tuple[int]):
     dir_loc = [0.0, 0.0, 0.0, 0.0]
-    if _loc_[2] == 0:  # Right
+    if _loc_[2] == 0:  # East
         dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
         dir_loc[0] = _loc_[1] + 1 - DIR_OFFSET - DIR_DIAMETER*2
         dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
         dir_loc[2] = _loc_[1] + 1 - DIR_OFFSET
-    elif _loc_[2] == 1:  # Up
-        dir_loc[1] = _loc_[0] + DIR_OFFSET
+    elif _loc_[2] == 1:  # South
+        dir_loc[1] = _loc_[0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
-        dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
+        dir_loc[3] = _loc_[0] + 1 - DIR_OFFSET
         dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
-    elif _loc_[2] == 2:  # Left
+    elif _loc_[2] == 2:  # West
         dir_loc[1] = _loc_[0] + 0.5 - DIR_DIAMETER
         dir_loc[0] = _loc_[1] + DIR_OFFSET
         dir_loc[3] = _loc_[0] + 0.5 + DIR_DIAMETER
         dir_loc[2] = _loc_[1] + DIR_OFFSET + DIR_DIAMETER*2
-    elif _loc_[2] == 3:  # Down
-        dir_loc[1] = _loc_[0] + 1 - DIR_OFFSET - DIR_DIAMETER*2
+    elif _loc_[2] == 3:  # North
+        dir_loc[1] = _loc_[0] + DIR_OFFSET
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
-        dir_loc[3] = _loc_[0] + 1 - DIR_OFFSET
+        dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
         dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
     return dir_loc
 

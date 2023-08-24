@@ -47,7 +47,7 @@ The user interface provides operations for user to control the scenario.
 - `--mv` (type: *int*):  Number of moves per timestep; the tile size of the map is `ppm` $\times$ `mv`.
 - `--delay` (type: *float*):  Wait time for each timestep after agents' movements.
 - `--start` (type: *int*): Start timestep for visualization (*default*: 0).
-- `--end` (type: *int*): Start timestep for visualization (*default*: 100).
+- `--end` (type: *int*): End timestep for visualization (*default*: 100).
 
 If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problems),
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
