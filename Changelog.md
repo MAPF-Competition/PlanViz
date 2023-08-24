@@ -1,5 +1,11 @@
 # Changelog
 
+Version 1.1.1 - 2023-08-24
+---
+Fix bugs:
+- Fix bugs for direction settings
+- Change task colors according to the timestep
+
 Version 1.1.0 - 2023-08-19
 ---
 Added:
