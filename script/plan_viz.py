@@ -1130,6 +1130,10 @@ class PlanViz:
         self.timestep_label.config(text = f"Timestep: {self.cur_timestep:03d}")
 
         # Change tasks' and agents' colors according to assigned timesteps
+        for (tid_, task_) in self.tasks.items():  # Initialize all the task states to unassigned
+            task_.state = TaskStates["unassigned"]
+            self.change_task_color(tid_, TASK_COLORS[TaskStates["unassigned"]])
+
         for a_id, a_time in enumerate(self.event_tracker["aTime"]):
             if a_time == -1:
                 self.event_tracker["aid"] = a_id
