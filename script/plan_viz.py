@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 """ Plan Visualizer with rotation agents
-This is a script for visualizing the plan for MAPF.
+This is a script for visualizing the plan for the League of Robot Runners.
+All rights reserved.
 """
 
 import argparse
@@ -14,14 +15,16 @@ from util import TASK_COLORS, AGENT_COLORS, DIR_OFFSET, \
     get_angle, get_dir_loc, get_rotation
 from plan_config import PlanConfig
 
+TEXT_SIZE:int = 12
+
 class PlanViz:
-    """Render MAPF instance
+    """ This is the control pannel of PlanViz
     """
-    def __init__(self, in_arg) -> None:
+    def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz =====")
 
         # Load the yaml file or the input arguments
-        self.pcf = PlanConfig(in_arg)
+        self.pcf = plan_config
         self.pcf.canvas.bind("<Button-3>", self.show_ag_plan)
 
         # This is what enables using the mouse:
@@ -35,7 +38,6 @@ class PlanViz:
 
         # Generate the UI pannel
         print("Rendering the pannel... ", end="")
-        ui_text_size:int = 12
 
         self.is_run = tk.BooleanVar()
         self.is_grid = tk.BooleanVar()
@@ -45,11 +47,11 @@ class PlanViz:
         self.show_all_conf_ag = tk.BooleanVar()
 
         self.is_run.set(False)
-        self.is_grid.set(in_arg.show_grid)
-        self.show_ag_idx.set(in_arg.show_ag_idx)
-        self.show_task_idx.set(in_arg.show_task_idx)
-        self.show_static.set(in_arg.show_static)
-        self.show_all_conf_ag.set(in_arg.show_conf_ag)
+        self.is_grid.set(_grid)
+        self.show_ag_idx.set(_ag_idx)
+        self.show_task_idx.set(_task_idx)
+        self.show_static.set(_static)
+        self.show_all_conf_ag.set(_conf_ag)
 
         gui_window = self.pcf.window
         gui_column = 1
@@ -64,42 +66,42 @@ class PlanViz:
 
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.pcf.cur_timestep:03d}",
-                                       font=("Arial", ui_text_size + 10))
+                                       font=("Arial", TEXT_SIZE + 10))
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
 
         # List of buttons
         self.run_button = tk.Button(self.frame, text="Play",
-                                    font=("Arial",ui_text_size),
+                                    font=("Arial",TEXT_SIZE),
                                     command=self.move_agents)
         self.run_button.grid(row=row_idx, column=0, sticky="nsew")
         self.pause_button = tk.Button(self.frame, text="Pause",
-                                      font=("Arial",ui_text_size),
+                                      font=("Arial",TEXT_SIZE),
                                       command=self.pause_agents)
         self.pause_button.grid(row=row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
-                                            font=("Arial",ui_text_size),
+                                            font=("Arial",TEXT_SIZE),
                                             command=self.resume_zoom)
         self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
         self.next_button = tk.Button(self.frame, text="Next",
-                                     font=("Arial",ui_text_size),
+                                     font=("Arial",TEXT_SIZE),
                                      command=self.move_agents_per_timestep)
         self.next_button.grid(row=row_idx, column=0, sticky="nsew")
         self.prev_button = tk.Button(self.frame, text="Prev",
-                                     font=("Arial",ui_text_size),
+                                     font=("Arial",TEXT_SIZE),
                                      command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="nsew")
         self.restart_button = tk.Button(self.frame, text="Reset",
-                                        font=("Arial",ui_text_size),
+                                        font=("Arial",TEXT_SIZE),
                                         command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
         # List of checkboxes
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
-                                          font=("Arial",ui_text_size),
+                                          font=("Arial",TEXT_SIZE),
                                           variable=self.is_grid,
                                           onvalue=True, offvalue=False,
                                           command=self.show_grid)
@@ -107,35 +109,35 @@ class PlanViz:
         row_idx += 1
 
         self.id_button = tk.Checkbutton(self.frame, text="Show agent indices",
-                                        font=("Arial",ui_text_size),
+                                        font=("Arial",TEXT_SIZE),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                         command=self.show_agent_index)
         self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
-                                         font=("Arial",ui_text_size),
+                                         font=("Arial",TEXT_SIZE),
                                          variable=self.show_task_idx, onvalue=True, offvalue=False,
                                          command=self.show_task_index)
         self.id_button2.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
-                                            font=("Arial",ui_text_size),
+                                            font=("Arial",TEXT_SIZE),
                                             variable=self.show_static, onvalue=True, offvalue=False,
                                             command=self.show_static_loc)
         self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
-                                                      font=("Arial",ui_text_size),
+                                                      font=("Arial",TEXT_SIZE),
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
                                                       command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", ui_text_size))
+        task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
                                        values=["all",
@@ -149,63 +151,63 @@ class PlanViz:
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
 
-        tmp_label = tk.Label(self.frame, text="Start timestep", font=("Arial",ui_text_size))
-        tmp_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        _label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
+        _label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
-                                         font=("Arial",ui_text_size))
+                                         font=("Arial",TEXT_SIZE))
         self.start_time_entry.grid(row=row_idx, column=1, sticky="w")
-        self.update_button = tk.Button(self.frame, text="Go", font=("Arial",ui_text_size),
+        self.update_button = tk.Button(self.frame, text="Go", font=("Arial",TEXT_SIZE),
                                        command=self.update_curtime)
         self.update_button.grid(row=row_idx, column=2, sticky="w")
         row_idx += 1
 
-        tmp_label2 = tk.Label(self.frame, text="List of errors", font=("Arial",ui_text_size))
-        tmp_label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        _label2 = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
+        _label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
                                            width=30,
                                            height=12,
-                                           font=("Arial",ui_text_size),
+                                           font=("Arial",TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
         conf_id = 0
         for tstep in sorted(self.pcf.conflicts.keys(), reverse=True):
-            if tstep < self.pcf.start_timestep:
+            if tstep < self.pcf.start_tstep:
                 continue
-            if tstep > self.pcf.end_timestep:
+            if tstep > self.pcf.end_tstep:
                 break
 
-            for _conf_ in self.pcf.conflicts[tstep]:
-                agent1 = _conf_[0]
-                agent2 = _conf_[1]
-                if agent1 > (self.pcf.num_of_agents-1) or agent2 > (self.pcf.num_of_agents-1):
+            for conf in self.pcf.conflicts[tstep]:
+                agent1 = conf[0]
+                agent2 = conf[1]
+                if agent1 > (self.pcf.team_size-1) or agent2 > (self.pcf.team_size-1):
                     continue
-                assert tstep == _conf_[2]
-                pid = tstep - self.pcf.start_timestep
+                assert tstep == conf[2]
+                pid = tstep - self.pcf.start_tstep
                 conf_str = str()
                 if agent1 != -1:
                     conf_str += "a" + str(agent1)
                 if agent2 != -1:
                     conf_str += ", a" + str(agent2)
-                if _conf_[-1] == "vertex conflict":
+                if conf[-1] == "vertex conflict":
                     _loc = "("+ str(self.pcf.agents[agent1].plan_path[pid][0]) + "," +\
                         str(self.pcf.agents[agent1].plan_path[pid][1]) +")"
                     conf_str += ", v: " + _loc
-                elif _conf_[-1] == "edge conflict":
+                elif conf[-1] == "edge conflict":
                     _loc1 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
                         str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
                     _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
                         str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
                     conf_str += ", e: " + _loc1 + "->" + _loc2
-                elif _conf_[-1] == 'incorrect vector size':
+                elif conf[-1] == 'incorrect vector size':
                     conf_str += 'Planner timeout'
                 else:
-                    conf_str += _conf_[-1]
+                    conf_str += conf[-1]
                 conf_str += ", t: " + str(tstep)
                 self.conflict_listbox.insert(conf_id, conf_str)
-                self.shown_conflicts[conf_str] = [_conf_, False]
+                self.shown_conflicts[conf_str] = [conf, False]
 
         self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
@@ -218,15 +220,15 @@ class PlanViz:
         row_idx += 1
 
         # Show events
-        tmp_label3 = tk.Label(self.frame, text="List of events", font=("Arial",ui_text_size))
-        tmp_label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        _label3 = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
+        _label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
                                         width=30,
                                         height=12,
-                                        font=("Arial",ui_text_size),
+                                        font=("Arial",TEXT_SIZE),
                                         selectmode=tk.EXTENDED)
         eve_id = 0
         time_list = list(self.pcf.events["assigned"])
@@ -266,12 +268,12 @@ class PlanViz:
         self.mark_conf_agents()
         self.resume_zoom()
 
-        self.new_time.set(self.pcf.start_timestep)
+        self.new_time.set(self.pcf.start_tstep)
         self.update_curtime()
 
         self.frame.update()  # Adjust window size
         # Use width and height for scaling
-        wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2, 
+        wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
                         self.pcf.window.winfo_screenwidth())
         wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
         if gui_column == 1:
@@ -365,7 +367,7 @@ class PlanViz:
 
 
     def restart_timestep(self):
-        self.new_time.set(self.pcf.start_timestep)
+        self.new_time.set(self.pcf.start_tstep)
         self.update_curtime()
 
 
@@ -374,13 +376,13 @@ class PlanViz:
             return
 
         _sid_ = event.widget.curselection()[0]  # get all selected indices
-        _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-        if _conf_[0][0] != -1:
-            self.change_ag_color(_conf_[0][0], AGENT_COLORS["collide"])
-        if _conf_[0][1] != -1:
-            self.change_ag_color(_conf_[0][1], AGENT_COLORS["collide"])
+        conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+        if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
+            self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
+        if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
+            self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-        self.new_time.set(int(_conf_[0][2])-1)
+        self.new_time.set(int(conf[0][2])-1)
         self.update_curtime()
 
         for (_, _agent_) in self.pcf.agents.items():
@@ -390,7 +392,7 @@ class PlanViz:
 
         for (_, _agent_) in self.pcf.agents.items():
             _agent_.path = _agent_.exec_path
-        self.new_time.set(int(_conf_[0][2])-1)
+        self.new_time.set(int(conf[0][2])-1)
         self.update_curtime()
 
 
@@ -438,7 +440,8 @@ class PlanViz:
         self.pcf.canvas.scale("all", 0, 0, __scale, __scale)
         self.pcf.tile_size = self.pcf.ppm * self.pcf.moves
         for child_widget in self.pcf.canvas.find_withtag("text"):
-            self.pcf.canvas.itemconfigure(child_widget, font=("Arial", int(self.pcf.tile_size // 2)))
+            self.pcf.canvas.itemconfigure(child_widget,
+                                          font=("Arial", int(self.pcf.tile_size // 2)))
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
         self.pcf.canvas.update()
 
@@ -468,12 +471,12 @@ class PlanViz:
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
         for conf in self.shown_conflicts.values():
-            if conf[0][0] != -1:
+            if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
                 if self.show_all_conf_ag.get():
                     self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
                 else:
                     self.change_ag_color(conf[0][0], self.pcf.agents[conf[0][0]].agent_obj.color)
-            if conf[0][1] != -1:
+            if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
                 if self.show_all_conf_ag.get():
                     self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
                 else:
@@ -544,7 +547,7 @@ class PlanViz:
 
 
     def move_agents_per_timestep(self) -> None:
-        if self.pcf.cur_timestep+1 > min(self.pcf.makespan, self.pcf.end_timestep):
+        if self.pcf.cur_timestep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
         self.next_button.config(state="disable")
@@ -553,7 +556,7 @@ class PlanViz:
         # Update the next timestep for each agent
         next_tstep = {}
         for (ag_id, agent) in self.pcf.agents.items():
-            next_t = min(self.pcf.cur_timestep+1 - self.pcf.start_timestep, len(agent.path)-1)
+            next_t = min(self.pcf.cur_timestep+1 - self.pcf.start_tstep, len(agent.path)-1)
             next_tstep[ag_id] = next_t
 
         for _m_ in range(self.pcf.moves):
@@ -614,7 +617,7 @@ class PlanViz:
 
 
     def back_agents_per_timestep(self) -> None:
-        if self.pcf.cur_timestep == self.pcf.start_timestep:
+        if self.pcf.cur_timestep == self.pcf.start_tstep:
             return
 
         self.prev_button.config(state="disable")
@@ -705,7 +708,7 @@ class PlanViz:
         self.task_shown.config(state="disable")
 
         self.is_run.set(True)
-        while self.pcf.cur_timestep < min(self.pcf.makespan, self.pcf.end_timestep):
+        while self.pcf.cur_timestep < min(self.pcf.makespan, self.pcf.end_tstep):
             if self.is_run.get() is True:
                 self.move_agents_per_timestep()
                 time.sleep(self.pcf.delay * 2)
@@ -731,9 +734,9 @@ class PlanViz:
 
 
     def update_curtime(self) -> None:
-        if self.new_time.get() > self.pcf.end_timestep:
+        if self.new_time.get() > self.pcf.end_tstep:
             print("The target timestep is larger than the ending timestep")
-            self.new_time.set(self.pcf.end_timestep)
+            self.new_time.set(self.pcf.end_tstep)
 
         self.pcf.cur_timestep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.pcf.cur_timestep:03d}")
@@ -780,7 +783,7 @@ class PlanViz:
                 _color_ = AGENT_COLORS["collide"]
 
             # Re-generate agent objects
-            tstep = min(self.pcf.cur_timestep - self.pcf.start_timestep, len(agent_.path)-1)
+            tstep = min(self.pcf.cur_timestep - self.pcf.start_tstep, len(agent_.path)-1)
             dir_loc = get_dir_loc(agent_.path[tstep])
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
@@ -804,26 +807,29 @@ def main() -> None:
     parser = argparse.ArgumentParser(description='Plan visualizer for a MAPF instance')
     parser.add_argument('--map', type=str, help="Path to the map file")
     parser.add_argument('--plan', type=str, help="Path to the planned path file")
-    parser.add_argument('--n', type=int, default=np.inf, dest="num_of_agents",
+    parser.add_argument('--n', dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
     parser.add_argument('--start', type=int, default=0, help="Starting timestep")
     parser.add_argument('--end', type=int, default=100, help="Ending timestep")
-    parser.add_argument('--ppm', type=int, dest="pixel_per_move", help="Number of pixels per move")
-    parser.add_argument('--mv', type=int, dest="moves", help="Number of moves per action")
+    parser.add_argument('--ppm', dest="ppm", type=int, help="Number of pixels per move")
+    parser.add_argument('--mv', dest="moves", type=int, help="Number of moves per action")
     parser.add_argument('--delay', type=float, help="Wait time between timesteps")
-    parser.add_argument('--grid', action='store_true', dest="show_grid",
+    parser.add_argument('--grid', dest="show_grid", action='store_true',
                         help="Show grid on the environment or not")
-    parser.add_argument('--aid', action='store_true', dest="show_ag_idx",
+    parser.add_argument('--aid', dest="show_ag_idx", action='store_true',
                         help="Show agent indices or not")
-    parser.add_argument('--tid', action='store_true', dest="show_task_idx",
+    parser.add_argument('--tid', dest="show_task_idx", action='store_true',
                         help="Show task indices or not")
-    parser.add_argument('--static', action='store_true', dest="show_static",
+    parser.add_argument('--static', dest="show_static", action='store_true',
                         help="Show start locations or not")
-    parser.add_argument('--ca', action='store_true', dest="show_conf_ag",
+    parser.add_argument('--ca',  dest="show_conf_ag", action='store_true',
                         help="Show all colliding agents")
     args = parser.parse_args()
 
-    PlanViz(args)
+    plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
+                             args.ppm, args.moves, args.delay)
+    PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
+            args.show_static, args.show_conf_ag)
     tk.mainloop()
 
 

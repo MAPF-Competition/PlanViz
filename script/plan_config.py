@@ -1,45 +1,41 @@
 # -*- coding: UTF-8 -*-
-""" UI pannel for PlanViz
-Creates buttons, but the functions are still in PlanViz.
+""" Plan configurations with rotation agents
+This script contains the configurations for PlanViz, a visualizer for the League of Robot Runners.
+All rights reserved.
 """
 
 import sys
 import logging
-import math
 from typing import List, Tuple, Dict
 import tkinter as tk
-from tkinter import ttk
-import time
 import json
 import numpy as np
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, DIR_OFFSET, \
-    get_map_name, get_angle, get_dir_loc, get_rotation, BaseObj, Agent, Task
+from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
+    get_map_name, get_dir_loc, BaseObj, Agent, Task
 
 
 class PlanConfig:
-    def __init__(self, in_arg) -> None:
+    """ Plan configuration and loading and rendering functions.
+    """
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, ppm, moves, delay):
+        map_name = get_map_name(map_file)
+        self.team_size:int = team_size
+        self.start_tstep:int = start_tstep
+        self.end_tstep:int = end_tstep
 
-        # Load the yaml file or the input arguments
-        self.map_file:str = in_arg.map
-        map_name = get_map_name(self.map_file)
-        self.plan_file:str = in_arg.plan
-        self.num_of_agents:int = in_arg.num_of_agents
-        self.start_timestep:int = in_arg.start
-        self.end_timestep:int = in_arg.end
-
-        self.ppm = in_arg.pixel_per_move
+        self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
                 raise TypeError("Missing variable: pixel_per_move.")
-        self.moves = in_arg.moves
+        self.moves = moves
         if self.moves is None:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
                 raise TypeError("Missing variable: moves.")
-        self.delay:int = in_arg.delay
+        self.delay:int = delay
         if self.delay is None:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
@@ -61,11 +57,11 @@ class PlanConfig:
         self.conflicts  = {}
         self.agents:Dict[int,Agent] = {}
         self.makespan:int = -1
-        self.cur_timestep = self.start_timestep
+        self.cur_timestep = self.start_tstep
         self.shown_path_agents = set()
         self.conflict_agents = set()
 
-        self.load_map()  # Load from files
+        self.load_map(map_file)  # Load from the map file
 
         # Initialize the window
         self.window = tk.Tk()
@@ -80,15 +76,13 @@ class PlanConfig:
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
         # Render instance on canvas
-        self.load_plan()  # Load the results
+        self.load_plan(plan_file)  # Load the results
         self.render_env()
         self.render_agents()
 
 
 
-    def load_map(self, map_file:str = None) -> None:
-        if map_file is None:
-            map_file = self.map_file
+    def load_map(self, map_file:str) -> None:
         print("Loading map from " + map_file, end = '... ')
 
         with open(file=map_file, mode="r", encoding="UTF-8") as fin:
@@ -112,21 +106,21 @@ class PlanConfig:
         print("Done!")
 
 
-    def load_plan(self):
+    def load_plan(self, plan_file):
         data = {}
-        with open(file=self.plan_file, mode="r", encoding="UTF-8") as fin:
+        with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
-        if self.num_of_agents == np.inf:
-            self.num_of_agents = data["teamSize"]
+        if self.team_size == np.inf:
+            self.team_size = data["teamSize"]
 
-        if self.end_timestep == np.inf:
+        if self.end_tstep == np.inf:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
-            self.end_timestep = data["makespan"]
+            self.end_tstep = data["makespan"]
 
-        print("Loading paths from " + str(self.plan_file), end="... ")
-        for ag_id in range(self.num_of_agents):
+        print("Loading paths from " + str(plan_file), end="... ")
+        for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.start_loc[ag_id] = start
@@ -151,16 +145,16 @@ class PlanConfig:
                 next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
                 self.plan_paths[ag_id].append(next_)
 
-            # Slice the paths between self.start_timestep and self.end_timestep
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_timestep:self.end_timestep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_timestep:self.end_timestep+1]
+            # Slice the paths between self.start_tstep and self.end_tstep
+            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
+            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
         print("Done!")
 
-        print("Loading errors from " + str(self.plan_file), end="... ")
+        print("Loading errors from " + str(plan_file), end="... ")
         if "errors" in data:
             for err in data["errors"]:
                 tstep = err[2]
-                if self.start_timestep <= tstep <= self.end_timestep:
+                if self.start_tstep <= tstep <= self.end_tstep:
                     self.conflict_agents.add(err[0])
                     self.conflict_agents.add(err[1])
                     if tstep not in self.conflicts:  # Sort errors according to the tstep
@@ -168,19 +162,19 @@ class PlanConfig:
                     self.conflicts[tstep].append(err)
         print("Done!")
 
-        print("Loading events from " + str(self.plan_file), end="... ")
+        print("Loading events from " + str(plan_file), end="... ")
         if "events" not in data.keys() and data["events"]:
             raise KeyError("Missing events.")
 
         # Initialize assigned events
         shown_tasks = set()
-        for ag_ in range(self.num_of_agents):
+        for ag_ in range(self.team_size):
             for eve in data["events"][ag_]:
                 if eve[2] != "assigned":
                     continue
                 tid:int   = eve[0]
                 tstep:int = eve[1]
-                if self.start_timestep <= tstep <= self.end_timestep:
+                if self.start_tstep <= tstep <= self.end_tstep:
                     if tstep not in self.events["assigned"]:
                         self.events["assigned"][tstep] = {}  # task_idx -> agent
                     self.events["assigned"][tstep][tid] = ag_
@@ -190,7 +184,7 @@ class PlanConfig:
         self.event_tracker["aid"] = 0
 
         # Initialize finished events
-        for ag_ in range(self.num_of_agents):
+        for ag_ in range(self.team_size):
             for eve in data["events"][ag_]:
                 if eve[2] != "finished":
                     continue
@@ -205,14 +199,14 @@ class PlanConfig:
         self.event_tracker["fid"] = 0
         print("Done!")
 
-        print("Loading tasks from " + str(self.plan_file), end="... ")
+        print("Loading tasks from " + str(plan_file), end="... ")
         if "tasks" not in data.keys() and data["tasks"]:
             raise KeyError("Missing tasks.")
 
         for a_time in self.event_tracker["aTime"]:  # traverse all assigned timesteps
-            if a_time < self.start_timestep:
+            if a_time < self.start_tstep:
                 continue
-            if a_time > self.end_timestep:
+            if a_time > self.end_tstep:
                 break
             for _tid_ in self.events["assigned"][a_time]:
                 _task_ = data["tasks"][_tid_]
@@ -354,7 +348,7 @@ class PlanConfig:
         start_objs = []
         path_objs = []
 
-        for ag_id in range(self.num_of_agents):
+        for ag_id in range(self.team_size):
             start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", "disable")
             start_objs.append(start)
 
@@ -375,7 +369,7 @@ class PlanConfig:
         if len(self.exec_paths) == 0:
             raise ValueError("Missing actual paths!")
 
-        for ag_id in range(self.num_of_agents):  # Render the actual agents
+        for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
                                         AGENT_COLORS["assigned"], "disable", 0.05, str(ag_id))
             dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
