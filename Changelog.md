@@ -1,5 +1,17 @@
 # Changelog
 
+Version 1.2.0 - 2023-08-27
+---
+Added:
+- Plan configurations that contain
+    - The map and the plan from the user-specified files.
+    - The loading and rendering methods for visualization.
+
+Changed:
+- Separate the plan configurations and the control pannel (which is PlanViz itself)
+- Distribute input arguments to plan configurations and control pannel
+- Refactorize the code for better understandings
+
 Version 1.1.1 - 2023-08-24
 ---
 Fix bugs:
