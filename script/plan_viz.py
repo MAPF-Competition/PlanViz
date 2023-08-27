@@ -18,7 +18,7 @@ from plan_config import PlanConfig
 TEXT_SIZE:int = 12
 
 class PlanViz:
-    """ This is the control pannel of PlanViz
+    """ This is the control panel of PlanViz
     """
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz =====")
@@ -36,8 +36,8 @@ class PlanViz:
         # windows scroll
         self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
 
-        # Generate the UI pannel
-        print("Rendering the pannel... ", end="")
+        # Generate the UI panel
+        print("Rendering the panel... ", end="")
 
         self.is_run = tk.BooleanVar()
         self.is_grid = tk.BooleanVar()
@@ -57,7 +57,7 @@ class PlanViz:
         gui_column = 1
         if (self.pcf.width+1) * self.pcf.tile_size > 0.52 * self.pcf.window.winfo_screenwidth():
             gui_window = tk.Toplevel()
-            gui_window.title("UI Pannel")
+            gui_window.title("UI Panel")
             gui_window.config(width=300, height=(self.pcf.height+1) * self.pcf.tile_size)
             gui_column = 0
         self.frame = tk.Frame(gui_window)

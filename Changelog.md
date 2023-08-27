@@ -8,9 +8,9 @@ Added:
     - The loading and rendering methods for visualization.
 
 Changed:
-- Separate the plan configurations and the control pannel (which is PlanViz itself)
-- Distribute input arguments to plan configurations and control pannel
-- Refactorize the code for better understandings
+- Separate the plan configurations and the control panel (which is PlanViz itself)
+- Distribute input arguments to plan configurations and control panel
+- Refactorize the code for a better understanding
 
 Version 1.1.1 - 2023-08-24
 ---
