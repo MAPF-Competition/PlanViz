@@ -1,12 +1,16 @@
 # -*- coding: UTF-8 -*-
+"""Utility functions
+
+Returns:
+    _type_: _description_
+"""
 import math
 from typing import List, Tuple, Dict
 
-TaskStates = {"unassigned": 0, "newlyassigned": 1, "assigned": 2, "finished": 3}
-TASK_COLORS: Dict[int, str] = {TaskStates["unassigned"]: "pink",
-                               TaskStates["newlyassigned"]: "yellowgreen",
-                               TaskStates["assigned"]: "orange",
-                               TaskStates["finished"]: "grey"}
+TASK_COLORS: Dict[int, str] = {"unassigned": "pink",
+                               "newlyassigned": "yellowgreen",
+                               "assigned": "orange",
+                               "finished": "grey"}
 AGENT_COLORS: Dict[str, str] = {"newlyassigned": "yellowgreen",
                                 "assigned": "deepskyblue",
                                 "collide": "red"}
@@ -36,6 +40,7 @@ def get_map_name(in_file:str) -> str:
         str: the name of the map
     """
     return in_file.split("/")[-1].split(".")[0]
+
 
 def get_angle(glob_dir:int):
     out_angle = 0
@@ -127,7 +132,7 @@ class Task:
                  state:int=0):
         self.idx = idx
         self.loc = loc
-        self.events = {TaskStates["assigned"]: {"agent": assigned[0], "timestep": assigned[1]},
-                       TaskStates["finished"]: {"agent": finished[0], "timestep": finished[1]}}
+        self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
+                       "finished": {"agent": finished[0], "timestep": finished[1]}}
         self.task_obj = task_obj
         self.state = state
