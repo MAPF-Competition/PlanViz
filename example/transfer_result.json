@@ -2049,7 +2049,7 @@
             "N"
         ]
     ],
-    "numTaskFinished": 0,
+    "numTaskFinished": 300,
     "sumOfCost": 9647,
     "makespan": 59,
     "actualPaths": [
