@@ -23,6 +23,8 @@ class PlanConfig:
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
 
+        self.agent_model:str = ""
+
         self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
@@ -118,6 +120,11 @@ class PlanConfig:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
             self.end_tstep = data["makespan"]
+        
+        if self.agent_model == "":
+            if 'actionModel' not in data.keys():
+                raise KeyError("Missing action model!")
+            self.agent_model = data['actionModel']
 
         print("Loading paths from " + str(plan_file), end="... ")
         for ag_id in range(self.team_size):
@@ -131,7 +138,10 @@ class PlanConfig:
                 raise KeyError("Missing actualPaths.")
             tmp_str = data["actualPaths"][ag_id].split(",")
             for motion in tmp_str:
-                next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
+                if self.agent_model == "MAPF":
+                    next_ = self.state_transition_mapf(self.exec_paths[ag_id][-1], motion)
+                else:
+                    next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
                 self.exec_paths[ag_id].append(next_)
             if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
                 self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
@@ -142,7 +152,10 @@ class PlanConfig:
                 raise KeyError("Missing plannerPaths.")
             tmp_str = data["plannerPaths"][ag_id].split(",")
             for tstep, motion in enumerate(tmp_str):
-                next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
+                if self.agent_model == "MAPF":
+                    next_ = self.state_transition_mapf(self.exec_paths[ag_id][tstep], motion)
+                else:
+                    next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
                 self.plan_paths[ag_id].append(next_)
 
             # Slice the paths between self.start_tstep and self.end_tstep
@@ -233,6 +246,21 @@ class PlanConfig:
             return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
         elif motion == "C":  # Counter-clockwise
             return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
+        elif motion in ["W", "T"]:
+            return cur_state
+        else:
+            logging.error("Invalid motion")
+            sys.exit()
+
+    def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
+        if motion == "U":  # south (u)
+            return (cur_state[0]+1, cur_state[1], cur_state[2])
+        elif motion == "L": #west (left)
+            return (cur_state[0], cur_state[1]-1, cur_state[2])
+        elif motion == "R": #east (right)
+                return (cur_state[0], cur_state[1]+1, cur_state[2])
+        elif motion == "D": #north (d)
+            return (cur_state[0]-1, cur_state[1], cur_state[2])
         elif motion in ["W", "T"]:
             return cur_state
         else:
