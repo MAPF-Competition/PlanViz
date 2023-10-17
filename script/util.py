@@ -14,7 +14,7 @@ TASK_COLORS: Dict[int, str] = {"unassigned": "pink",
 AGENT_COLORS: Dict[str, str] = {"newlyassigned": "yellowgreen",
                                 "assigned": "deepskyblue",
                                 "collide": "red"}
-DIRECTION: Dict[str,int] = {"E":0, "N":1, "W":2, "S":3}
+DIRECTION: Dict[str,int] = {"E":0, "N":1, "W":2, "S":3, "N/A":-1}
 OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {

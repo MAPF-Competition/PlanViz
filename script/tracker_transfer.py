@@ -52,7 +52,7 @@ class TrackerTransfer:
             start_col = int(line[4])
             task_row = int(line[7])
             task_col = int(line[6])
-            self.start.append([start_row,start_col,'N'])
+            self.start.append([start_row,start_col,'N/A'])
             self.tasks.append([len(self.tasks),task_row,task_col])
             line = f.readline()
 
