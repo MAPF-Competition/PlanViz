@@ -81,7 +81,6 @@ class PlanConfig:
         self.render_agents()
 
 
-
     def load_map(self, map_file:str) -> None:
         print("Loading map from " + map_file, end = '... ')
 
@@ -127,27 +126,28 @@ class PlanConfig:
 
             self.exec_paths[ag_id] = []  # Get actual path
             self.exec_paths[ag_id].append(start)
-            if "actualPaths" not in data.keys():
-                raise KeyError("Missing actualPaths.")
-            tmp_str = data["actualPaths"][ag_id].split(",")
-            for motion in tmp_str:
-                next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
-                self.exec_paths[ag_id].append(next_)
-            if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+            if "actualPaths" in data:
+                tmp_str = data["actualPaths"][ag_id].split(",")
+                tmp_str = tmp_str[self.start_tstep:self.end_tstep]
+                for motion in tmp_str:
+                    next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
+                    self.exec_paths[ag_id].append(next_)
+                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
+                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+            else:
+                print("No actual paths.", end=" ")
 
             self.plan_paths[ag_id] = []  # Get planned path
             self.plan_paths[ag_id].append(start)
-            if "plannerPaths" not in data.keys():
-                raise KeyError("Missing plannerPaths.")
-            tmp_str = data["plannerPaths"][ag_id].split(",")
-            for tstep, motion in enumerate(tmp_str):
-                next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
-                self.plan_paths[ag_id].append(next_)
+            if "plannerPaths" in data:
+                tmp_str = data["plannerPaths"][ag_id].split(",")
+                tmp_str = tmp_str[self.start_tstep:self.end_tstep]
+                for tstep, motion in enumerate(tmp_str):
+                    next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
+                    self.plan_paths[ag_id].append(next_)
+            else:
+                print("No planner paths.", end=" ")
 
-            # Slice the paths between self.start_tstep and self.end_tstep
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
         print("Done!")
 
         print("Loading errors from " + str(plan_file), end="... ")
@@ -163,60 +163,60 @@ class PlanConfig:
         print("Done!")
 
         print("Loading events from " + str(plan_file), end="... ")
-        if "events" not in data.keys() and data["events"]:
-            raise KeyError("Missing events.")
+        if "events" in data:
+            # Initialize assigned events
+            shown_tasks = set()
+            for ag_ in range(self.team_size):
+                for eve in data["events"][ag_]:
+                    if eve[2] != "assigned":
+                        continue
+                    tid:int   = eve[0]
+                    tstep:int = eve[1]
+                    if self.start_tstep <= tstep <= self.end_tstep:
+                        if tstep not in self.events["assigned"]:
+                            self.events["assigned"][tstep] = {}  # task_idx -> agent
+                        self.events["assigned"][tstep][tid] = ag_
+                        shown_tasks.add(tid)
+            self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
+            self.event_tracker["aTime"].append(-1)
+            self.event_tracker["aid"] = 0
 
-        # Initialize assigned events
-        shown_tasks = set()
-        for ag_ in range(self.team_size):
-            for eve in data["events"][ag_]:
-                if eve[2] != "assigned":
-                    continue
-                tid:int   = eve[0]
-                tstep:int = eve[1]
-                if self.start_tstep <= tstep <= self.end_tstep:
-                    if tstep not in self.events["assigned"]:
-                        self.events["assigned"][tstep] = {}  # task_idx -> agent
-                    self.events["assigned"][tstep][tid] = ag_
-                    shown_tasks.add(tid)
-        self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
-        self.event_tracker["aTime"].append(-1)
-        self.event_tracker["aid"] = 0
-
-        # Initialize finished events
-        for ag_ in range(self.team_size):
-            for eve in data["events"][ag_]:
-                if eve[2] != "finished":
-                    continue
-                tid:int   = eve[0]
-                tstep:int = eve[1]
-                if tid in shown_tasks:
-                    if tstep not in self.events["finished"]:
-                        self.events["finished"][tstep] = {}  # task_idx -> agent
-                    self.events["finished"][tstep][tid] = ag_
-        self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
-        self.event_tracker["fTime"].append(-1)
-        self.event_tracker["fid"] = 0
-        print("Done!")
+            # Initialize finished events
+            for ag_ in range(self.team_size):
+                for eve in data["events"][ag_]:
+                    if eve[2] != "finished":
+                        continue
+                    tid:int   = eve[0]
+                    tstep:int = eve[1]
+                    if tid in shown_tasks:
+                        if tstep not in self.events["finished"]:
+                            self.events["finished"][tstep] = {}  # task_idx -> agent
+                        self.events["finished"][tstep][tid] = ag_
+            self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
+            self.event_tracker["fTime"].append(-1)
+            self.event_tracker["fid"] = 0
+            print("Done!")
+        else:
+            print("No events.")
 
         print("Loading tasks from " + str(plan_file), end="... ")
-        if "tasks" not in data.keys() and data["tasks"]:
-            raise KeyError("Missing tasks.")
-
-        for a_time in self.event_tracker["aTime"]:  # traverse all assigned timesteps
-            if a_time < self.start_tstep:
-                continue
-            if a_time > self.end_tstep:
-                break
-            for _tid_ in self.events["assigned"][a_time]:
-                _task_ = data["tasks"][_tid_]
-                assert _tid_ == _task_[0]
-                _tloc_ = (_task_[1], _task_[2])
-                _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle",
-                                         TASK_COLORS["unassigned"])
-                new_task = Task(_tid_, _tloc_, _tobj_)
-                self.tasks[_tid_] = new_task
-        print("Done!")
+        if "tasks" in data:
+            for a_time in self.event_tracker["aTime"]:  # traverse all assigned timesteps
+                if a_time < self.start_tstep:
+                    continue
+                if a_time > self.end_tstep:
+                    break
+                for _tid_ in self.events["assigned"][a_time]:
+                    _task_ = data["tasks"][_tid_]
+                    assert _tid_ == _task_[0]
+                    _tloc_ = (_task_[1], _task_[2])
+                    _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle",
+                                            TASK_COLORS["unassigned"])
+                    new_task = Task(_tid_, _tloc_, _tobj_)
+                    self.tasks[_tid_] = new_task
+            print("Done!")
+        else:
+            print("No tasks.")
 
 
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
