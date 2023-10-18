@@ -88,10 +88,14 @@ class TrackerTransfer:
             json.dump(output_dic,f, indent=4)
 
 def runSingleTransfer(scen_file, plan_file, output_file):
-    tracker_transfer = TrackerTransfer(scen_file,plan_file)
-    tracker_transfer.read_single_plan(0,'path')
-    tracker_transfer.read_start_task()
-    tracker_transfer.write_to_json(output_file+".json")
+    try:
+        tracker_transfer = TrackerTransfer(scen_file,plan_file)
+        tracker_transfer.read_single_plan(0,'path')
+        tracker_transfer.read_start_task()
+        tracker_transfer.write_to_json(output_file+".json")
+        print(" Success")
+    except:
+        print(" Unsuccess")
 
 def runMultiTransfer(scen_folder,plan_file,output_file):
     muti_plan_df = pd.read_csv(plan_file)
@@ -99,16 +103,17 @@ def runMultiTransfer(scen_folder,plan_file,output_file):
     success_count = 0
     for index, row in muti_plan_df.iterrows():
         print("------- transfering solution for the",str(index)+"th","instance -------")
-        # try:
-        scen = scen_folder+"/" + row['map_name'] + "-" + row['scen_type'] + "-" +str(row['type_id']) + ".scen"
-        tracker_transfer = TrackerTransfer(str(scen),plan_file)
-        tracker_transfer.read_single_plan(index,'solution_plan')
-        tracker_transfer.read_start_task()
-        tracker_transfer.write_to_json(output_file+"_"+str(index)+".json")
-        success_count+=1
-    #     except:
-    #         print("Unsuccessful")
-    # print("finished with ", success_count,"success")
+        try:
+            scen = scen_folder+"/" + row['map_name'] + "-" + row['scen_type'] + "-" +str(row['type_id']) + ".scen"
+            tracker_transfer = TrackerTransfer(str(scen),plan_file)
+            tracker_transfer.read_single_plan(index,'solution_plan')
+            tracker_transfer.read_start_task()
+            tracker_transfer.write_to_json(output_file+"_"+str(index)+".json")
+            success_count+=1
+            print(" Success")
+        except:
+            print(" Unsuccess")
+    print("finished with ", success_count,"success")
 
         
 
