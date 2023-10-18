@@ -6,7 +6,7 @@ Being an offline tool, PlanViz takes as input a grid map (part of the competitio
 ![plan_viz_gif](images/plan_viz.gif)
 
 
-## Interface and Visual Markers
+## Visual Markers
 
 PlanViz provides a variety of visual markers to help users understand the results of their planning strategies. 
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
@@ -16,8 +16,8 @@ PlanViz provides a variety of visual markers to help users understand the result
 
 ![scenario](images/scenario.png)
 
-## User Interface
-The user interface provides operations for user to control the scenario.
+## UI Options and Controls 
+The user interface supports a variety of operations to control and focus the display of plans.
 - `Timestep` shows the current timestep.
 - The buttons controls the progress of the plan/execution:
     - `Play`: Auto-play the plan/execution
