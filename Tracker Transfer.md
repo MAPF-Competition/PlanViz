@@ -10,7 +10,7 @@ To use this tool, you need a MAPF plan, and the corresponding scenario file (`.s
 - `outputFile` (type: *str*): Path to the output file without extension (ie. `example/transfer_result`).
 
 ## Run
-The following example shows how to convert the plan (CSV format) for a single instance involving 300 agents on the map random-32-32-20. The input plan and the corresponding scenario file (which details the start and target locations of the agents) can both be found in the `example/` subfolder of this repository. The output of this example is an output file which can be passed to PlanViz, and which will be created at location `example/transfer_result`: 
+The following example shows how to convert the plan (CSV format) for a single instance involving 300 agents on a small grid map with randomly placed obstacles. The input MAPF plan and the corresponding scenario file (which details the start and target locations of the agents) can both be found in the `example/` subfolder of this repository. The output of this example is an output file which can be passed to PlanViz, and which will be created at location `example/transfer_result`: 
 ```bash
 python3 tracker_transfer.py --plan example/random-32-32-20_random_1_300.csv --scen example/random-32-32-20-random-1.scen --outputFile example/transfer_result
 ```
