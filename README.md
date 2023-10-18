@@ -1,5 +1,5 @@
 # PlanViz
-Welcome to PlanViz! This is an **offline** visualization tool for analysing solutions to multi-robot and multi-agent coordination problems.
+Welcome to PlanViz! This is an **offline** (i.e., post-hoc) visualiser for analysing solutions to multi-robot and multi-agent coordination problems.
 It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition.
 However, PlanViz can also be used for a variety of similar problems which are outside the scope of the competition. 
 
