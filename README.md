@@ -21,10 +21,10 @@ Tracker Transfer is a tool that helps to convert best-known solutions to a wide 
 
 
 ## Run
-Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.md) for details about how to use this tool and supported features. The following examples shows how to use Tracker Transfer to convert a single and multiple plans from the CSV formatted output of the MAPF Tracker to the format of PlanViz:
+Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.md) for details about how to use this tool and supported features. The following examples show how to use Tracker Transfer to convert a single plan, from the CSV formatted output of the MAPF Tracker, to the JSON format of PlanViz:
 
-To convert a single plan, open a terminal and type the following command:
+Open a terminal and type the following command:
 ```bash
 python3 tracker_transfer.py --plan ../example/random-32-32-20_random_1_300.csv --scen ../example/random-32-32-20-random-1.scen --outputFile ../example/transfer_result
 ```
-The MAPF Tracker also supports exporting multiple plans into a single csv file at the same time (see http://tracker.pathfinding.ai/results/). Tracker transfer supports this format, please refer to the documentation for more details.
+The MAPF Tracker also supports exporting multiple plans at the same time, from a single CSV file export (see http://tracker.pathfinding.ai/results/) to multiple PlanViz output files. To learn more about this feature please refer to the documentation.
