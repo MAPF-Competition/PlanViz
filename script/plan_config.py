@@ -127,6 +127,10 @@ class PlanConfig:
             self.agent_model = data['actionModel']
 
         print("Loading paths from " + str(plan_file), end="... ")
+        if self.agent_model == "MAPF":
+            state_trans = self.state_transition_mapf
+        else:
+            state_trans = self.state_transition
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -138,10 +142,11 @@ class PlanConfig:
                 raise KeyError("Missing actualPaths.")
             tmp_str = data["actualPaths"][ag_id].split(",")
             for motion in tmp_str:
-                if self.agent_model == "MAPF":
-                    next_ = self.state_transition_mapf(self.exec_paths[ag_id][-1], motion)
-                else:
-                    next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
+                # if self.agent_model == "MAPF":
+                #     next_ = self.state_transition_mapf(self.exec_paths[ag_id][-1], motion)
+                # else:
+                #     next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
+                next_ = state_trans(self.exec_paths[ag_id][-1], motion)
                 self.exec_paths[ag_id].append(next_)
             if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
                 self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
@@ -152,10 +157,11 @@ class PlanConfig:
                 raise KeyError("Missing plannerPaths.")
             tmp_str = data["plannerPaths"][ag_id].split(",")
             for tstep, motion in enumerate(tmp_str):
-                if self.agent_model == "MAPF":
-                    next_ = self.state_transition_mapf(self.exec_paths[ag_id][tstep], motion)
-                else:
-                    next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
+                # if self.agent_model == "MAPF":
+                #     next_ = self.state_transition_mapf(self.exec_paths[ag_id][tstep], motion)
+                # else:
+                #     next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
+                next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
                 self.plan_paths[ag_id].append(next_)
 
             # Slice the paths between self.start_tstep and self.end_tstep
