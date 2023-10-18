@@ -27,4 +27,4 @@ Open a terminal and type the following command:
 ```bash
 python3 tracker_transfer.py --plan ../example/random-32-32-20_random_1_300.csv --scen ../example/random-32-32-20-random-1.scen --outputFile ../example/transfer_result
 ```
-The MAPF Tracker also supports exporting multiple plans at the same time, from bulk export CSV file (downloadable [here](http://tracker.pathfinding.ai/results/)) to multiple PlanViz output files. To learn more about this feature please refer to the documentation.
+The MAPF Tracker also supports exporting multiple plans at the same time, from a bulk export CSV file (downloadable [here](http://tracker.pathfinding.ai/results/)) to multiple PlanViz output files. To learn more about this feature please refer to the documentation.
