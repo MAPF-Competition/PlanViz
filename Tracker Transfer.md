@@ -22,5 +22,5 @@ python3 tracker_transfer.py --plan example/random-32-32-20.csv --scen example/sc
 
 After converting a MAPF Tracker plan to the PlanViz format, you can then visualise the result. The following command refers to a MAPF plan (`example/mapf_plan_example.json`) that we converted earlier:
 ```bash
-python3 plan_viz.py --map ../example/random-32-32-20.map --plan ../example/mapf_plan_example.json --grid --aid --static --ca
+python3 plan_viz.py --map example/random-32-32-20.map --plan example/mapf_plan_example.json --grid --aid --static --ca
 ```
