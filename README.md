@@ -1,9 +1,9 @@
 # PlanViz
 Welcome to PlanViz! This is an **offline** (i.e., post-hoc) visualiser for analysing solutions to multi-robot and multi-agent coordination problems.
 It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition.
-However, PlanViz can also be used for a variety of similar problems which are outside the scope of the competition. PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3/library/tkinter.html), a Tcl/Tk GUI toolkit. 
+However, PlanViz can also be used for a variety of similar problems which are outside the scope of the competition. 
 
-An example of the application in action is shown in the following video.
+PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3/library/tkinter.html), a Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
