@@ -15,7 +15,7 @@ The following example shows how to convert the plan (CSV format) for a single in
 python3 tracker_transfer.py --plan example/random-32-32-20_random_1_300.csv --scen example/random-32-32-20-random-1.scen --outputFile example/transfer_result
 ```
 
-The following example shows how to convert [a set of plans](http://tracker.pathfinding.ai/results/) appearing in a single file (CSV format, on map random-32-32-20, the corresponding scenario files are in folder `example/scen-files`). The resulting files (JSON format) are all placed in `../example/transfer_result`:
+The following example shows how to convert [a set of plans](http://tracker.pathfinding.ai/results/) appearing in a single file (CSV format, on map random-32-32-20, the corresponding scenario files are in folder `example/scen-files`). The resulting files (JSON format) are all placed in `example/transfer_result`:
 ```bash
 python3 tracker_transfer.py --plan example/random-32-32-20.csv --scen example/scen-files --outputFile example/transfer_result --multiPlan
 ```
