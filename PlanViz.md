@@ -1,13 +1,14 @@
 # PlanViz
 The primary purpose of PlanViz is to help participants in the [League of Robot Runners competition](https://leagueofrobotrunners.org) better understand the planned paths and executed commands of their robots. PlanViz offers insights into problem solving strategies, by showing how robots move across the map, and by highlighting and exploring the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). 
 
-Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a `JSON` formatted log file, which is produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result with [`tkinter`](https://docs.python.org/3/library/tkinter.html), a pyton interface for the Tcl/Tk GUI toolkit (see the `example/warehouse-small.map` and `example/warehouse-small-60.json` for example). An example of the application in action is shown in the following video.
+Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a `JSON` formatted log file, which is produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
 
-## Scenario and Visual Markers
-The scenario on the left of PlanViz shows how the agents move in the environment and how the tasks are allocated at each timestep.
+## Interface and Visual Markers
+
+PlanViz provides a variety of visual markers to help users understand the results of their planning strategies. 
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
 - A task is plotted in a colored square with a number being the task index. Each task is initially marked in pink, and turns yellowgreen when it is newly assigned to an agent, orange after it is assigned to an agent, and grey when it is completed.
