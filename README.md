@@ -7,8 +7,12 @@ The primary purpose of PlanViz is to better understand how robots/agents move ac
 
 ![plan_viz_gif](images/plan_viz.gif)
 
+Please refer to the [PlanViz instruction manual](./PlanViz.md) for how to use this tool.
+
 ## Run
-To run PlanViz, open a terminal under the directory `PlanViz/script` and type the following example command:
+The following example shows how to visualise a plan file in the JSON format used by the Robot Runners competition.
+
+Open a terminal and type the following command:
 ```bash
 python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/warehouse_small.json --grid --aid --static --ca
 ```
@@ -16,11 +20,12 @@ python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/wareh
 # Tracker Transfer
 Tracker Transfer is a tool that helps to convert best-known solutions to a wide range of MAPF problems, as published by the community website [MAPF tracker](http://tracker.pathfinding.ai/). Once converted, these plans can be visualised with PlanViz. 
 
-Please refer to the [Tracker Transfer instruction manual](https://github.com/MAPF-Competition/PlanViz/blob/mapf-dev/Tracker%20Transfer.md) for how to use this tool.
+Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.md) for how to use this tool.
 
 ## Run
 The following example shows how to use Tracker Transfer to convert a single plan from the format of the MAPF Tracker to the format of PlanViz:
 
+Open a terminal and type the following command:
 ```bash
 python3 tracker_transfer.py --plan ../example/random-32-32-20_random_1_300.csv --scen ../example/random-32-32-20-random-1.scen --outputFile ../example/transfer_result
 ```
