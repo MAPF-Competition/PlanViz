@@ -62,27 +62,12 @@ PlanViz also support visualising a MAPF plan. To do this, you need to provide th
 
 We also provide transfer tools that can help you to transfer the MAPF plan from [MAPF tracker](http://tracker.pathfinding.ai/) to the required JSON output format. 
 
-## Arguments
-- `plan` (type: *str*): Path to the planned path file (ends with `.json`). See `example/random-32-32-20.csv` and `example/random-32-32-20_random_1_300.csv` for more information.
-- `multiPlan`: Weather the plan path contains path for multiple instances or not. Set to True if specified.
-- `scen` (type: *str*): Path to scenario file for single plan file (ie. `example/random-32-32-20_random_1_300.csv`), path to the folder that contains the scenario files (ie. `example/random-32-32-20.csv`) if multiPlan is enabled.
-- `outputFile` (type: *str*): Path to the output file without extension (ie. `example/transfer_result`).
+Please refer to the [Tracker Transfer instruction manual](https://github.com/MAPF-Competition/PlanViz/blob/mapf-dev/Tracker%20Transfer.md) for how to use this tool.
 
-## Run Tracker Transfer
-To run Tracker Transfer to view MAPF plan, open a terminal under the directory `PlanViz/script` and type the following example command:
+## Run
+The following example shows how to use Tracker Transfer to convert a single plan from the format of the MAPF Tracker to the format of PlanViz:
 
-If you are running tracker_transfer.py for plan of multiple instances
-```bash
-python3 tracker_transfer.py --plan ../example/random-32-32-20.csv --scen ../example/scen-files --outputFile ../example/test/result --multiPlan
-```
-
-If you are running tracker_transfer.py for plan of single instance 
 ```bash
 python3 tracker_transfer.py --plan ../example/random-32-32-20_random_1_300.csv --scen ../example/random-32-32-20-random-1.scen --outputFile ../example/transfer_result
 ```
-
-After you transfer the mapf tracker plan to the PlanViz support json format, you can then visualise the plan by running the PlanViz
-```bash
-python3 plan_viz.py --map ../example/random-32-32-20.map --plan ../example/transfer_result.json --grid --aid --static --ca
-```
-
+The MAPF Tracker also supports exporting multiple plans into a single csv file at the same time (see http://tracker.pathfinding.ai/results/). Tracker transfer supports this format, please refer to the documentation for more details.
