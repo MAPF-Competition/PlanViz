@@ -17,7 +17,7 @@ python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/wareh
 ```
 
 # Tracker Transfer
-Tracker Transfer is a tool that helps to convert best-known solutions to a wide range of MAPF problems, as published by the community website [MAPF tracker](http://tracker.pathfinding.ai/). Once converted, these plans can be visualised with PlanViz. 
+Tracker Transfer is a tool that helps to convert best-known solutions to a wide range of MAPF problems, as published by the community website [MAPF Tracker](http://tracker.pathfinding.ai/). Once converted, these plans can be visualised with PlanViz. 
 
 
 ## Run
