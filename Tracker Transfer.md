@@ -20,7 +20,7 @@ The following example shows how to convert a set of plans appearing in a single 
 python3 tracker_transfer.py --plan example/random-32-32-20.csv --scen example/scen-files --outputFile example/transfer_result --multiPlan
 ```
 
-After converting a MAPF Tracker plan to the PlanViz format, you can visualise the result, as shown in the following example. The demo refers to a MAPF plan (`example/mapf_plan_example.json`) that we converted earlier and which is again available in the `example/` subfolder:
+After converting a MAPF Tracker plan to the PlanViz format, you can visualise the result, as shown in the following example. The demo refers to a MAPF plan that we converted earlier and which is again available in the `example/` subfolder:
 ```bash
 python3 plan_viz.py --map example/random-32-32-20.map --plan example/mapf_plan_example.json --grid --aid --static --ca
 ```
