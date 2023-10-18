@@ -21,7 +21,7 @@ Tracker Transfer is a tool that helps to convert best-known solutions to a wide 
 
 
 ## Run
-Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.md) for details about how to use this tool and supported features. The following examples show how to use Tracker Transfer to convert a single plan, from the CSV formatted output of the MAPF Tracker, to the JSON format of PlanViz:
+Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.md) for details about how to use this tool and supported features. The following example show how to use Tracker Transfer to convert a single plan, from the CSV formatted output of the MAPF Tracker, to the JSON format of PlanViz:
 
 Open a terminal and type the following command:
 ```bash
