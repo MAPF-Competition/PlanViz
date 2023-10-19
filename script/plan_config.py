@@ -56,6 +56,7 @@ class PlanConfig:
         self.exec_paths = {}
         self.conflicts  = {}
         self.agents:Dict[int,Agent] = {}
+        self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
         self.cur_timestep = self.start_tstep
         self.shown_path_agents = set()
@@ -176,6 +177,9 @@ class PlanConfig:
                         if tstep not in self.events["assigned"]:
                             self.events["assigned"][tstep] = {}  # task_idx -> agent
                         self.events["assigned"][tstep][tid] = ag_
+                        if ag_ not in self.ag_to_task:
+                            self.ag_to_task[ag_] = []
+                        self.ag_to_task[ag_].append(tid)
                         shown_tasks.add(tid)
             self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
             self.event_tracker["aTime"].append(-1)
@@ -211,7 +215,7 @@ class PlanConfig:
                     assert _tid_ == _task_[0]
                     _tloc_ = (_task_[1], _task_[2])
                     _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle",
-                                            TASK_COLORS["unassigned"])
+                                             TASK_COLORS["unassigned"])
                     new_task = Task(_tid_, _tloc_, _tobj_)
                     self.tasks[_tid_] = new_task
             print("Done!")
@@ -361,9 +365,11 @@ class PlanConfig:
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.25)
                 else:  # non=wait action, smaller rectangle
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.4)
-                self.canvas.itemconfigure(_p_obj.obj, state="hidden")
-                self.canvas.delete(_p_obj.text)
-                ag_path.append(_p_obj)
+                if _p_obj is not None:
+                    self.canvas.tag_lower(_p_obj.obj)
+                    self.canvas.itemconfigure(_p_obj.obj, state="hidden")
+                    self.canvas.delete(_p_obj.text)
+                    ag_path.append(_p_obj)
             path_objs.append(ag_path)
 
         if len(self.exec_paths) == 0:

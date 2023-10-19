@@ -25,7 +25,7 @@ class PlanViz:
 
         # Load the yaml file or the input arguments
         self.pcf = plan_config
-        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan)
+        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -302,50 +302,9 @@ class PlanViz:
             task_id (int): the index in self.pcf.tasks
             color   (str): the color to be changed
         """
-        tsk = self.pcf.tasks[task_id]  # Get the reference of the task
-
         # Change the color of the task
-        if self.pcf.canvas.itemcget(tsk.task_obj.obj, "fill") != color:
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, fill=color)
-
-        # Change the visible state of the task
-        if self.task_shown.get() == "all":
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "hidden":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
-                if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disabled")
-                else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-            return
-
-        if self.task_shown.get() == "none":
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-            return
-
-        if self.task_shown.get() == "assigned":
-            if tsk.state in ["assigned", "newlyassigned"]:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
-                if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disabled")
-                else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-            else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-            return
-
-        if tsk.state == self.task_shown.get():
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disabled")
-            if self.show_task_idx.get():
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disabled")
-            else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-        else:
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-            self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
-        return
+        if self.pcf.canvas.itemcget(self.pcf.tasks[task_id].task_obj.obj, "fill") != color:
+            self.pcf.canvas.itemconfig(self.pcf.tasks[task_id].task_obj.obj, fill=color)
 
 
     def select_conflict(self, event):
@@ -368,6 +327,17 @@ class PlanViz:
 
     def restart_timestep(self):
         self.new_time.set(self.pcf.start_tstep)
+        for ag_idx in self.pcf.shown_path_agents:
+            for _p_ in self.pcf.agents[ag_idx].path_objs:
+                self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
+        self.pcf.shown_path_agents.clear()
+
+        # Reset the tasks
+        if not self.pcf.shown_path_agents:
+            for ag_ in range(self.pcf.team_size):
+                for tid_ in self.pcf.ag_to_task[ag_]:
+                    self.show_single_task(tid_)
+
         self.update_curtime()
 
 
@@ -446,7 +416,7 @@ class PlanViz:
         self.pcf.canvas.update()
 
 
-    def show_ag_plan(self, event):
+    def show_ag_plan_by_click(self, event):
         item = self.pcf.canvas.find_closest(event.x, event.y)[0]
         tags:set(str) = self.pcf.canvas.gettags(item)
         ag_idx = -1
@@ -456,16 +426,35 @@ class PlanViz:
                 break
         if ag_idx == -1:
             return
+        self.show_ag_plan(ag_idx)
 
-        if ag_idx in self.pcf.shown_path_agents:
+
+    def show_ag_plan(self, ag_idx):
+        if ag_idx in self.pcf.shown_path_agents:  # Remove ag_id if it's already in the set
             self.pcf.shown_path_agents.remove(ag_idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
         else:
-            self.pcf.shown_path_agents.add(ag_idx)
+            self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
             for _pid_ in range(self.pcf.cur_timestep+1, len(self.pcf.agents[ag_idx].path_objs)):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state="disable")
+
+        # Reset the tasks
+        if not self.pcf.shown_path_agents:
+            for ag_ in range(self.pcf.team_size):
+                for tid_ in self.pcf.ag_to_task[ag_]:
+                    self.show_single_task(tid_)
+            return
+
+        # Hide tasks that are not in ag_id
+        for ag_ in range(self.pcf.team_size):
+            if ag_ in self.pcf.shown_path_agents:
+                for tid_ in self.pcf.ag_to_task[ag_]:
+                    self.show_single_task(tid_)
+            else:
+                for tid_ in self.pcf.ag_to_task[ag_]:
+                    self.hide_single_task(tid_)
 
 
     def mark_conf_agents(self) -> None:
@@ -537,6 +526,53 @@ class PlanViz:
         self.show_tasks()
 
 
+    def show_single_task(self, tid) -> None:
+        tsk = self.pcf.tasks[tid]
+        if self.task_shown.get() == "all":
+            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "hidden":
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+                if self.show_task_idx.get():
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+                else:
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
+
+        if self.task_shown.get() == "none":
+            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
+
+        if self.task_shown.get() == "assigned":
+            if tsk.state in ["assigned", "newlyassigned"]:
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+                if self.show_task_idx.get():
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+                else:
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            else:
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            return
+
+        if tsk.state == self.task_shown.get():
+            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+            if self.show_task_idx.get():
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+            else:
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+        else:
+            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
+            self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+        return
+
+
+    def hide_single_task(self, tid) -> None:
+        task = self.pcf.tasks[tid]
+        self.pcf.canvas.itemconfig(task.task_obj.obj, state="hidden")
+        self.pcf.canvas.itemconfig(task.task_obj.text, state="hidden")
+
+
     def show_static_loc(self) -> None:
         _os_ = "disable" if self.show_static.get() is True else "hidden"
         _ts_ = "disable" if (self.show_ag_idx.get() is True and\
@@ -599,6 +635,8 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "assigned"
                 self.change_task_color(tid, TASK_COLORS["assigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
 
         if self.pcf.cur_timestep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to newly assigned
@@ -606,6 +644,8 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "newlyassigned"
                 self.change_task_color(tid, TASK_COLORS["newlyassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
             self.pcf.event_tracker["aid"] += 1
 
         if self.pcf.cur_timestep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
@@ -613,6 +653,8 @@ class PlanViz:
             for tid in self.pcf.events["finished"][self.pcf.cur_timestep]:
                 self.pcf.tasks[tid].state = "finished"
                 self.change_task_color(tid, TASK_COLORS["finished"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
             self.pcf.event_tracker["fid"] += 1
 
 
@@ -630,10 +672,12 @@ class PlanViz:
         prev_fin_time = self.pcf.event_tracker["fTime"][prev_fid]
 
         if self.pcf.cur_timestep == prev_fin_time:  # from finished to assigned
-            for tid in self.pcf.events["finished"][prev_fin_time]:
+            for (tid, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
                 assert self.pcf.tasks[tid].state == "finished"
                 self.pcf.tasks[tid].state = "assigned"
                 self.change_task_color(tid, TASK_COLORS["assigned"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
             self.pcf.event_tracker["fid"] = prev_fid
 
         if self.pcf.cur_timestep == prev_agn_time:  # from newly assigned to unassigned
@@ -642,6 +686,8 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "unassigned"
                 self.change_task_color(tid, TASK_COLORS["unassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
             self.pcf.event_tracker["aid"] = prev_aid
             prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
             prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
@@ -652,6 +698,8 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "newlyassigned"
                 self.change_task_color(tid, TASK_COLORS["newlyassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
+                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                    self.show_single_task(tid)
 
         # Compute the previous location
         prev_loc:Dict[int, Tuple[int, int]] = {}
@@ -755,11 +803,15 @@ class PlanViz:
                     self.pcf.tasks[tid].state = "assigned"
                     self.change_task_color(tid, TASK_COLORS["assigned"])
                     self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
+                    if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(tid)
             elif a_time == self.pcf.cur_timestep:
                 for (tid, ag_id) in self.pcf.events["assigned"][a_time].items():
                     self.pcf.tasks[tid].state = "newlyassigned"
                     self.change_task_color(tid, TASK_COLORS["newlyassigned"])
                     self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
+                    if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(tid)
             else:  # a_time > self.pcf.cur_timestep
                 self.pcf.event_tracker["aid"] = a_id
                 break
@@ -769,9 +821,11 @@ class PlanViz:
             if f_time == -1:
                 break
             if f_time <= self.pcf.cur_timestep:
-                for tid in self.pcf.events["finished"][f_time]:
+                for (tid, ag_id) in self.pcf.events["finished"][f_time].items():
                     self.pcf.tasks[tid].state = "finished"
                     self.change_task_color(tid, TASK_COLORS["finished"])
+                    if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(tid)
             else:
                 self.pcf.event_tracker["fid"] = f_id
                 break
