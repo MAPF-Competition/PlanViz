@@ -13,7 +13,7 @@ Please refer to the [PlanViz instruction manual](./PlanViz.md) for details about
 
 Open a terminal and type the following command:
 ```bash
-python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/warehouse_small.json --grid --aid --static --ca
+python3 script/plan_viz.py --map example/warehouse_small.map --plan example/warehouse_small.json --grid --aid --static --ca
 ```
 
 # Tracker Transfer
@@ -25,6 +25,6 @@ Please refer to the [Tracker Transfer instruction manual](./Tracker%20Transfer.m
 
 Open a terminal and type the following command:
 ```bash
-python3 tracker_transfer.py --plan ../example/random-32-32-20_random_1_300.csv --scen ../example/random-32-32-20-random-1.scen --outputFile ../example/transfer_result
+python3 script/tracker_transfer.py --plan example/random-32-32-20_random_1_300.csv --scen example/random-32-32-20-random-1.scen --outputFile example/transfer_result
 ```
 The MAPF Tracker also supports exporting multiple plans at the same time, from a bulk export CSV file (downloadable [here](http://tracker.pathfinding.ai/results/)) to multiple PlanViz output files. To learn more about this feature please refer to the instruction manual.
