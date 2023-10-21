@@ -288,7 +288,9 @@ class PlanViz:
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         ag_color = color
-        if self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents:
+        if (self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents) or \
+            self.pcf.canvas.itemcget(self.pcf.agents[ag_idx].agent_obj.obj, "fill") \
+                == AGENT_COLORS["collide"]:
             ag_color = AGENT_COLORS["collide"]
         if ag_color != AGENT_COLORS["collide"]:
             self.pcf.agents[ag_idx].agent_obj.color = ag_color
@@ -308,21 +310,24 @@ class PlanViz:
 
 
     def select_conflict(self, event):
-        selected_indices = event.widget.curselection()  # get all selected indices
+        selected_indices = event.widget.curselection()  # Get all selected indices
 
-        for _conf_ in self.shown_conflicts.values():
-            _conf_[1] = False
-            if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], self.pcf.agents[_conf_[0][0]].agent_obj.color)
-            if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], self.pcf.agents[_conf_[0][1]].agent_obj.color)
-        for _sid_ in selected_indices:
-            _conf_ = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+        for conf in self.shown_conflicts.values():  # Reset all the conflicts to non-selected
+            conf[1] = False
+            if conf[0][0] != -1:
+                self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
+                                           fill=self.pcf.agents[conf[0][0]].agent_obj.color)
+            if conf[0][1] != -1:
+                self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
+                                           fill=self.pcf.agents[conf[0][1]].agent_obj.color)
+
+        for _sid_ in selected_indices:  # Mark the selected conflicting agents to red
             self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-            if _conf_[0][0] != -1:
-                self.change_ag_color(_conf_[0][0], AGENT_COLORS["collide"])
-            if _conf_[0][1] != -1:
-                self.change_ag_color(_conf_[0][1], AGENT_COLORS["collide"])
+            conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
+            if conf[0][0] != -1:
+                self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
+            if conf[0][1] != -1:
+                self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
 
 
     def restart_timestep(self):
@@ -462,14 +467,19 @@ class PlanViz:
         for conf in self.shown_conflicts.values():
             if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
                 if self.show_all_conf_ag.get():
-                    self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
+                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
+                                               fill=AGENT_COLORS["collide"])
                 else:
-                    self.change_ag_color(conf[0][0], self.pcf.agents[conf[0][0]].agent_obj.color)
+                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
+                                               fill=self.pcf.agents[conf[0][0]].agent_obj.color)
+
             if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
                 if self.show_all_conf_ag.get():
-                    self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
+                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
+                                               fill=AGENT_COLORS["collide"])
                 else:
-                    self.change_ag_color(conf[0][1], self.pcf.agents[conf[0][1]].agent_obj.color)
+                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
+                                               fill=self.pcf.agents[conf[0][1]].agent_obj.color)
             conf[1] = False
 
 
@@ -832,9 +842,10 @@ class PlanViz:
 
         for (ag_id, agent_) in self.pcf.agents.items():
             # Check colliding agents
-            _color_ = agent_.agent_obj.color
-            if self.show_all_conf_ag.get() and agent_ in self.pcf.conflict_agents:
-                _color_ = AGENT_COLORS["collide"]
+            show_collide = False
+            if (self.show_all_conf_ag.get() and agent_ in self.pcf.conflict_agents) or \
+                self.pcf.canvas.itemcget(agent_.agent_obj.obj, "fill") == AGENT_COLORS["collide"]:
+                show_collide = True
 
             # Re-generate agent objects
             tstep = min(self.pcf.cur_timestep - self.pcf.start_tstep, len(agent_.path)-1)
@@ -842,7 +853,8 @@ class PlanViz:
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             self.pcf.canvas.delete(agent_.dir_obj)
-            agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval", _color_,
+            agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
+                                                   agent_.agent_obj.color,
                                                    "normal", 0.05, str(ag_id))
             agent_.dir_obj = self.pcf.canvas.create_oval(dir_loc[0] * self.pcf.tile_size,
                                                          dir_loc[1] * self.pcf.tile_size,
@@ -852,7 +864,12 @@ class PlanViz:
                                                          tag="dir",
                                                          state="disable",
                                                          outline="")
+            # Check colliding agents
+            if show_collide:
+                self.change_ag_color(ag_id, AGENT_COLORS["collide"])
+
         self.show_agent_index()
+        self.pcf.canvas.update()
 
 
 def main() -> None:
