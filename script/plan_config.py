@@ -154,7 +154,7 @@ class PlanConfig:
                 tmp_str = data["plannerPaths"][ag_id].split(",")
                 tmp_str = tmp_str[self.start_tstep:self.end_tstep]
                 for tstep, motion in enumerate(tmp_str):
-                    next_ = self.state_transition(self.exec_paths[ag_id][tstep], motion)
+                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
                     self.plan_paths[ag_id].append(next_)
             else:
                 print("No planner paths.", end=" ")
@@ -403,15 +403,17 @@ class PlanConfig:
         for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
                                         AGENT_COLORS["assigned"], "disable", 0.05, str(ag_id))
-            dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
-            dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
-                                              dir_loc[1] * self.tile_size,
-                                              dir_loc[2] * self.tile_size,
-                                              dir_loc[3] * self.tile_size,
-                                              fill="navy",
-                                              tag="dir",
-                                              state="disable",
-                                              outline="")
+            dir_obj = None
+            if self.agent_model == "MAPF_T":
+                dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
+                dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
+                                                dir_loc[1] * self.tile_size,
+                                                dir_loc[2] * self.tile_size,
+                                                dir_loc[3] * self.tile_size,
+                                                fill="navy",
+                                                tag="dir",
+                                                state="disable",
+                                                outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
                           path_objs[ag_id], self.exec_paths[ag_id], dir_obj)

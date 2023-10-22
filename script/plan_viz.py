@@ -55,7 +55,7 @@ class PlanViz:
 
         gui_window = self.pcf.window
         gui_column = 1
-        if (self.pcf.width+1) * self.pcf.tile_size > 0.52 * self.pcf.window.winfo_screenwidth():
+        if (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
             gui_window = tk.Toplevel()
             gui_window.title("UI Panel")
             gui_window.config(width=300, height=(self.pcf.height+1) * self.pcf.tile_size)
@@ -624,8 +624,9 @@ class PlanViz:
                 _sin = -1 * (math.sin(cur_angle+ next_ang*(_m_+1))-math.sin(cur_angle+next_ang*_m_))
                 self.pcf.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.pcf.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
-                self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
-                self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
+                if self.pcf.agent_model == "MAPF_T":
+                    self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
+                    self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
 
@@ -742,8 +743,9 @@ class PlanViz:
                 _sin = -1*(math.sin(cur_angle+next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_))
                 self.pcf.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.pcf.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
-                self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
-                self.pcf.canvas.move(agent.dir_obj, _rad_*_cos, _rad_*_sin)
+                if not self.pcf.agent_model == "MAPF_T":
+                    self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
+                    self.pcf.canvas.move(agent.dir_obj, _rad_*_cos, _rad_*_sin)
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
         for (ag_id, agent) in self.pcf.agents.items():
@@ -849,21 +851,22 @@ class PlanViz:
 
             # Re-generate agent objects
             tstep = min(self.pcf.cur_timestep - self.pcf.start_tstep, len(agent_.path)-1)
-            dir_loc = get_dir_loc(agent_.path[tstep])
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
                                                    agent_.agent_obj.color,
                                                    "normal", 0.05, str(ag_id))
-            self.pcf.canvas.delete(agent_.dir_obj)
-            agent_.dir_obj = self.pcf.canvas.create_oval(dir_loc[0] * self.pcf.tile_size,
-                                                         dir_loc[1] * self.pcf.tile_size,
-                                                         dir_loc[2] * self.pcf.tile_size,
-                                                         dir_loc[3] * self.pcf.tile_size,
-                                                         fill="navy",
-                                                         tag="dir",
-                                                         state="disable",
-                                                         outline="")
+            if self.pcf.agent_model == "MAPF_T":
+                self.pcf.canvas.delete(agent_.dir_obj)
+                dir_loc = get_dir_loc(agent_.path[tstep])
+                agent_.dir_obj = self.pcf.canvas.create_oval(dir_loc[0] * self.pcf.tile_size,
+                                                            dir_loc[1] * self.pcf.tile_size,
+                                                            dir_loc[2] * self.pcf.tile_size,
+                                                            dir_loc[3] * self.pcf.tile_size,
+                                                            fill="navy",
+                                                            tag="dir",
+                                                            state="disable",
+                                                            outline="")
             # Check colliding agents
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])

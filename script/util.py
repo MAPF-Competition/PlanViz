@@ -113,7 +113,7 @@ class BaseObj:
 
 class Agent:
     def __init__(self, _idx_, ag_obj:BaseObj, st_obj:BaseObj,
-                 plan_pth:List, pth_obj:List[BaseObj], exec_pth:List, dir_obj:BaseObj):
+                 plan_pth:List, pth_obj:List[BaseObj], exec_pth:List, dir_obj:BaseObj=None):
         self.idx = _idx_
         self.agent_obj = ag_obj
         self.start_obj = st_obj
