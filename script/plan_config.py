@@ -23,6 +23,8 @@ class PlanConfig:
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
 
+        self.agent_model:str = ""
+
         self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
@@ -119,7 +121,15 @@ class PlanConfig:
                 raise KeyError("Missing makespan!")
             self.end_tstep = data["makespan"]
 
+        if self.agent_model == "":
+            if 'actionModel' not in data.keys():
+                raise KeyError("Missing action model!")
+            self.agent_model = data['actionModel']
+
         print("Loading paths from " + str(plan_file), end="... ")
+        state_trans = self.state_transition
+        if self.agent_model == "MAPF":
+            state_trans = self.state_transition_mapf
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -131,7 +141,7 @@ class PlanConfig:
                 tmp_str = data["actualPaths"][ag_id].split(",")
                 tmp_str = tmp_str[self.start_tstep:self.end_tstep]
                 for motion in tmp_str:
-                    next_ = self.state_transition(self.exec_paths[ag_id][-1], motion)
+                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
                     self.exec_paths[ag_id].append(next_)
                 if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
                     self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
@@ -148,7 +158,6 @@ class PlanConfig:
                     self.plan_paths[ag_id].append(next_)
             else:
                 print("No planner paths.", end=" ")
-
         print("Done!")
 
         print("Loading errors from " + str(plan_file), end="... ")
@@ -237,6 +246,22 @@ class PlanConfig:
             return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
         elif motion == "C":  # Counter-clockwise
             return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
+        elif motion in ["W", "T"]:
+            return cur_state
+        else:
+            logging.error("Invalid motion")
+            sys.exit()
+
+
+    def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
+        if motion == "U":  # south (u)
+            return (cur_state[0]+1, cur_state[1], cur_state[2])
+        elif motion == "L": #west (left)
+            return (cur_state[0], cur_state[1]-1, cur_state[2])
+        elif motion == "R": #east (right)
+            return (cur_state[0], cur_state[1]+1, cur_state[2])
+        elif motion == "D": #north (d)
+            return (cur_state[0]-1, cur_state[1], cur_state[2])
         elif motion in ["W", "T"]:
             return cur_state
         else:
@@ -363,7 +388,7 @@ class PlanConfig:
                 if _pid_ > 0 and _p_loc_ == (self.exec_paths[ag_id][_pid_-1][0],
                                              self.exec_paths[ag_id][_pid_-1][1]):
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.25)
-                else:  # non=wait action, smaller rectangle
+                else:  # non-wait action, smaller rectangle
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.4)
                 if _p_obj is not None:
                     self.canvas.tag_lower(_p_obj.obj)
