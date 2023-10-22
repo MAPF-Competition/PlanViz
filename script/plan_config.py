@@ -120,7 +120,7 @@ class PlanConfig:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
             self.end_tstep = data["makespan"]
-        
+
         if self.agent_model == "":
             if 'actionModel' not in data.keys():
                 raise KeyError("Missing action model!")
@@ -258,13 +258,14 @@ class PlanConfig:
             logging.error("Invalid motion")
             sys.exit()
 
+
     def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "U":  # south (u)
             return (cur_state[0]+1, cur_state[1], cur_state[2])
         elif motion == "L": #west (left)
             return (cur_state[0], cur_state[1]-1, cur_state[2])
         elif motion == "R": #east (right)
-                return (cur_state[0], cur_state[1]+1, cur_state[2])
+            return (cur_state[0], cur_state[1]+1, cur_state[2])
         elif motion == "D": #north (d)
             return (cur_state[0]-1, cur_state[1], cur_state[2])
         elif motion in ["W", "T"]:
@@ -393,7 +394,7 @@ class PlanConfig:
                 if _pid_ > 0 and _p_loc_ == (self.exec_paths[ag_id][_pid_-1][0],
                                              self.exec_paths[ag_id][_pid_-1][1]):
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.25)
-                else:  # non=wait action, smaller rectangle
+                else:  # non-wait action, smaller rectangle
                     _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.4)
                 self.canvas.itemconfigure(_p_obj.obj, state="hidden")
                 self.canvas.delete(_p_obj.text)
