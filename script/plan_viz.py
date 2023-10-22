@@ -717,15 +717,16 @@ class PlanViz:
 
         # Compute the previous location
         prev_loc:Dict[int, Tuple[int, int]] = {}
+        relative_prev_t = prev_timestep - self.pcf.start_tstep
         for (ag_id, agent) in self.pcf.agents.items():
-            if prev_timestep > len(agent.path)-1:
+            if relative_prev_t > len(agent.path)-1:
                 prev_loc[ag_id] = (agent.path[-1][0],
                                    agent.path[-1][1],
                                    agent.path[-1][2])
             else:
-                prev_loc[ag_id] = (agent.path[prev_timestep][0],
-                                   agent.path[prev_timestep][1],
-                                   agent.path[prev_timestep][2])
+                prev_loc[ag_id] = (agent.path[relative_prev_t][0],
+                                   agent.path[relative_prev_t][1],
+                                   agent.path[relative_prev_t][2])
 
         # Move the agents backward
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2

@@ -108,6 +108,169 @@ class PlanConfig:
         print("Done!")
 
 
+    def load_paths(self, data:Dict):
+        print("Loading paths", end="... ")
+
+        state_trans = self.state_transition
+        if self.agent_model == "MAPF":
+            state_trans = self.state_transition_mapf
+        for ag_id in range(self.team_size):
+            start = data["start"][ag_id]  # Get start location
+            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+            self.start_loc[ag_id] = start
+
+            self.exec_paths[ag_id] = []  # Get actual path
+            self.exec_paths[ag_id].append(start)
+            if "actualPaths" in data:
+                tmp_str = data["actualPaths"][ag_id].split(",")
+                for motion in tmp_str:
+                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
+                    self.exec_paths[ag_id].append(next_)
+                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
+                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+            else:
+                print("No actual paths.", end=" ")
+
+            self.plan_paths[ag_id] = []  # Get planned path
+            self.plan_paths[ag_id].append(start)
+            if "plannerPaths" in data:
+                tmp_str = data["plannerPaths"][ag_id].split(",")
+                for tstep, motion in enumerate(tmp_str):
+                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
+                    self.plan_paths[ag_id].append(next_)
+            else:
+                print("No planner paths.", end=" ")
+
+        for ag_id in range(self.team_size):
+            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
+            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
+
+        print("Done!")
+
+
+    def load_errors(self, data:Dict):
+        print("Loading errors", end="... ")
+        if "errors" not in data:
+            print("No errors.")
+            return
+
+        for err in data["errors"]:
+            tstep = err[2]
+            if self.start_tstep <= tstep <= self.end_tstep:
+                self.conflict_agents.add(err[0])
+                self.conflict_agents.add(err[1])
+                if tstep not in self.conflicts:  # Sort errors according to the tstep
+                    self.conflicts[tstep] = []
+                self.conflicts[tstep].append(err)
+        print("Done!")
+
+
+    def load_events(self, data:Dict):
+        print("Loading events", end="... ")
+
+        if "events" not in data:
+            print("No events.")
+            return
+
+        # Initialize assigned events
+        ag_to_timedtasks = {}
+        for ag_ in range(self.team_size):
+            for eve in data["events"][ag_]:
+                if eve[2] != "assigned":
+                    continue
+                tid:int   = eve[0]
+                tstep:int = eve[1]
+                if ag_ not in ag_to_timedtasks:
+                    ag_to_timedtasks[ag_] = []
+                ag_to_timedtasks[ag_].append((tid, tstep))
+
+        for _, timedtasks in ag_to_timedtasks.items():
+            timedtasks.sort(key=lambda x: x[1])
+            st_id = 0
+            ed_id = len(timedtasks)
+            for ii in range(len(timedtasks)-1):
+                if self.start_tstep < timedtasks[ii+1][-1]:
+                    st_id = ii
+                    break
+            for ii in range(len(timedtasks)-1):
+                if self.end_tstep < timedtasks[ii+1][-1]:
+                    ed_id = ii
+                    break
+            timedtasks = timedtasks[st_id:ed_id]
+
+        shown_tasks = set()
+        for _, timedtasks in ag_to_timedtasks.items():
+            for ttsk in timedtasks:
+                shown_tasks.add(ttsk[0])
+
+        # Initialize assigned events
+        for ag_ in range(self.team_size):
+            for eve in data["events"][ag_]:
+                if eve[2] != "assigned":
+                    continue
+                tid:int   = eve[0]
+                tstep:int = eve[1]
+                if tid in shown_tasks:
+                    if tstep not in self.events["assigned"]:
+                        self.events["assigned"][tstep] = {}  # task_idx -> agent
+                    self.events["assigned"][tstep][tid] = ag_
+                    if ag_ not in self.ag_to_task:
+                        self.ag_to_task[ag_] = []
+                    self.ag_to_task[ag_].append(tid)
+        self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
+        self.event_tracker["aTime"].append(-1)
+        self.event_tracker["aid"] = 0
+
+        # Initialize finished events
+        for ag_ in range(self.team_size):
+            for eve in data["events"][ag_]:
+                if eve[2] != "finished":
+                    continue
+                tid:int   = eve[0]
+                tstep:int = eve[1]
+                if tid in shown_tasks:
+                    if tstep not in self.events["finished"]:
+                        self.events["finished"][tstep] = {}  # task_idx -> agent
+                    self.events["finished"][tstep][tid] = ag_
+        self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
+        self.event_tracker["fTime"].append(-1)
+        self.event_tracker["fid"] = 0
+        print("Done!")
+
+
+    def load_tasks(self, data:Dict):
+        print("Loading tasks", end="... ")
+
+        if "tasks" not in data:
+            print("No tasks.")
+            return
+
+        if self.event_tracker:
+            for a_time in self.event_tracker["aTime"]:  # traverse all assigned timesteps
+                if a_time == -1:
+                    continue
+                for tid in self.events["assigned"][a_time]:
+                    _task_ = data["tasks"][tid]
+                    assert tid == _task_[0]
+                    _tloc_ = (_task_[1], _task_[2])
+                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
+                    new_task = Task(tid, _tloc_, _tobj_)
+                    self.tasks[tid] = new_task
+        else:
+            print("No events found. Render all tasks.", end=" ")
+            for _, task_list in self.ag_to_task.items():
+                for tid in task_list:
+                    _task_ = data["tasks"][tid]
+                    assert tid == _task_[0]
+                    _tloc_ = (_task_[1], _task_[2])
+                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle",
+                                                TASK_COLORS["unassigned"])
+                    new_task = Task(tid, _tloc_, _tobj_)
+                    self.tasks[tid] = new_task
+
+        print("Done!")
+
+
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -126,110 +289,10 @@ class PlanConfig:
                 raise KeyError("Missing action model!")
             self.agent_model = data['actionModel']
 
-        print("Loading paths from " + str(plan_file), end="... ")
-        state_trans = self.state_transition
-        if self.agent_model == "MAPF":
-            state_trans = self.state_transition_mapf
-        for ag_id in range(self.team_size):
-            start = data["start"][ag_id]  # Get start location
-            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
-            self.start_loc[ag_id] = start
-
-            self.exec_paths[ag_id] = []  # Get actual path
-            self.exec_paths[ag_id].append(start)
-            if "actualPaths" in data:
-                tmp_str = data["actualPaths"][ag_id].split(",")
-                tmp_str = tmp_str[self.start_tstep:self.end_tstep]
-                for motion in tmp_str:
-                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                    self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
-            else:
-                print("No actual paths.", end=" ")
-
-            self.plan_paths[ag_id] = []  # Get planned path
-            self.plan_paths[ag_id].append(start)
-            if "plannerPaths" in data:
-                tmp_str = data["plannerPaths"][ag_id].split(",")
-                tmp_str = tmp_str[self.start_tstep:self.end_tstep]
-                for tstep, motion in enumerate(tmp_str):
-                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
-                    self.plan_paths[ag_id].append(next_)
-            else:
-                print("No planner paths.", end=" ")
-        print("Done!")
-
-        print("Loading errors from " + str(plan_file), end="... ")
-        if "errors" in data:
-            for err in data["errors"]:
-                tstep = err[2]
-                if self.start_tstep <= tstep <= self.end_tstep:
-                    self.conflict_agents.add(err[0])
-                    self.conflict_agents.add(err[1])
-                    if tstep not in self.conflicts:  # Sort errors according to the tstep
-                        self.conflicts[tstep] = []
-                    self.conflicts[tstep].append(err)
-        print("Done!")
-
-        print("Loading events from " + str(plan_file), end="... ")
-        if "events" in data:
-            # Initialize assigned events
-            shown_tasks = set()
-            for ag_ in range(self.team_size):
-                for eve in data["events"][ag_]:
-                    if eve[2] != "assigned":
-                        continue
-                    tid:int   = eve[0]
-                    tstep:int = eve[1]
-                    if self.start_tstep <= tstep <= self.end_tstep:
-                        if tstep not in self.events["assigned"]:
-                            self.events["assigned"][tstep] = {}  # task_idx -> agent
-                        self.events["assigned"][tstep][tid] = ag_
-                        if ag_ not in self.ag_to_task:
-                            self.ag_to_task[ag_] = []
-                        self.ag_to_task[ag_].append(tid)
-                        shown_tasks.add(tid)
-            self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
-            self.event_tracker["aTime"].append(-1)
-            self.event_tracker["aid"] = 0
-
-            # Initialize finished events
-            for ag_ in range(self.team_size):
-                for eve in data["events"][ag_]:
-                    if eve[2] != "finished":
-                        continue
-                    tid:int   = eve[0]
-                    tstep:int = eve[1]
-                    if tid in shown_tasks:
-                        if tstep not in self.events["finished"]:
-                            self.events["finished"][tstep] = {}  # task_idx -> agent
-                        self.events["finished"][tstep][tid] = ag_
-            self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
-            self.event_tracker["fTime"].append(-1)
-            self.event_tracker["fid"] = 0
-            print("Done!")
-        else:
-            print("No events.")
-
-        print("Loading tasks from " + str(plan_file), end="... ")
-        if "tasks" in data:
-            for a_time in self.event_tracker["aTime"]:  # traverse all assigned timesteps
-                if a_time < self.start_tstep:
-                    continue
-                if a_time > self.end_tstep:
-                    break
-                for _tid_ in self.events["assigned"][a_time]:
-                    _task_ = data["tasks"][_tid_]
-                    assert _tid_ == _task_[0]
-                    _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(_tid_, _tloc_, "rectangle",
-                                             TASK_COLORS["unassigned"])
-                    new_task = Task(_tid_, _tloc_, _tobj_)
-                    self.tasks[_tid_] = new_task
-            print("Done!")
-        else:
-            print("No tasks.")
+        self.load_paths(data)
+        self.load_errors(data)
+        self.load_events(data)
+        self.load_tasks(data)
 
 
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
