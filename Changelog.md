@@ -7,6 +7,7 @@ Added:
 - Show not only the path but tasks when right-click an agent.
 - Transform plans from one-shot MAPF tracker to JSON file (see `tracker_transfer.py`).
 - Support one-shot MAPF problem visualization.
+- Show one previous task before start timestep.
 
 Changed:
 - Minimum requirements of JSON file are "actionModel", "AllValid", "teamSize", and "start"
