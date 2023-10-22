@@ -852,10 +852,10 @@ class PlanViz:
             dir_loc = get_dir_loc(agent_.path[tstep])
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
-            self.pcf.canvas.delete(agent_.dir_obj)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
                                                    agent_.agent_obj.color,
                                                    "normal", 0.05, str(ag_id))
+            self.pcf.canvas.delete(agent_.dir_obj)
             agent_.dir_obj = self.pcf.canvas.create_oval(dir_loc[0] * self.pcf.tile_size,
                                                          dir_loc[1] * self.pcf.tile_size,
                                                          dir_loc[2] * self.pcf.tile_size,

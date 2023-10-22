@@ -112,18 +112,16 @@ class BaseObj:
         self.color = _color_
 
 class Agent:
-    def __init__(self, _idx_, _ag_obj_:BaseObj, _start_:BaseObj,
-                 _plan_path_:List, _path_objs_:List[BaseObj], _exec_path_:List, _dir_obj_):
+    def __init__(self, _idx_, ag_obj:BaseObj, st_obj:BaseObj,
+                 plan_pth:List, pth_obj:List[BaseObj], exec_pth:List, dir_obj:BaseObj):
         self.idx = _idx_
-        self.task_idx = -1
-        self.agent_obj = _ag_obj_
-        self.start_obj = _start_
-        self.dir_obj = _dir_obj_  # oval on canvas
-        self.plan_path = _plan_path_
-        self.exec_path = _exec_path_
-        self.path_objs = _path_objs_
+        self.agent_obj = ag_obj
+        self.start_obj = st_obj
+        self.plan_path = plan_pth
+        self.path_objs = pth_obj
+        self.exec_path = exec_pth
+        self.dir_obj = dir_obj  # oval on canvas
         self.path = self.exec_path  # Set execution path as default
-
 
 class Task:
     def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,

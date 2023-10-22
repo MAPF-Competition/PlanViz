@@ -6,7 +6,7 @@ All rights reserved.
 
 import sys
 import logging
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
 import numpy as np
@@ -58,9 +58,9 @@ class PlanConfig:
         self.agents:Dict[int,Agent] = {}
         self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
-        self.cur_timestep = self.start_tstep
-        self.shown_path_agents = set()
-        self.conflict_agents = set()
+        self.cur_timestep:int = self.start_tstep
+        self.shown_path_agents:Set[int] = set()
+        self.conflict_agents:Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
 
