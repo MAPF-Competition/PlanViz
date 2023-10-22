@@ -19,7 +19,7 @@ class TrackerTransfer:
         self.makespan = 0
         self.actual_path = []
         self.planner_path = []
-        self.plannerTime = []
+        self.planner_time = []
         self.errors = []
         self.events = []
         self.tasks = []
@@ -84,7 +84,7 @@ class TrackerTransfer:
         output_dic['makespan'] = self.makespan
         output_dic['actualPaths'] = self.actual_path
         output_dic['plannerPaths'] = self.planner_path
-        output_dic['plannerTimes'] = self.plannerTime
+        output_dic['plannerTimes'] = self.planner_time
         output_dic['errors'] = self.errors
         output_dic['events'] = self.events
         output_dic['tasks'] = self.tasks
