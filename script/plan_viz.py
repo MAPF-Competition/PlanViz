@@ -338,7 +338,7 @@ class PlanViz:
         self.pcf.shown_path_agents.clear()
 
         # Reset the tasks
-        if not self.pcf.shown_path_agents:
+        if self.pcf.event_tracker:
             for ag_ in range(self.pcf.team_size):
                 for tid_ in self.pcf.ag_to_task[ag_]:
                     self.show_single_task(tid_)
@@ -639,6 +639,9 @@ class PlanViz:
         self.next_button.config(state="normal")
 
         # Change tasks' states after cur_timestep += 1
+        if not self.pcf.event_tracker:
+            return
+
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
         if self.pcf.cur_timestep-1 == self.pcf.event_tracker["aTime"][prev_aid]:
             # from newly assigned to assigned
@@ -806,41 +809,42 @@ class PlanViz:
             task_.state = "unassigned"
             self.change_task_color(tid_, TASK_COLORS["unassigned"])
 
-        for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
-            if a_time == -1:
-                self.pcf.event_tracker["aid"] = a_id
-                break
-            if a_time < self.pcf.cur_timestep:
-                for (tid, ag_id) in self.pcf.events["assigned"][a_time].items():
-                    self.pcf.tasks[tid].state = "assigned"
-                    self.change_task_color(tid, TASK_COLORS["assigned"])
-                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
-                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                        self.show_single_task(tid)
-            elif a_time == self.pcf.cur_timestep:
-                for (tid, ag_id) in self.pcf.events["assigned"][a_time].items():
-                    self.pcf.tasks[tid].state = "newlyassigned"
-                    self.change_task_color(tid, TASK_COLORS["newlyassigned"])
-                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
-                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                        self.show_single_task(tid)
-            else:  # a_time > self.pcf.cur_timestep
-                self.pcf.event_tracker["aid"] = a_id
-                break
+        if self.pcf.event_tracker:
+            for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
+                if a_time == -1:
+                    self.pcf.event_tracker["aid"] = a_id
+                    break
+                if a_time < self.pcf.cur_timestep:
+                    for (tid, ag_id) in self.pcf.events["assigned"][a_time].items():
+                        self.pcf.tasks[tid].state = "assigned"
+                        self.change_task_color(tid, TASK_COLORS["assigned"])
+                        self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
+                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                            self.show_single_task(tid)
+                elif a_time == self.pcf.cur_timestep:
+                    for (tid, ag_id) in self.pcf.events["assigned"][a_time].items():
+                        self.pcf.tasks[tid].state = "newlyassigned"
+                        self.change_task_color(tid, TASK_COLORS["newlyassigned"])
+                        self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
+                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                            self.show_single_task(tid)
+                else:  # a_time > self.pcf.cur_timestep
+                    self.pcf.event_tracker["aid"] = a_id
+                    break
 
-        # Change tasks' colors according to finished timesteps
-        for f_id, f_time in enumerate(self.pcf.event_tracker["fTime"]):
-            if f_time == -1:
-                break
-            if f_time <= self.pcf.cur_timestep:
-                for (tid, ag_id) in self.pcf.events["finished"][f_time].items():
-                    self.pcf.tasks[tid].state = "finished"
-                    self.change_task_color(tid, TASK_COLORS["finished"])
-                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                        self.show_single_task(tid)
-            else:
-                self.pcf.event_tracker["fid"] = f_id
-                break
+            # Change tasks' colors according to finished timesteps
+            for f_id, f_time in enumerate(self.pcf.event_tracker["fTime"]):
+                if f_time == -1:
+                    break
+                if f_time <= self.pcf.cur_timestep:
+                    for (tid, ag_id) in self.pcf.events["finished"][f_time].items():
+                        self.pcf.tasks[tid].state = "finished"
+                        self.change_task_color(tid, TASK_COLORS["finished"])
+                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                            self.show_single_task(tid)
+                else:
+                    self.pcf.event_tracker["fid"] = f_id
+                    break
 
         for (ag_id, agent_) in self.pcf.agents.items():
             # Check colliding agents
