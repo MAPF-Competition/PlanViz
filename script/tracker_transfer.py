@@ -1,3 +1,5 @@
+# -*- coding: UTF-8 -*-
+
 import pandas as pd
 import json
 import argparse
@@ -8,7 +10,6 @@ class TrackerTransfer:
     def __init__(self, scen_file, plan_file):
         self.scen_file = scen_file
         self.plan_file = plan_file
-        
         self.action_model = "MAPF"
         self.all_valid = "Yes"
         self.team_size = 0
@@ -23,14 +24,15 @@ class TrackerTransfer:
         self.events = []
         self.tasks = []
 
+
     def read_single_plan(self,row,path_col_name):
         plan_df = pd.read_csv(self.plan_file)
         self.team_size = int(plan_df['agents'][row])
         self.sum_of_cost = int(plan_df['solution_cost'][row])
         plan = plan_df[path_col_name][row].split('\n')
         for path in plan:
-            if (len(path) > self.makespan):
-                self.makespan = len(path) 
+            if len(path) > self.makespan:
+                self.makespan = len(path)
             self.actual_path.append(list(path.upper()))
             self.planner_path.append(list(path.upper()))
             event = []
@@ -39,11 +41,12 @@ class TrackerTransfer:
             self.events.append(event)
         self.fill_path()
         self.num_task_finished = self.team_size
-    
+
+
     def read_start_task(self):
         """ read start and task from scen file
         """
-        f = open(self.scen_file)
+        f = open(self.scen_file, mode="r", encoding="UTF-8")
         line = f.readline() #skip the first line
         line = f.readline()
         while line:
@@ -56,21 +59,22 @@ class TrackerTransfer:
             self.tasks.append([len(self.tasks),task_row,task_col])
             line = f.readline()
 
+
     def fill_path(self):
         for agent in range(self.team_size):
             curr_len = int(len(self.actual_path[agent]))
-            for i in range(curr_len,self.makespan):
+            for _ in range(curr_len,self.makespan):
                 self.actual_path[agent].append('W')
                 self.planner_path[agent].append('W')
-            if (len(self.planner_path[agent]) != self.makespan or len(self.actual_path[agent]) != self.makespan):
+            if len(self.planner_path[agent]) != self.makespan or\
+                len(self.actual_path[agent]) != self.makespan:
                 print("wrong")
             self.actual_path[agent] = ",".join(self.actual_path[agent])
             self.planner_path[agent] = ",".join(self.planner_path[agent])
-        
-            
-    
+
+
     def write_to_json(self, write_file):
-        output_dic = dict()
+        output_dic = {}
         output_dic['actionModel'] = self.action_model
         output_dic['AllValid'] = self.all_valid
         output_dic['teamSize'] = self.team_size
@@ -84,8 +88,9 @@ class TrackerTransfer:
         output_dic['errors'] = self.errors
         output_dic['events'] = self.events
         output_dic['tasks'] = self.tasks
-        with open(write_file,"w") as f:
+        with open(write_file, mode="w", encoding="UTF-8") as f:
             json.dump(output_dic,f, indent=4)
+
 
 def runSingleTransfer(scen_file, plan_file, output_file):
     try:
@@ -97,68 +102,57 @@ def runSingleTransfer(scen_file, plan_file, output_file):
     except:
         print(" Unsuccess")
 
-def runMultiTransfer(scen_folder,plan_file,output_file):
+
+def runMultiTransfer(scen_folder, plan_file, output_file):
     muti_plan_df = pd.read_csv(plan_file)
 
     success_count = 0
     for index, row in muti_plan_df.iterrows():
-        print("------- transfering solution for the",str(index)+"th","instance -------")
+        print("------- transfering solution for the", str(index)+"th", "instance -------")
         try:
-            scen = scen_folder+"/" + row['map_name'] + "-" + row['scen_type'] + "-" +str(row['type_id']) + ".scen"
+            scen = scen_folder + "/" + row['map_name'] + "-" + \
+                row['scen_type'] + "-" + str(row['type_id']) + ".scen"
             tracker_transfer = TrackerTransfer(str(scen),plan_file)
             tracker_transfer.read_single_plan(index,'solution_plan')
             tracker_transfer.read_start_task()
-            tracker_transfer.write_to_json(output_file+"_"+str(index)+".json")
+            tracker_transfer.write_to_json(output_file + "_" + str(index) + ".json")
             success_count+=1
             print(" Success")
         except:
             print(" Unsuccess")
-    print("finished with ", success_count,"success")
-
-        
+    print("finished with ", success_count, "success")
 
 
 def main() -> None:
     """The main function of the tracker transfer.
     """
-    parser = argparse.ArgumentParser(description='A program to transfer results from mapf tracker to visualiser support format')
+    parser = argparse.ArgumentParser(
+        description='A program to transfer results from mapf tracker to visualiser support format')
 
     parser.add_argument('--plan', type=str, help="Path to the planned path file")
-    #parser.add_argument('--randomScen', type=str, help="Path to random scenario file")
-    #parser.add_argument('--evenScen', type=str, help="Path to even scenario file")
-    parser.add_argument('--multiPlan',action="store_true", help="Enable this if the plan file contains path for multiple instances")
-    parser.add_argument('--scen', type=str, help="Path to scenario file for single plan file, path to the folder that contains the scenario files if multiPlan is enabled")
-    parser.add_argument('--outputFile', type=str, default="../example/transfer_result/result", help="Path to the output file without extension")
+    parser.add_argument('--multiPlan',action="store_true",
+                        help="Enable this if the plan file contains path for multiple instances")
+    parser.add_argument('--scen', type=str,
+                        help="Path to scenario file for single plan file, or path to the folder \
+                            that contains the scenario files if multiPlan is enabled")
+    parser.add_argument('--outputFile', type=str, default="../example/transfer_result/result",
+                        help="Path to the output file without extension")
     args = parser.parse_args()
 
-    if args.plan == None:
+    if args.plan is None:
         raise TypeError("Missing variable: plan (path the the planned path file).")
     plan = args.plan
     output = args.outputFile
-    if args.scen == None:
+    if args.scen is None:
         raise TypeError("Missing variable: scen (path/folder) to scenario file).")
     scen = args.scen
 
     multi = args.multiPlan
     if not multi:
         runSingleTransfer(scen,plan,output)
-        # if args.randomScen == None and args.evenScen == None:
-        #     raise TypeError("Missing variable: scenario file (either randomScen or evenScen).")
-        # if args.randomScen != None and args.evenScen != None:
-        #     raise TypeError("More then one scenario file provide: when set singlePlan to True, there should be only one scenario file, either randomScen or evenScen.")
-        # if args.randomScen != None:
-        #     scen = args.randomScen
-        # elif args.evenScen != None:
-        #     scen = args.evenScen
-        # output = output+".json"
-        # runSingleTransfer(scen,plan,output)
     else:
-    #     if args.randomScen == None and args.evenScen == None:
-    #         raise TypeError("Missing variable: should provide at least one from randomScen and evenScen.")
-    #     random_scen = args.randomScen
-    #     even_scen = args.evenScen
         runMultiTransfer(scen,plan,output)
+
 
 if __name__ == "__main__":
     main()
-
