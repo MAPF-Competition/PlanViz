@@ -93,14 +93,10 @@ class TrackerTransfer:
 
 
 def runSingleTransfer(scen_file, plan_file, output_file):
-    try:
-        tracker_transfer = TrackerTransfer(scen_file,plan_file)
-        tracker_transfer.read_single_plan(0,'path')
-        tracker_transfer.read_start_task()
-        tracker_transfer.write_to_json(output_file+".json")
-        print(" Success")
-    except:
-        print(" Unsuccess")
+    tracker_transfer = TrackerTransfer(scen_file,plan_file)
+    tracker_transfer.read_single_plan(0,'path')
+    tracker_transfer.read_start_task()
+    tracker_transfer.write_to_json(output_file+".json")
 
 
 def runMultiTransfer(scen_folder, plan_file, output_file):
@@ -118,8 +114,8 @@ def runMultiTransfer(scen_folder, plan_file, output_file):
             tracker_transfer.write_to_json(output_file + "_" + str(index) + ".json")
             success_count+=1
             print(" Success")
-        except:
-            print(" Unsuccess")
+        except FileNotFoundError:
+            print(" Unsuccess, scenario file",scen,"cannot found")
     print("finished with ", success_count, "success")
 
 
