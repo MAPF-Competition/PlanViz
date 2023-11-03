@@ -3,7 +3,7 @@
 This is a script for visualizing the plan for the League of Robot Runners.
 All rights reserved.
 """
-
+import sys
 import argparse
 import math
 from typing import List, Tuple, Dict
@@ -21,20 +21,33 @@ class PlanViz:
     """ This is the control panel of PlanViz
     """
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
+
         print("===== Initialize PlanViz =====")
 
-        # Load the yaml file or the input arguments
         self.pcf = plan_config
-        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
 
-        # This is what enables using the mouse:
-        self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
-        self.pcf.canvas.bind("<B1-Motion>", self.__move_to)
-        # linux scroll
-        self.pcf.canvas.bind("<Button-4>", self.__wheel)
-        self.pcf.canvas.bind("<Button-5>", self.__wheel)
-        # windows scroll
-        self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
+        MAC_OS = False
+        if sys.platform == 'darwin':
+            MAC_OS = True
+        if MAC_OS:
+            self.pcf.canvas.bind("<Button-2>", self.show_ag_plan_by_click)
+            self.pcf.canvas.bind("<Button-1>", self.__move_from)
+            self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
+            self.pcf.canvas.bind("<B1-Motion>", self.__move_to)
+            self.pcf.canvas.bind_all("<MouseWheel>",self.__wheel_mac)
+            self.pcf.canvas.bind_all("<Shift-MouseWheel>",self.__wheel_mac)
+        else:
+            # Load the yaml file or the input arguments
+            self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
+
+            # This is what enables using the mouse:
+            self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
+            self.pcf.canvas.bind("<B1-Motion>", self.__move_to)
+            # linux scroll
+            self.pcf.canvas.bind("<Button-4>", self.__wheel)
+            self.pcf.canvas.bind("<Button-5>", self.__wheel)
+            # windows scroll
+            self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
 
         # Generate the UI panel
         print("Rendering the panel... ", end="")
@@ -393,7 +406,7 @@ class PlanViz:
     def __wheel(self, event):
         """ Zoom with mouse wheel """
         scale = 1.0
-        # Respond to Linux (event.num) or Windows (event.delta) wheel event
+        #Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
             threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
             if threshold < 30:
@@ -401,6 +414,24 @@ class PlanViz:
             scale /= 1.10
             self.pcf.tile_size /= 1.10
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
+            scale *= 1.10
+            self.pcf.tile_size *= 1.10
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        for child_widget in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(child_widget,
+                                      font=("Arial", int(self.pcf.tile_size // 2)))
+        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+
+    def __wheel_mac(self, event):
+        """ Zoom with mouse wheel for mac"""
+        scale = 1.0
+        if event.num == 5 or event.delta == -1:  # scroll down, smaller
+            threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
+            if threshold < 30:
+                return  # image is less than 30 pixels
+            scale /= 1.10
+            self.pcf.tile_size /= 1.10
+        if event.num == 4 or event.delta == 1:  # scroll up, bigger
             scale *= 1.10
             self.pcf.tile_size *= 1.10
         self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
