@@ -49,6 +49,10 @@ class PlanViz:
             # windows scroll
             self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
 
+        self.pcf.canvas.bind_all("<Control-equal>",self.__zoomin)
+        self.pcf.canvas.bind_all("<Control-minus>",self.__zoomout)
+        self.pcf.canvas.bind_all("<p>",self.show_ag_plan_by_click)
+
         # Generate the UI panel
         print("Rendering the panel... ", end="")
 
@@ -416,6 +420,31 @@ class PlanViz:
         if event.num == 4 or event.delta == 120:  # scroll up, bigger
             scale *= 1.10
             self.pcf.tile_size *= 1.10
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        for child_widget in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(child_widget,
+                                      font=("Arial", int(self.pcf.tile_size // 2)))
+        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+
+    def __zoomin(self, event):
+        """ Zoom with mouse wheel """
+        scale = 1.0
+        scale *= 1.10
+        self.pcf.tile_size *= 1.10
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        for child_widget in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(child_widget,
+                                      font=("Arial", int(self.pcf.tile_size // 2)))
+        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+    
+    def __zoomout(self, event):
+        """ Zoom with mouse wheel """
+        scale = 1.0
+        threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
+        if threshold < 30:
+            return  # image is less than 30 pixels
+        scale /= 1.10
+        self.pcf.tile_size /= 1.10
         self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
