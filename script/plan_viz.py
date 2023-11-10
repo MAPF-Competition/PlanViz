@@ -52,6 +52,11 @@ class PlanViz:
         self.pcf.canvas.bind_all("<Control-equal>",self.__zoomin)
         self.pcf.canvas.bind_all("<Control-minus>",self.__zoomout)
         self.pcf.canvas.bind_all("<p>",self.show_ag_plan_by_click)
+        #self.pcf.canvas.bind_all('<w>',self.keypress)
+        self.pcf.canvas.bind_all('<w>',lambda event: self.pcf.canvas.yview_scroll(-1, "units"))
+        self.pcf.canvas.bind_all('<s>',lambda event: self.pcf.canvas.yview_scroll(1, "units"))
+        self.pcf.canvas.bind_all('<a>',lambda event: self.pcf.canvas.xview_scroll(-1, "units"))
+        self.pcf.canvas.bind_all('<d>',lambda event: self.pcf.canvas.xview_scroll(1, "units"))
 
         # Generate the UI panel
         print("Rendering the panel... ", end="")
@@ -938,6 +943,19 @@ class PlanViz:
 
         self.show_agent_index()
         self.pcf.canvas.update()
+
+    def keypress(self,event):
+        """Recieve a keypress and move the ball by a specified amount"""
+        print(event)
+        # if event.char == 'w':
+        # elif event.char == 's':
+        #     self.pcf.canvas.move(0,5)
+        # elif event.char == 'a':
+        #     self.pcf.canvas.move(-5,0)
+        # elif event.char == 'd':
+        #     self.pcf.canvas.move(5,0)
+        # else:
+        #     pass
 
 
 def main() -> None:
