@@ -317,13 +317,13 @@ class PlanConfig:
 
 
     def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "U":  # south (u)
+        if motion == "D":  # south (down)
             return (cur_state[0]+1, cur_state[1], cur_state[2])
         elif motion == "L": #west (left)
             return (cur_state[0], cur_state[1]-1, cur_state[2])
         elif motion == "R": #east (right)
             return (cur_state[0], cur_state[1]+1, cur_state[2])
-        elif motion == "D": #north (d)
+        elif motion == "U": #north (up)
             return (cur_state[0]-1, cur_state[1], cur_state[2])
         elif motion in ["W", "T"]:
             return cur_state
