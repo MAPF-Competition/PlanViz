@@ -439,11 +439,13 @@ class PlanViz:
             self.pcf.shown_path_agents.remove(ag_idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
+                self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
             for _pid_ in range(self.pcf.cur_timestep+1, len(self.pcf.agents[ag_idx].path_objs)):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state="disable")
+                self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
 
         # Reset the tasks
         if not self.pcf.shown_path_agents:
