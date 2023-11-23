@@ -33,6 +33,9 @@ class TrackerTransfer:
         for path in plan:
             if len(path) > self.makespan:
                 self.makespan = len(path)
+            path = path.replace('u','a')
+            path = path.replace('d','u')
+            path = path.replace('a','d')
             self.actual_path.append(list(path.upper()))
             self.planner_path.append(list(path.upper()))
             event = []
