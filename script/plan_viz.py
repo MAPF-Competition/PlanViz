@@ -57,6 +57,7 @@ class PlanViz:
         self.pcf.canvas.bind_all('<s>',lambda event: self.pcf.canvas.yview_scroll(1, "units"))
         self.pcf.canvas.bind_all('<a>',lambda event: self.pcf.canvas.xview_scroll(-1, "units"))
         self.pcf.canvas.bind_all('<d>',lambda event: self.pcf.canvas.xview_scroll(1, "units"))
+        self.pcf.canvas.bind_all("<BackSpace>", self.restart_timestep)
 
         # Generate the UI panel
         print("Rendering the panel... ", end="")
@@ -353,6 +354,21 @@ class PlanViz:
 
 
     def restart_timestep(self):
+        self.new_time.set(self.pcf.start_tstep)
+        for ag_idx in self.pcf.shown_path_agents:
+            for _p_ in self.pcf.agents[ag_idx].path_objs:
+                self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
+        self.pcf.shown_path_agents.clear()
+
+        # Reset the tasks
+        if self.pcf.event_tracker:
+            for ag_ in range(self.pcf.team_size):
+                for tid_ in self.pcf.ag_to_task[ag_]:
+                    self.show_single_task(tid_)
+
+        self.update_curtime()
+
+    def restart_timestep(self,event):
         self.new_time.set(self.pcf.start_tstep)
         for ag_idx in self.pcf.shown_path_agents:
             for _p_ in self.pcf.agents[ag_idx].path_objs:
