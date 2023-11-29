@@ -10,6 +10,8 @@ from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
 import numpy as np
+from matplotlib.colors import Normalize
+from matplotlib import cm
 from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
     get_map_name, get_dir_loc, BaseObj, Agent, Task
 
@@ -17,7 +19,8 @@ from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
 class PlanConfig:
     """ Plan configuration and loading and rendering functions.
     """
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, ppm, moves, delay):
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
+                 ppm, moves, delay, heat_maps):
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -48,7 +51,9 @@ class PlanConfig:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
+        self.heat_map:List[List[int]] = []
         self.grids:List = []
+        self.heat_grids:List = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
@@ -80,6 +85,7 @@ class PlanConfig:
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.render_env()
         self.render_agents()
 
@@ -295,6 +301,55 @@ class PlanConfig:
         self.load_tasks(data)
 
 
+    def load_heat_maps(self, plan_files:List[str]):
+        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+
+        for ag_id in range(self.team_size):
+            for p in self.exec_paths[ag_id]:
+                self.heat_map[p[0]][p[1]] += 1
+
+        for plan_file in plan_files:
+            data = {}
+            with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
+                data = json.load(fin)
+
+            if self.team_size == np.inf:
+                self.team_size = data["teamSize"]
+
+            if self.end_tstep == np.inf:
+                if "makespan" not in data.keys():
+                    raise KeyError("Missing makespan!")
+                self.end_tstep = data["makespan"]
+
+            if self.agent_model == "":
+                if 'actionModel' not in data.keys():
+                    raise KeyError("Missing action model!")
+                self.agent_model = data['actionModel']
+
+            state_trans = self.state_transition
+            if self.agent_model == "MAPF":
+                state_trans = self.state_transition_mapf
+
+            for ag_id in range(data["teamSize"]):
+                start = data["start"][ag_id]  # Get start location
+                start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+
+                exec_path = []  # Get actual path
+                exec_path.append(start)
+                if "actualPaths" in data:
+                    tmp_str = data["actualPaths"][ag_id].split(",")
+                    for motion in tmp_str:
+                        next_ = state_trans(exec_path[-1], motion)
+                        exec_path.append(next_)
+                    # exec_path = exec_path[self.start_tstep:self.end_tstep+1]
+                else:
+                    print("No actual paths.", end=" ")
+
+                for p in exec_path:
+                    self.heat_map[p[0]][p[1]] += 1
+
+
+
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "F":  # Forward
             if cur_state[-1] == 0:  # Right
@@ -319,21 +374,20 @@ class PlanConfig:
     def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "D":  # south (down)
             return (cur_state[0]+1, cur_state[1], cur_state[2])
-        elif motion == "L": #west (left)
+        if motion == "L": #west (left)
             return (cur_state[0], cur_state[1]-1, cur_state[2])
-        elif motion == "R": #east (right)
+        if motion == "R": #east (right)
             return (cur_state[0], cur_state[1]+1, cur_state[2])
-        elif motion == "U": #north (up)
+        if motion == "U": #north (up)
             return (cur_state[0]-1, cur_state[1], cur_state[2])
-        elif motion in ["W", "T"]:
+        if motion in ["W", "T"]:
             return cur_state
-        else:
-            logging.error("Invalid motion")
-            sys.exit()
+        logging.error("Invalid motion")
+        sys.exit()
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
-                   _color_:str="blue", _state_:str="normal", offset:float=0.05, _tag_:str="obj"):
+                   _color_:str="blue", _state_=tk.NORMAL, offset:float=0.05, _tag_:str="obj"):
         """Mark certain positions on the visualizer
 
         Args:
@@ -341,7 +395,7 @@ class PlanConfig:
             _loc_ (List, required): A list of locations on the map.
             _shape_ (str, optional): The shape of marked on each location. Defaults to "rectangle".
             _color_ (str, optional): The color of the mark. Defaults to "blue".
-            _state_ (str, optional): Whether to show the object or not. Defaults to "normal"
+            _state_ (str, optional): Whether to show the object or not. Defaults to tk.NORMAL
         """
         _tmp_canvas_ = None
         if _shape_ == "rectangle":
@@ -384,26 +438,26 @@ class PlanConfig:
             _line_ = self.canvas.create_line(0, rid * self.tile_size,
                                              self.width * self.tile_size, rid * self.tile_size,
                                              tags="grid",
-                                             state= "normal",
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
             _line_ = self.canvas.create_line(cid * self.tile_size, 0,
                                              cid * self.tile_size, self.height * self.tile_size,
                                              tags="grid",
-                                             state= "normal",
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
 
         # Render features
-        for rid, _cur_row_ in enumerate(self.env_map):
-            for cid, _cur_ele_ in enumerate(_cur_row_):
-                if _cur_ele_ == 0:  # obstacles
+        for rid, cur_row in enumerate(self.env_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele == 0:  # obstacles
                     self.canvas.create_rectangle(cid * self.tile_size,
                                                  rid * self.tile_size,
-                                                 (cid+1)*self.tile_size,
-                                                 (rid+1)*self.tile_size,
-                                                 state="disable",
+                                                 (cid+1) * self.tile_size,
+                                                 (rid+1) * self.tile_size,
+                                                 state=tk.DISABLED,
                                                  fill="black")
 
         # Render coordinates
@@ -413,7 +467,7 @@ class PlanConfig:
                                     text=str(cid),
                                     fill="black",
                                     tag="text",
-                                    state="disable",
+                                    state=tk.DISABLED,
                                     font=("Arial", int(self.tile_size//2)))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
@@ -421,16 +475,49 @@ class PlanConfig:
                                     text=str(rid),
                                     fill="black",
                                     tag="text",
-                                    state="disable",
+                                    state=tk.DISABLED,
                                     font=("Arial", int(self.tile_size//2)))
         self.canvas.create_line(self.width * self.tile_size, 0,
                                 self.width * self.tile_size, self.height * self.tile_size,
-                                state="disable",
+                                state=tk.DISABLED,
                                 fill="black")
         self.canvas.create_line(0, self.height * self.tile_size,
                                 self.width * self.tile_size, self.height * self.tile_size,
-                                state="disable",
+                                state=tk.DISABLED,
                                 fill="black")
+
+        # Render heat map
+        min_heat = np.inf
+        for rid, cur_row in enumerate(self.heat_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele < min_heat:
+                    min_heat = cur_ele
+
+        max_heat = -np.inf
+        for rid, cur_row in enumerate(self.heat_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele > max_heat:
+                    max_heat = cur_ele
+
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=min_heat, vmax=max_heat)
+        rgba = cmap(norm(self.heat_map))
+        for rid, cur_row in enumerate(self.heat_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele > 0:
+                    cur_color = (int(rgba[rid][cid][0] * 255),
+                                 int(rgba[rid][cid][1] * 255),
+                                 int(rgba[rid][cid][2]*255))
+                    code = '#%02x%02x%02x' % cur_color
+                    rect = self.canvas.create_rectangle(cid * self.tile_size,
+                                                        rid * self.tile_size,
+                                                        (cid+1) * self.tile_size,
+                                                        (rid+1) * self.tile_size,
+                                                        outline="grey",
+                                                        state=tk.HIDDEN,
+                                                        tags="heatmap",
+                                                        fill = code)
+                    self.heat_grids.append(rect)
         print("Done!")
 
 
@@ -441,7 +528,7 @@ class PlanConfig:
         path_objs = []
 
         for ag_id in range(self.team_size):
-            start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", "disable")
+            start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", tk.DISABLED)
             start_objs.append(start)
 
             ag_path = []  # Render paths as purple rectangles
@@ -450,22 +537,22 @@ class PlanConfig:
                 _p_obj = None
                 if _pid_ > 0 and _p_loc_ == (self.exec_paths[ag_id][_pid_-1][0],
                                              self.exec_paths[ag_id][_pid_-1][1]):
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.25)
+                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.4)
+                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", tk.DISABLED, 0.4)
                 if _p_obj is not None:
                     self.canvas.tag_lower(_p_obj.obj)
-                    self.canvas.itemconfigure(_p_obj.obj, state="hidden")
+                    self.canvas.itemconfigure(_p_obj.obj, state=tk.HIDDEN)
                     self.canvas.delete(_p_obj.text)
                     ag_path.append(_p_obj)
             path_objs.append(ag_path)
 
-        if len(self.exec_paths) == 0:
+        if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
 
         for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
-                                        AGENT_COLORS["assigned"], "disable", 0.05, str(ag_id))
+                                        AGENT_COLORS["assigned"], tk.DISABLED, 0.05, str(ag_id))
             dir_obj = None
             if self.agent_model == "MAPF_T":
                 dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
@@ -475,7 +562,7 @@ class PlanConfig:
                                                 dir_loc[3] * self.tile_size,
                                                 fill="navy",
                                                 tag="dir",
-                                                state="disable",
+                                                state=tk.DISABLED,
                                                 outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],

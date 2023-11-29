@@ -45,6 +45,7 @@ class PlanViz:
         self.show_task_idx = tk.BooleanVar()
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
+        self.is_heat_map = tk.BooleanVar()
 
         self.is_run.set(False)
         self.is_grid.set(_grid)
@@ -52,6 +53,7 @@ class PlanViz:
         self.show_task_idx.set(_task_idx)
         self.show_static.set(_static)
         self.show_all_conf_ag.set(_conf_ag)
+        self.is_heat_map.set(False)
 
         gui_window = self.pcf.window
         gui_column = 1
@@ -70,7 +72,7 @@ class PlanViz:
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
 
-        # List of buttons
+        # ---------- List of buttons ------------------------------- #
         self.run_button = tk.Button(self.frame, text="Play",
                                     font=("Arial",TEXT_SIZE),
                                     command=self.move_agents)
@@ -99,7 +101,7 @@ class PlanViz:
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
         row_idx += 1
 
-        # List of checkboxes
+        # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
                                           font=("Arial",TEXT_SIZE),
                                           variable=self.is_grid,
@@ -137,6 +139,15 @@ class PlanViz:
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
+        self.heat_map_button = tk.Checkbutton(self.frame, text="Show heatmap",
+                                              font=("Arial",TEXT_SIZE),
+                                              variable=self.is_heat_map,
+                                              onvalue=True, offvalue=False,
+                                              command=self.show_heat_map)
+        self.heat_map_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
@@ -151,6 +162,7 @@ class PlanViz:
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
 
+        # ---------- Set the starting timestep --------------------- #
         _label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
         _label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
@@ -162,6 +174,7 @@ class PlanViz:
         self.update_button.grid(row=row_idx, column=2, sticky="w")
         row_idx += 1
 
+        # ---------- Show the list of errors ----------------------- #
         _label2 = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
         _label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
@@ -219,7 +232,7 @@ class PlanViz:
         scrollbar.grid(row=row_idx, column=5, sticky="w")
         row_idx += 1
 
-        # Show events
+        # ---------- Show the list of events ----------------------- #
         _label3 = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
         _label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
@@ -334,7 +347,7 @@ class PlanViz:
         self.new_time.set(self.pcf.start_tstep)
         for ag_idx in self.pcf.shown_path_agents:
             for _p_ in self.pcf.agents[ag_idx].path_objs:
-                self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
+                self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
         self.pcf.shown_path_agents.clear()
 
         # Reset the tasks
@@ -438,13 +451,13 @@ class PlanViz:
         if ag_idx in self.pcf.shown_path_agents:  # Remove ag_id if it's already in the set
             self.pcf.shown_path_agents.remove(ag_idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
-                self.pcf.canvas.itemconfigure(_p_.obj, state="hidden")
+                self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
             for _pid_ in range(self.pcf.cur_timestep+1, len(self.pcf.agents[ag_idx].path_objs)):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
-                                              state="disable")
+                                              state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
 
         # Reset the tasks
@@ -488,16 +501,25 @@ class PlanViz:
     def show_grid(self) -> None:
         if self.is_grid.get() is True:
             for _line_ in self.pcf.grids:
-                self.pcf.canvas.itemconfig(_line_, state="normal")
+                self.pcf.canvas.itemconfig(_line_, state=tk.NORMAL)
         else:
             for _line_ in self.pcf.grids:
-                self.pcf.canvas.itemconfig(_line_, state="hidden")
+                self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
+
+
+    def show_heat_map(self) -> None:
+        if self.is_heat_map.get() is True:
+            for item in self.pcf.heat_grids:
+                self.pcf.canvas.itemconfig(item, state=tk.DISABLED)
+        else:
+            for item in self.pcf.heat_grids:
+                self.pcf.canvas.itemconfig(item, state=tk.HIDDEN)
 
 
     def show_agent_index(self) -> None:
-        _state_ = "disable" if self.show_ag_idx.get() is True else "hidden"
-        _ts_ = "disable" if (self.show_ag_idx.get() is True and\
-            self.show_static.get() is True) else "hidden"
+        _state_ = tk.DISABLED if self.show_ag_idx.get() is True else tk.HIDDEN
+        _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
+            self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
             self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
@@ -505,32 +527,32 @@ class PlanViz:
 
     def show_task_index(self) -> None:
         for (_, task) in self.pcf.tasks.items():
-            self.pcf.canvas.itemconfig(task.task_obj.text, state="hidden")
+            self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
             if not self.show_task_idx.get():
-                self.pcf.canvas.itemconfig(task.task_obj.text, state="hidden")
+                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
             elif self.task_shown.get() == "all":
-                self.pcf.canvas.itemconfig(task.task_obj.text, state="disable")
+                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
             elif self.task_shown.get() == "none":
-                self.pcf.canvas.itemconfig(task.task_obj.text, state="hidden")
+                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
             elif self.task_shown.get() == "assigned":
                 if task.state in ["assigned", "newlyassigned"]:
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state="disable")
+                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
             elif task.state == self.task_shown.get():
-                self.pcf.canvas.itemconfig(task.task_obj.text, state="disable")
+                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
 
 
     def show_tasks(self) -> None:
         for (_, task) in self.pcf.tasks.items():
-            self.pcf.canvas.itemconfig(task.task_obj.obj, state="hidden")
+            self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
             if self.task_shown.get() == "all":
-                self.pcf.canvas.itemconfig(task.task_obj.obj, state="disable")
+                self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
             elif self.task_shown.get() == "none":
-                self.pcf.canvas.itemconfig(task.task_obj.obj, state="hidden")
+                self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
             elif self.task_shown.get() == "assigned":
                 if task.state in ["assigned", "newlyassigned"]:
-                    self.pcf.canvas.itemconfig(task.task_obj.obj, state="disable")
+                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
             elif task.state == self.task_shown.get():
-                self.pcf.canvas.itemconfig(task.task_obj.obj, state="disable")
+                self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
         self.show_task_index()
 
 
@@ -541,54 +563,54 @@ class PlanViz:
     def show_single_task(self, tid) -> None:
         tsk = self.pcf.tasks[tid]
         if self.task_shown.get() == "all":
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "hidden":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
                 if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
                 else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
         if self.task_shown.get() == "none":
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
         if self.task_shown.get() == "assigned":
             if tsk.state in ["assigned", "newlyassigned"]:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
                 if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
                 else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
         if tsk.state == self.task_shown.get():
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="disable")
+            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
             if self.show_task_idx.get():
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="disable")
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
             else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
         else:
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state="hidden")
-            self.pcf.canvas.itemconfig(tsk.task_obj.text, state="hidden")
+            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
+            self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
         return
 
 
     def hide_single_task(self, tid) -> None:
         task = self.pcf.tasks[tid]
-        self.pcf.canvas.itemconfig(task.task_obj.obj, state="hidden")
-        self.pcf.canvas.itemconfig(task.task_obj.text, state="hidden")
+        self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
+        self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
 
 
     def show_static_loc(self) -> None:
-        _os_ = "disable" if self.show_static.get() is True else "hidden"
-        _ts_ = "disable" if (self.show_ag_idx.get() is True and\
-            self.show_static.get() is True) else "hidden"
+        _os_ = tk.DISABLED if self.show_static.get() is True else tk.HIDDEN
+        _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
+            self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
             self.pcf.canvas.itemconfig(_agent_.start_obj.obj, state=_os_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
@@ -598,7 +620,7 @@ class PlanViz:
         if self.pcf.cur_timestep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
-        self.next_button.config(state="disable")
+        self.next_button.config(state=tk.DISABLED)
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2
 
         # Update the next timestep for each agent
@@ -638,7 +660,7 @@ class PlanViz:
                                    agent.path[next_tstep[ag_id]][1],
                                    agent.path[next_tstep[ag_id]][2])
         self.pcf.cur_timestep += 1
-        self.next_button.config(state="normal")
+        self.next_button.config(state=tk.NORMAL)
 
         # Change tasks' states after cur_timestep += 1
         if not self.pcf.event_tracker:
@@ -678,7 +700,7 @@ class PlanViz:
         if self.pcf.cur_timestep == self.pcf.start_tstep:
             return
 
-        self.prev_button.config(state="disable")
+        self.prev_button.config(state=tk.DISABLED)
         prev_timestep = max(self.pcf.cur_timestep-1, 0)
 
         # Move the event tracker backward
@@ -758,20 +780,20 @@ class PlanViz:
             agent.agent_obj.loc = prev_loc[ag_id]
 
         self.pcf.cur_timestep = prev_timestep
-        self.prev_button.config(state="normal")
-        self.next_button.config(state="normal")
+        self.prev_button.config(state=tk.NORMAL)
+        self.next_button.config(state=tk.NORMAL)
 
 
     def move_agents(self) -> None:
         """Move agents from cur_timstep to cur_timestep+1 and increase the cur_timestep by 1
         """
-        self.run_button.config(state="disable")
-        self.pause_button.config(state="normal")
-        self.next_button.config(state="disable")
-        self.prev_button.config(state="disable")
-        self.update_button.config(state="disable")
-        self.restart_button.config(state="disable")
-        self.task_shown.config(state="disable")
+        self.run_button.config(state=tk.DISABLED)
+        self.pause_button.config(state=tk.NORMAL)
+        self.next_button.config(state=tk.DISABLED)
+        self.prev_button.config(state=tk.DISABLED)
+        self.update_button.config(state=tk.DISABLED)
+        self.restart_button.config(state=tk.DISABLED)
+        self.task_shown.config(state=tk.DISABLED)
 
         self.is_run.set(True)
         while self.pcf.cur_timestep < min(self.pcf.makespan, self.pcf.end_tstep):
@@ -781,22 +803,22 @@ class PlanViz:
             else:
                 break
 
-        self.run_button.config(state="normal")
-        self.pause_button.config(state="normal")
-        self.next_button.config(state="normal")
-        self.prev_button.config(state="normal")
-        self.update_button.config(state="normal")
-        self.restart_button.config(state="normal")
-        self.task_shown.config(state="normal")
+        self.run_button.config(state=tk.NORMAL)
+        self.pause_button.config(state=tk.NORMAL)
+        self.next_button.config(state=tk.NORMAL)
+        self.prev_button.config(state=tk.NORMAL)
+        self.update_button.config(state=tk.NORMAL)
+        self.restart_button.config(state=tk.NORMAL)
+        self.task_shown.config(state=tk.NORMAL)
 
 
     def pause_agents(self) -> None:
         self.is_run.set(False)
-        self.pause_button.config(state="disable")
-        self.run_button.config(state="normal")
-        self.next_button.config(state="normal")
-        self.prev_button.config(state="normal")
-        self.pcf.canvas.after(200, lambda: self.pause_button.config(state="normal"))
+        self.pause_button.config(state=tk.DISABLED)
+        self.run_button.config(state=tk.NORMAL)
+        self.next_button.config(state=tk.NORMAL)
+        self.prev_button.config(state=tk.NORMAL)
+        self.pcf.canvas.after(200, lambda: self.pause_button.config(state=tk.NORMAL))
 
 
     def update_curtime(self) -> None:
@@ -862,7 +884,7 @@ class PlanViz:
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
                                                    agent_.agent_obj.color,
-                                                   "normal", 0.05, str(ag_id))
+                                                   tk.NORMAL, 0.05, str(ag_id))
             if self.pcf.agent_model == "MAPF_T":
                 self.pcf.canvas.delete(agent_.dir_obj)
                 dir_loc = get_dir_loc(agent_.path[tstep])
@@ -872,7 +894,7 @@ class PlanViz:
                                                             dir_loc[3] * self.pcf.tile_size,
                                                             fill="navy",
                                                             tag="dir",
-                                                            state="disable",
+                                                            state=tk.DISABLED,
                                                             outline="")
             # Check colliding agents
             if show_collide:
@@ -905,10 +927,12 @@ def main() -> None:
                         help="Show start locations or not")
     parser.add_argument('--ca',  dest="show_conf_ag", action='store_true',
                         help="Show all colliding agents")
+    parser.add_argument('--hm', dest='heat_maps', nargs='+', default=[],
+                        help='Path files for generating heatmap')
     args = parser.parse_args()
 
     plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
-                             args.ppm, args.moves, args.delay)
+                             args.ppm, args.moves, args.delay, args.heat_maps)
     PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
             args.show_static, args.show_conf_ag)
     tk.mainloop()
