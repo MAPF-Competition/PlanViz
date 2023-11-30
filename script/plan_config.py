@@ -87,6 +87,7 @@ class PlanConfig:
         self.load_plan(plan_file)  # Load the results
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.render_env()
+        self.render_heat_map()
         self.render_agents()
 
 
@@ -269,8 +270,7 @@ class PlanConfig:
                     _task_ = data["tasks"][tid]
                     assert tid == _task_[0]
                     _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle",
-                                                TASK_COLORS["unassigned"])
+                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
                     new_task = Task(tid, _tloc_, _tobj_)
                     self.tasks[tid] = new_task
 
@@ -303,10 +303,6 @@ class PlanConfig:
 
     def load_heat_maps(self, plan_files:List[str]):
         self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
-
-        for ag_id in range(self.team_size):
-            for p in self.exec_paths[ag_id]:
-                self.heat_map[p[0]][p[1]] += 1
 
         for plan_file in plan_files:
             data = {}
@@ -341,11 +337,17 @@ class PlanConfig:
                     for motion in tmp_str:
                         next_ = state_trans(exec_path[-1], motion)
                         exec_path.append(next_)
-                    # exec_path = exec_path[self.start_tstep:self.end_tstep+1]
+
+                    path_cost = len(exec_path) - 1
+                    while tmp_str[path_cost-1] == "W":
+                        path_cost -= 1
+                        if path_cost == 0:
+                            break
                 else:
                     print("No actual paths.", end=" ")
 
-                for p in exec_path:
+                for tt in range(path_cost):
+                    p = exec_path[tt]
                     self.heat_map[p[0]][p[1]] += 1
 
 
@@ -387,7 +389,8 @@ class PlanConfig:
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
-                   _color_:str="blue", _state_=tk.NORMAL, offset:float=0.05, _tag_:str="obj"):
+                   _color_:str="blue", _state_=tk.NORMAL,
+                   offset:float=0.05, _tag_:str="obj", _outline_:str=""):
         """Mark certain positions on the visualizer
 
         Args:
@@ -406,7 +409,7 @@ class PlanConfig:
                                                         fill=_color_,
                                                         tag=_tag_,
                                                         state=_state_,
-                                                        outline="")
+                                                        outline=_outline_)
         elif _shape_ == "oval":
             _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
                                                    (_loc_[0]+offset) * self.tile_size,
@@ -415,7 +418,7 @@ class PlanConfig:
                                                    fill=_color_,
                                                    tag=_tag_,
                                                    state=_state_,
-                                                   outline="")
+                                                   outline=_outline_)
         else:
             logging.error("Undefined shape.")
             sys.exit()
@@ -485,7 +488,11 @@ class PlanConfig:
                                 self.width * self.tile_size, self.height * self.tile_size,
                                 state=tk.DISABLED,
                                 fill="black")
+        print("Done!")
 
+
+    def render_heat_map(self):
+        print("Rendering the heatmap ... ", end="")
         # Render heat map
         min_heat = np.inf
         for rid, cur_row in enumerate(self.heat_map):
@@ -508,16 +515,10 @@ class PlanConfig:
                     cur_color = (int(rgba[rid][cid][0] * 255),
                                  int(rgba[rid][cid][1] * 255),
                                  int(rgba[rid][cid][2]*255))
-                    code = '#%02x%02x%02x' % cur_color
-                    rect = self.canvas.create_rectangle(cid * self.tile_size,
-                                                        rid * self.tile_size,
-                                                        (cid+1) * self.tile_size,
-                                                        (rid+1) * self.tile_size,
-                                                        outline="grey",
-                                                        state=tk.HIDDEN,
-                                                        tags="heatmap",
-                                                        fill = code)
-                    self.heat_grids.append(rect)
+                    _code = '#%02x%02x%02x' % cur_color
+                    _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                                0.0, "heatmap", "grey")
+                    self.heat_grids.append(_heat_obj)
         print("Done!")
 
 
@@ -533,18 +534,18 @@ class PlanConfig:
 
             ag_path = []  # Render paths as purple rectangles
             for _pid_ in range(len(self.exec_paths[ag_id])):
-                _p_loc_ = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
-                _p_obj = None
-                if _pid_ > 0 and _p_loc_ == (self.exec_paths[ag_id][_pid_-1][0],
+                p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
+                p_obj = None
+                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
                                              self.exec_paths[ag_id][_pid_-1][1]):
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", tk.DISABLED, 0.25)
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", tk.DISABLED, 0.4)
-                if _p_obj is not None:
-                    self.canvas.tag_lower(_p_obj.obj)
-                    self.canvas.itemconfigure(_p_obj.obj, state=tk.HIDDEN)
-                    self.canvas.delete(_p_obj.text)
-                    ag_path.append(_p_obj)
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
+                if p_obj is not None:
+                    self.canvas.tag_lower(p_obj.obj)
+                    self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
+                    self.canvas.delete(p_obj.text)
+                    ag_path.append(p_obj)
             path_objs.append(ag_path)
 
         if self.team_size != len(self.exec_paths):

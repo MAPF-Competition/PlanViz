@@ -510,10 +510,12 @@ class PlanViz:
     def show_heat_map(self) -> None:
         if self.is_heat_map.get() is True:
             for item in self.pcf.heat_grids:
-                self.pcf.canvas.itemconfig(item, state=tk.DISABLED)
+                self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
+                self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
         else:
             for item in self.pcf.heat_grids:
-                self.pcf.canvas.itemconfig(item, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
 
     def show_agent_index(self) -> None:
@@ -889,13 +891,13 @@ class PlanViz:
                 self.pcf.canvas.delete(agent_.dir_obj)
                 dir_loc = get_dir_loc(agent_.path[tstep])
                 agent_.dir_obj = self.pcf.canvas.create_oval(dir_loc[0] * self.pcf.tile_size,
-                                                            dir_loc[1] * self.pcf.tile_size,
-                                                            dir_loc[2] * self.pcf.tile_size,
-                                                            dir_loc[3] * self.pcf.tile_size,
-                                                            fill="navy",
-                                                            tag="dir",
-                                                            state=tk.DISABLED,
-                                                            outline="")
+                                                             dir_loc[1] * self.pcf.tile_size,
+                                                             dir_loc[2] * self.pcf.tile_size,
+                                                             dir_loc[3] * self.pcf.tile_size,
+                                                             fill="navy",
+                                                             tag="dir",
+                                                             state=tk.DISABLED,
+                                                             outline="")
             # Check colliding agents
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
