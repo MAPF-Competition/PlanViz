@@ -20,7 +20,7 @@ class PlanConfig:
     """ Plan configuration and loading and rendering functions.
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, heat_maps):
+                 ppm, moves, delay, heat_maps, hwy_file):
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -54,6 +54,7 @@ class PlanConfig:
         self.heat_map:List[List[int]] = []
         self.grids:List = []
         self.heat_grids:List = []
+        self.highway:List[Dict[str,Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
@@ -86,8 +87,10 @@ class PlanConfig:
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
+        self.load_highway(hwy_file)
         self.render_env()
         self.render_heat_map()
+        self.render_highway()
         self.render_agents()
 
 
@@ -351,6 +354,25 @@ class PlanConfig:
                     self.heat_map[p[0]][p[1]] += 1
 
 
+    def load_highway(self, hwy_file:str):
+        if hwy_file == "":
+            return
+
+        edge_num:int = 0  # Number of edges in the highway
+        with open(file=hwy_file, mode="r", encoding="utf-8") as fin:
+            edge_num = int(fin.readline().strip())
+            for line in fin.readlines():
+                edge_idx = int(line.strip())
+                _from_ = (edge_idx // (self.width * self.height)) - 1
+                from_row = _from_ // self.width
+                from_col = _from_ % self.width
+                _to_ = edge_idx % (self.width * self.height)
+                to_row = _to_ // self.width
+                to_col = _to_ % self.width
+                assert (from_row == to_row) or (from_col == to_col)
+                self.highway.append({"from":(from_row, from_col), "to":(to_row, to_col)})
+            assert len(self.highway) == edge_num
+
 
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "F":  # Forward
@@ -492,7 +514,7 @@ class PlanConfig:
 
 
     def render_heat_map(self):
-        print("Rendering the heatmap ... ", end="")
+        print("Rendering the heatmap... ", end="")
         # Render heat map
         min_heat = np.inf
         for rid, cur_row in enumerate(self.heat_map):
@@ -519,6 +541,28 @@ class PlanConfig:
                     _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                                 0.0, "heatmap", "grey")
                     self.heat_grids.append(_heat_obj)
+        print("Done!")
+
+
+    def render_highway(self):
+        print("Rendering the highway... ", end="")
+        HWY_DIRECTION = {(1,0): "↓",  # Down
+                         (0,1): "→",  # Right
+                         (-1,0): "↑", # Up
+                         (0,-1): "←"} # Left
+        for edge in self.highway:
+            hdir = (edge["to"][0]-edge["from"][0],
+                    edge["to"][1]-edge["from"][1])
+            hdir = HWY_DIRECTION[hdir]
+            loc = ((edge["to"][0]+edge["from"][0])/2.,
+                   (edge["to"][1]+edge["from"][1])/2.)
+            edge["obj"] = self.canvas.create_text((loc[1]+0.5) * self.tile_size,
+                                                  (loc[0]+0.5) * self.tile_size,
+                                                  text=hdir,
+                                                  fill="red",
+                                                  tag="hwy",
+                                                  state=tk.HIDDEN,
+                                                  font=("Arial", int(self.tile_size*1.2)))
         print("Done!")
 
 

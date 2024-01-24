@@ -46,6 +46,7 @@ class PlanViz:
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
+        self.is_highway = tk.BooleanVar()
 
         self.is_run.set(False)
         self.is_grid.set(_grid)
@@ -54,6 +55,7 @@ class PlanViz:
         self.show_static.set(_static)
         self.show_all_conf_ag.set(_conf_ag)
         self.is_heat_map.set(False)
+        self.is_highway.set(False)
 
         gui_window = self.pcf.window
         gui_column = 1
@@ -145,6 +147,14 @@ class PlanViz:
                                               onvalue=True, offvalue=False,
                                               command=self.show_heat_map)
         self.heat_map_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        self.highway_button = tk.Checkbutton(self.frame, text="Show highway",
+                                             font=("Arial",TEXT_SIZE),
+                                             variable=self.is_highway,
+                                             onvalue=True, offvalue=False,
+                                             command=self.show_highway)
+        self.highway_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         # ---------- Show tasks according to their states ---------- #
@@ -419,7 +429,10 @@ class PlanViz:
         self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
-                                      font=("Arial", int(self.pcf.tile_size // 2)))
+                                          font=("Arial", int(self.pcf.tile_size // 2)))
+        for child_widget in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(child_widget,
+                                          font=("Arial", int(self.pcf.tile_size*1.2)))
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
 
 
@@ -516,6 +529,14 @@ class PlanViz:
             for item in self.pcf.heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
                 self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+
+    def show_highway(self) -> None:
+        if self.is_highway.get() is True:
+            for item in self.pcf.highway:
+                self.pcf.canvas.itemconfig(item["obj"], state=tk.DISABLED)
+        else:
+            for item in self.pcf.highway:
+                self.pcf.canvas.itemconfig(item["obj"], state=tk.HIDDEN)
 
 
     def show_agent_index(self) -> None:
@@ -931,10 +952,12 @@ def main() -> None:
                         help="Show all colliding agents")
     parser.add_argument('--hm', dest='heat_maps', nargs='+', default=[],
                         help='Path files for generating heatmap')
+    parser.add_argument('--hw', dest='hwy_file', type=str, default="",
+                        help='Path files for generating highway')
     args = parser.parse_args()
 
     plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
-                             args.ppm, args.moves, args.delay, args.heat_maps)
+                             args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file)
     PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
             args.show_static, args.show_conf_ag)
     tk.mainloop()
