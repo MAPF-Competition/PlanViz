@@ -75,6 +75,24 @@ class PathsTransfer:
         self.num_task_finished = self.team_size
 
 
+    def read_conf(self, conf_file) -> None:
+        with open(conf_file, mode='r', encoding='utf-8') as fin:
+            fin.readline()  # Ignore the title
+            for line in fin.readlines():
+                line = line.strip().split(',')
+                ag0 = int(line[0])
+                ag1 = int(line[1])
+                timestep = int(line[-2])
+                ctype = ''
+                if line[-1] == 'V':
+                    ctype = 'vertex conflict'
+                elif line[-1] == 'E':
+                    ctype = 'edge conflict'
+                elif line[-1] == 'T':
+                    ctype = 'target conflict'
+                self.errors.append([ag0, ag1, timestep, ctype])
+
+
     def write_to_json(self, write_file):
         output_dic = {}
         output_dic['actionModel'] = self.action_model
@@ -94,16 +112,15 @@ class PathsTransfer:
 
 
 if __name__ == '__main__':
-    IN_SCEN = '/home/rdaneel/mapf_benchmark/scen-s2s/warehouse-10-20-10-2-1-s2s-1.scen'
-    IN_PATH = '/home/rdaneel/FEECBS_HWY/local/result_path.txt'
-    OUT_PATH = '/home/rdaneel/MAPF_analysis/local/result_path.json'
-
     parser = argparse.ArgumentParser(description='Transfer path from Jiaoyang codebase to PlanViz')
-    parser.add_argument('--scen', type=str, help='Scen file')
-    parser.add_argument('--path', type=str, help='Path file')
-    parser.add_argument('--out', type=str, help='Output json file')
+    parser.add_argument('--scen', type=str, required=True, help='Scen file')
+    parser.add_argument('--path', type=str, required=True, help='Path file')
+    parser.add_argument('--out',  type=str, required=True, help='Output json file')
+    parser.add_argument('--conf', type=str, required=False, default="", help='Conflict file')
     args = parser.parse_args()
 
     path_trans = PathsTransfer(args.scen, args.path)
     path_trans.read_path(args.path)
+    if len(args.conf) > 0:
+        path_trans.read_conf(args.conf)
     path_trans.write_to_json(args.out)
