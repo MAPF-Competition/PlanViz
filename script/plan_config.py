@@ -4,12 +4,16 @@ This script contains the configurations for PlanViz, a visualizer for the League
 All rights reserved.
 """
 
+import os
 import sys
 import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
 import numpy as np
+import pandas as pd
+from matplotlib.colors import Normalize
+from matplotlib import cm
 from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
     get_map_name, get_dir_loc, BaseObj, Agent, Task
 
@@ -17,7 +21,8 @@ from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
 class PlanConfig:
     """ Plan configuration and loading and rendering functions.
     """
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, ppm, moves, delay):
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
+                 ppm, moves, delay, heat_maps, hwy_file, search_tree_files):
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -48,11 +53,16 @@ class PlanConfig:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
-        self.grids:List = []
+        self.heat_map:List[List[int]] = []
+        self.search_trees:Dict[str,List[List[int]]] = {}
+        self.highway:List[Dict[str,Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
 
+        self.grids:List = []
+        self.heat_grids:List = []
+        self.search_tree_grids:Dict[str,List] = {}
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -63,6 +73,7 @@ class PlanConfig:
         self.cur_timestep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
         self.conflict_agents:Set[int] = set()
+        self.cur_tree:str = "None"
 
         self.load_map(map_file)  # Load from the map file
 
@@ -80,7 +91,13 @@ class PlanConfig:
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
+        self.load_highway(hwy_file)
+        self.load_search_trees(search_tree_files)
         self.render_env()
+        self.render_heat_map()
+        self.render_highway()
+        self.render_search_trees()
         self.render_agents()
 
 
@@ -263,8 +280,7 @@ class PlanConfig:
                     _task_ = data["tasks"][tid]
                     assert tid == _task_[0]
                     _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle",
-                                                TASK_COLORS["unassigned"])
+                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
                     new_task = Task(tid, _tloc_, _tobj_)
                     self.tasks[tid] = new_task
 
@@ -295,6 +311,92 @@ class PlanConfig:
         self.load_tasks(data)
 
 
+    def load_heat_maps(self, plan_files:List[str]):
+        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+
+        for plan_file in plan_files:
+            data = {}
+            with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
+                data = json.load(fin)
+
+            if self.team_size == np.inf:
+                self.team_size = data["teamSize"]
+
+            if self.end_tstep == np.inf:
+                if "makespan" not in data.keys():
+                    raise KeyError("Missing makespan!")
+                self.end_tstep = data["makespan"]
+
+            if self.agent_model == "":
+                if 'actionModel' not in data.keys():
+                    raise KeyError("Missing action model!")
+                self.agent_model = data['actionModel']
+
+            state_trans = self.state_transition
+            if self.agent_model == "MAPF":
+                state_trans = self.state_transition_mapf
+
+            for ag_id in range(data["teamSize"]):
+                start = data["start"][ag_id]  # Get start location
+                start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+
+                exec_path = []  # Get actual path
+                exec_path.append(start)
+                if "actualPaths" in data:
+                    tmp_str = data["actualPaths"][ag_id].split(",")
+                    for motion in tmp_str:
+                        next_ = state_trans(exec_path[-1], motion)
+                        exec_path.append(next_)
+
+                    path_cost = len(exec_path) - 1
+                    while tmp_str[path_cost-1] == "W":
+                        path_cost -= 1
+                        if path_cost == 0:
+                            break
+                else:
+                    print("No actual paths.", end=" ")
+
+                for tt in range(path_cost):
+                    p = exec_path[tt]
+                    self.heat_map[p[0]][p[1]] += 1
+
+
+    def load_highway(self, hwy_file:str):
+        if hwy_file == "":
+            return
+
+        edge_num:int = 0  # Number of edges in the highway
+        with open(file=hwy_file, mode="r", encoding="utf-8") as fin:
+            edge_num = int(fin.readline().strip())
+            for line in fin.readlines():
+                edge_idx = int(line.strip())
+                _from_ = (edge_idx // (self.width * self.height)) - 1
+                from_row = _from_ // self.width
+                from_col = _from_ % self.width
+                _to_ = edge_idx % (self.width * self.height)
+                to_row = _to_ // self.width
+                to_col = _to_ % self.width
+                assert (from_row == to_row) or (from_col == to_col)
+                self.highway.append({"from":(from_row, from_col), "to":(to_row, to_col)})
+            assert len(self.highway) == edge_num
+
+
+    def load_search_trees(self, search_tree_files:List[str]):
+        print("Loading search trees... ", end="")
+        for fin in search_tree_files:
+            search_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+            if os.path.exists(fin):
+                data_frame = pd.read_csv(fin)
+                for _, data_row in data_frame.iterrows():
+                    row = data_row["loc"] // self.width
+                    col = data_row["loc"] % self.width
+                    search_map[row][col] += 1
+            file_name = fin.split("/")[-1].split(".")[0]
+            if file_name not in self.search_trees:
+                self.search_trees[file_name] = search_map
+        print("Done!")
+
+
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "F":  # Forward
             if cur_state[-1] == 0:  # Right
@@ -317,23 +419,23 @@ class PlanConfig:
 
 
     def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "U":  # south (u)
+        if motion == "D":  # south (down)
             return (cur_state[0]+1, cur_state[1], cur_state[2])
-        elif motion == "L": #west (left)
+        if motion == "L": #west (left)
             return (cur_state[0], cur_state[1]-1, cur_state[2])
-        elif motion == "R": #east (right)
+        if motion == "R": #east (right)
             return (cur_state[0], cur_state[1]+1, cur_state[2])
-        elif motion == "D": #north (d)
+        if motion == "U": #north (up)
             return (cur_state[0]-1, cur_state[1], cur_state[2])
-        elif motion in ["W", "T"]:
+        if motion in ["W", "T"]:
             return cur_state
-        else:
-            logging.error("Invalid motion")
-            sys.exit()
+        logging.error("Invalid motion")
+        sys.exit()
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
-                   _color_:str="blue", _state_:str="normal", offset:float=0.05, _tag_:str="obj"):
+                   _color_:str="blue", _state_=tk.NORMAL,
+                   offset:float=0.05, _tag_:str="obj", _outline_:str=""):
         """Mark certain positions on the visualizer
 
         Args:
@@ -341,7 +443,7 @@ class PlanConfig:
             _loc_ (List, required): A list of locations on the map.
             _shape_ (str, optional): The shape of marked on each location. Defaults to "rectangle".
             _color_ (str, optional): The color of the mark. Defaults to "blue".
-            _state_ (str, optional): Whether to show the object or not. Defaults to "normal"
+            _state_ (str, optional): Whether to show the object or not. Defaults to tk.NORMAL
         """
         _tmp_canvas_ = None
         if _shape_ == "rectangle":
@@ -352,7 +454,7 @@ class PlanConfig:
                                                         fill=_color_,
                                                         tag=_tag_,
                                                         state=_state_,
-                                                        outline="")
+                                                        outline=_outline_)
         elif _shape_ == "oval":
             _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
                                                    (_loc_[0]+offset) * self.tile_size,
@@ -361,7 +463,7 @@ class PlanConfig:
                                                    fill=_color_,
                                                    tag=_tag_,
                                                    state=_state_,
-                                                   outline="")
+                                                   outline=_outline_)
         else:
             logging.error("Undefined shape.")
             sys.exit()
@@ -384,26 +486,26 @@ class PlanConfig:
             _line_ = self.canvas.create_line(0, rid * self.tile_size,
                                              self.width * self.tile_size, rid * self.tile_size,
                                              tags="grid",
-                                             state= "normal",
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
             _line_ = self.canvas.create_line(cid * self.tile_size, 0,
                                              cid * self.tile_size, self.height * self.tile_size,
                                              tags="grid",
-                                             state= "normal",
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
 
         # Render features
-        for rid, _cur_row_ in enumerate(self.env_map):
-            for cid, _cur_ele_ in enumerate(_cur_row_):
-                if _cur_ele_ == 0:  # obstacles
+        for rid, cur_row in enumerate(self.env_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele == 0:  # obstacles
                     self.canvas.create_rectangle(cid * self.tile_size,
                                                  rid * self.tile_size,
-                                                 (cid+1)*self.tile_size,
-                                                 (rid+1)*self.tile_size,
-                                                 state="disable",
+                                                 (cid+1) * self.tile_size,
+                                                 (rid+1) * self.tile_size,
+                                                 state=tk.DISABLED,
                                                  fill="black")
 
         # Render coordinates
@@ -413,7 +515,7 @@ class PlanConfig:
                                     text=str(cid),
                                     fill="black",
                                     tag="text",
-                                    state="disable",
+                                    state=tk.DISABLED,
                                     font=("Arial", int(self.tile_size//2)))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
@@ -421,16 +523,100 @@ class PlanConfig:
                                     text=str(rid),
                                     fill="black",
                                     tag="text",
-                                    state="disable",
+                                    state=tk.DISABLED,
                                     font=("Arial", int(self.tile_size//2)))
         self.canvas.create_line(self.width * self.tile_size, 0,
                                 self.width * self.tile_size, self.height * self.tile_size,
-                                state="disable",
+                                state=tk.DISABLED,
                                 fill="black")
         self.canvas.create_line(0, self.height * self.tile_size,
                                 self.width * self.tile_size, self.height * self.tile_size,
-                                state="disable",
+                                state=tk.DISABLED,
                                 fill="black")
+        print("Done!")
+
+
+    def render_heat_map(self):
+        print("Rendering the heatmap... ", end="")
+        # Render heat map
+        min_val = np.inf
+        for cur_row in self.heat_map:
+            for cur_ele in cur_row:
+                if cur_ele < min_val:
+                    min_val = cur_ele
+
+        max_val = -np.inf
+        for cur_row in self.heat_map:
+            for cur_ele in cur_row:
+                if cur_ele > max_val:
+                    max_val = cur_ele
+
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=min_val, vmax=max_val)
+        rgba = cmap(norm(self.heat_map))
+        for rid, cur_row in enumerate(self.heat_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele > 0:
+                    cur_color = (int(rgba[rid][cid][0] * 255),
+                                 int(rgba[rid][cid][1] * 255),
+                                 int(rgba[rid][cid][2]*255))
+                    _code = '#%02x%02x%02x' % cur_color
+                    _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                                0.0, "heatmap", "grey")
+                    self.heat_grids.append(_heat_obj)
+        print("Done!")
+
+
+    def render_highway(self):
+        print("Rendering the highway... ", end="")
+        HWY_DIRECTION = {(1,0): "↓",  # Down
+                         (0,1): "→",  # Right
+                         (-1,0): "↑", # Up
+                         (0,-1): "←"} # Left
+        for edge in self.highway:
+            hdir = (edge["to"][0]-edge["from"][0],
+                    edge["to"][1]-edge["from"][1])
+            hdir = HWY_DIRECTION[hdir]
+            loc = ((edge["to"][0]+edge["from"][0])/2.,
+                   (edge["to"][1]+edge["from"][1])/2.)
+            edge["obj"] = self.canvas.create_text((loc[1]+0.5) * self.tile_size,
+                                                  (loc[0]+0.5) * self.tile_size,
+                                                  text=hdir,
+                                                  fill="red",
+                                                  tag="hwy",
+                                                  state=tk.HIDDEN,
+                                                  font=("Arial", int(self.tile_size)))
+        print("Done!")
+
+
+    def render_search_trees(self):
+        print("Renderinf the search trees... ", end="")
+        # Render search trees
+        min_val = np.inf
+        max_val = -np.inf
+        for _, search_tree in self.search_trees.items():
+            for cur_row in search_tree:
+                for cur_ele in cur_row:
+                    if cur_ele < min_val:
+                        min_val = cur_ele
+                    if cur_ele > max_val:
+                        max_val = cur_ele
+        cmap = cm.get_cmap("Blues")
+        norm = Normalize(vmin=min_val, vmax=max_val)
+
+        for ag_id, search_tree in self.search_trees.items():
+            rgba = cmap(norm(search_tree))
+            self.search_tree_grids[ag_id] = []
+            for rid, cur_row in enumerate(search_tree):
+                for cid, cur_ele in enumerate(cur_row):
+                    if cur_ele > 0:
+                        cur_color = (int(rgba[rid][cid][0] * 255),
+                                     int(rgba[rid][cid][1] * 255),
+                                     int(rgba[rid][cid][2] * 255))
+                        _code = '#%02x%02x%02x' % cur_color
+                        _obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                               0.05, "search_tree")
+                        self.search_tree_grids[ag_id].append(_obj)
         print("Done!")
 
 
@@ -441,31 +627,31 @@ class PlanConfig:
         path_objs = []
 
         for ag_id in range(self.team_size):
-            start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", "disable")
+            start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", tk.DISABLED)
             start_objs.append(start)
 
             ag_path = []  # Render paths as purple rectangles
             for _pid_ in range(len(self.exec_paths[ag_id])):
-                _p_loc_ = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
-                _p_obj = None
-                if _pid_ > 0 and _p_loc_ == (self.exec_paths[ag_id][_pid_-1][0],
+                p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
+                p_obj = None
+                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
                                              self.exec_paths[ag_id][_pid_-1][1]):
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.25)
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
-                    _p_obj = self.render_obj(ag_id, _p_loc_, "rectangle", "purple", "disable", 0.4)
-                if _p_obj is not None:
-                    self.canvas.tag_lower(_p_obj.obj)
-                    self.canvas.itemconfigure(_p_obj.obj, state="hidden")
-                    self.canvas.delete(_p_obj.text)
-                    ag_path.append(_p_obj)
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
+                if p_obj is not None:
+                    self.canvas.tag_lower(p_obj.obj)
+                    self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
+                    self.canvas.delete(p_obj.text)
+                    ag_path.append(p_obj)
             path_objs.append(ag_path)
 
-        if len(self.exec_paths) == 0:
+        if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
 
         for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
-                                        AGENT_COLORS["assigned"], "disable", 0.05, str(ag_id))
+                                        AGENT_COLORS["assigned"], tk.DISABLED, 0.05, str(ag_id))
             dir_obj = None
             if self.agent_model == "MAPF_T":
                 dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
@@ -475,7 +661,7 @@ class PlanConfig:
                                                 dir_loc[3] * self.tile_size,
                                                 fill="navy",
                                                 tag="dir",
-                                                state="disable",
+                                                state=tk.DISABLED,
                                                 outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
