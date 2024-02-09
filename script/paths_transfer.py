@@ -13,7 +13,7 @@ class PathsTransfer:
         self.scen_file = scen_file
         self.path_file = path_file
         self.action_model = 'MAPF'
-        self.all_valid = 'No'
+        self.all_valid = 'Yes'
         self.team_size = 0
         self.starts:List = []
         self.num_task_finished = 0
@@ -76,6 +76,7 @@ class PathsTransfer:
 
 
     def read_conf(self, conf_file) -> None:
+        self.all_valid = 'No'
         with open(conf_file, mode='r', encoding='utf-8') as fin:
             fin.readline()  # Ignore the title
             for line in fin.readlines():

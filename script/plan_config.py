@@ -4,12 +4,14 @@ This script contains the configurations for PlanViz, a visualizer for the League
 All rights reserved.
 """
 
+import os
 import sys
 import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
 import numpy as np
+import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
 from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
@@ -20,7 +22,7 @@ class PlanConfig:
     """ Plan configuration and loading and rendering functions.
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, heat_maps, hwy_file):
+                 ppm, moves, delay, heat_maps, hwy_file, search_tree_files):
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -52,13 +54,15 @@ class PlanConfig:
         self.height:int = -1
         self.env_map:List[List[int]] = []
         self.heat_map:List[List[int]] = []
-        self.grids:List = []
-        self.heat_grids:List = []
+        self.search_trees:Dict[str,List[List[int]]] = {}
         self.highway:List[Dict[str,Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
 
+        self.grids:List = []
+        self.heat_grids:List = []
+        self.search_tree_grids:Dict[str,List] = {}
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -69,6 +73,7 @@ class PlanConfig:
         self.cur_timestep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
         self.conflict_agents:Set[int] = set()
+        self.cur_tree:str = "None"
 
         self.load_map(map_file)  # Load from the map file
 
@@ -88,9 +93,11 @@ class PlanConfig:
         self.load_plan(plan_file)  # Load the results
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
+        self.load_search_trees(search_tree_files)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
+        self.render_search_trees()
         self.render_agents()
 
 
@@ -374,6 +381,22 @@ class PlanConfig:
             assert len(self.highway) == edge_num
 
 
+    def load_search_trees(self, search_tree_files:List[str]):
+        print("Loading search trees... ", end="")
+        for fin in search_tree_files:
+            search_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+            if os.path.exists(fin):
+                data_frame = pd.read_csv(fin)
+                for _, data_row in data_frame.iterrows():
+                    row = data_row["loc"] // self.width
+                    col = data_row["loc"] % self.width
+                    search_map[row][col] += 1
+            file_name = fin.split("/")[-1].split(".")[0]
+            if file_name not in self.search_trees:
+                self.search_trees[file_name] = search_map
+        print("Done!")
+
+
     def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
         if motion == "F":  # Forward
             if cur_state[-1] == 0:  # Right
@@ -516,20 +539,20 @@ class PlanConfig:
     def render_heat_map(self):
         print("Rendering the heatmap... ", end="")
         # Render heat map
-        min_heat = np.inf
-        for rid, cur_row in enumerate(self.heat_map):
-            for cid, cur_ele in enumerate(cur_row):
-                if cur_ele < min_heat:
-                    min_heat = cur_ele
+        min_val = np.inf
+        for cur_row in self.heat_map:
+            for cur_ele in cur_row:
+                if cur_ele < min_val:
+                    min_val = cur_ele
 
-        max_heat = -np.inf
-        for rid, cur_row in enumerate(self.heat_map):
-            for cid, cur_ele in enumerate(cur_row):
-                if cur_ele > max_heat:
-                    max_heat = cur_ele
+        max_val = -np.inf
+        for cur_row in self.heat_map:
+            for cur_ele in cur_row:
+                if cur_ele > max_val:
+                    max_val = cur_ele
 
         cmap = cm.get_cmap("Reds")
-        norm = Normalize(vmin=min_heat, vmax=max_heat)
+        norm = Normalize(vmin=min_val, vmax=max_val)
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -562,7 +585,38 @@ class PlanConfig:
                                                   fill="red",
                                                   tag="hwy",
                                                   state=tk.HIDDEN,
-                                                  font=("Arial", int(self.tile_size*1.2)))
+                                                  font=("Arial", int(self.tile_size)))
+        print("Done!")
+
+
+    def render_search_trees(self):
+        print("Renderinf the search trees... ", end="")
+        # Render search trees
+        min_val = np.inf
+        max_val = -np.inf
+        for _, search_tree in self.search_trees.items():
+            for cur_row in search_tree:
+                for cur_ele in cur_row:
+                    if cur_ele < min_val:
+                        min_val = cur_ele
+                    if cur_ele > max_val:
+                        max_val = cur_ele
+        cmap = cm.get_cmap("Blues")
+        norm = Normalize(vmin=min_val, vmax=max_val)
+
+        for ag_id, search_tree in self.search_trees.items():
+            rgba = cmap(norm(search_tree))
+            self.search_tree_grids[ag_id] = []
+            for rid, cur_row in enumerate(search_tree):
+                for cid, cur_ele in enumerate(cur_row):
+                    if cur_ele > 0:
+                        cur_color = (int(rgba[rid][cid][0] * 255),
+                                     int(rgba[rid][cid][1] * 255),
+                                     int(rgba[rid][cid][2] * 255))
+                        _code = '#%02x%02x%02x' % cur_color
+                        _obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                               0.05, "search_tree")
+                        self.search_tree_grids[ag_id].append(_obj)
         print("Done!")
 
 

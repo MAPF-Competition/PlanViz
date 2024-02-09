@@ -157,6 +157,20 @@ class PlanViz:
         self.highway_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
+        # ---------- Show low-level search trees ------------------- #
+        tree_label = tk.Label(self.frame, text="Search trees", font=("Arial", TEXT_SIZE))
+        tree_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+
+        tree_combobox = ["None"]
+        for tree_ele in self.pcf.search_tree_grids.keys():
+            tree_combobox.append(tree_ele)
+        self.tree_shown = ttk.Combobox(self.frame, width=8, state="readonly",
+                                       values=tree_combobox)
+        self.tree_shown.current(0)
+        self.tree_shown.bind("<<ComboboxSelected>>", self.show_search_tree)
+        self.tree_shown.grid(row=row_idx, column=1, sticky="w")
+        row_idx += 1
+
         # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
@@ -168,13 +182,13 @@ class PlanViz:
                                                "finished",
                                                "none"])
         self.task_shown.current(0)
-        self.task_shown.bind('<<ComboboxSelected>>', self.show_tasks_by_click)
+        self.task_shown.bind("<<ComboboxSelected>>", self.show_tasks_by_click)
         self.task_shown.grid(row=row_idx, column=1, sticky="w")
         row_idx += 1
 
         # ---------- Set the starting timestep --------------------- #
-        _label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
-        _label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        st_label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
+        st_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
                                          font=("Arial",TEXT_SIZE))
@@ -185,14 +199,14 @@ class PlanViz:
         row_idx += 1
 
         # ---------- Show the list of errors ----------------------- #
-        _label2 = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
-        _label2.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
+        err_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
                                            width=30,
-                                           height=12,
+                                           height=9,
                                            font=("Arial",TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
         conf_id = 0
@@ -224,8 +238,8 @@ class PlanViz:
                     _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
                         str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
                     conf_str += ", e: " + _loc1 + "->" + _loc2
-                elif conf[-1] == 'incorrect vector size':
-                    conf_str += 'Planner timeout'
+                elif conf[-1] == "incorrect vector size":
+                    conf_str += "Planner timeout"
                 else:
                     conf_str += conf[-1]
                 conf_str += ", t: " + str(tstep)
@@ -233,8 +247,8 @@ class PlanViz:
                 self.shown_conflicts[conf_str] = [conf, False]
 
         self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
-        self.conflict_listbox.bind('<<ListboxSelect>>', self.select_conflict)
-        self.conflict_listbox.bind('<Double-1>', self.move_to_conflict)
+        self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
+        self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
@@ -243,14 +257,14 @@ class PlanViz:
         row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
-        _label3 = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
-        _label3.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
+        event_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
         row_idx += 1
 
         self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
                                         width=30,
-                                        height=12,
+                                        height=9,
                                         font=("Arial",TEXT_SIZE),
                                         selectmode=tk.EXTENDED)
         eve_id = 0
@@ -276,7 +290,7 @@ class PlanViz:
                     eve_id += 1
 
         self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
-        self.event_listbox.bind('<Double-1>', self.move_to_event)
+        self.event_listbox.bind("<Double-1>", self.move_to_event)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.event_listbox.config(yscrollcommand = scrollbar.set)
@@ -537,6 +551,25 @@ class PlanViz:
         else:
             for item in self.pcf.highway:
                 self.pcf.canvas.itemconfig(item["obj"], state=tk.HIDDEN)
+
+
+    def show_search_tree(self, _) -> None:
+        if self.pcf.cur_tree == self.tree_shown.get():
+            return
+
+        # Hide previous search tree
+        if self.pcf.cur_tree != "None":
+            for item in self.pcf.search_tree_grids[self.pcf.cur_tree]:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+
+        # Show new search tree
+        self.pcf.cur_tree = self.tree_shown.get()
+        if self.pcf.cur_tree == "None":
+            return
+        for item in self.pcf.search_tree_grids[self.pcf.cur_tree]:
+            self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
+            self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
 
 
     def show_agent_index(self) -> None:
@@ -930,34 +963,37 @@ class PlanViz:
 def main() -> None:
     """The main function of the visualizer.
     """
-    parser = argparse.ArgumentParser(description='Plan visualizer for a MAPF instance')
-    parser.add_argument('--map', type=str, help="Path to the map file")
-    parser.add_argument('--plan', type=str, help="Path to the planned path file")
-    parser.add_argument('--n', dest="team_size", type=int, default=np.inf,
+    parser = argparse.ArgumentParser(description="Plan visualizer for a MAPF instance")
+    parser.add_argument("--map", type=str, help="Path to the map file")
+    parser.add_argument("--plan", type=str, help="Path to the planned path file")
+    parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
-    parser.add_argument('--start', type=int, default=0, help="Starting timestep")
-    parser.add_argument('--end', type=int, default=100, help="Ending timestep")
-    parser.add_argument('--ppm', dest="ppm", type=int, help="Number of pixels per move")
-    parser.add_argument('--mv', dest="moves", type=int, help="Number of moves per action")
-    parser.add_argument('--delay', type=float, help="Wait time between timesteps")
-    parser.add_argument('--grid', dest="show_grid", action='store_true',
+    parser.add_argument("--start", type=int, default=0, help="Starting timestep")
+    parser.add_argument("--end", type=int, default=100, help="Ending timestep")
+    parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
+    parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
+    parser.add_argument("--delay", type=float, help="Wait time between timesteps")
+    parser.add_argument("--grid", dest="show_grid", action="store_true",
                         help="Show grid on the environment or not")
-    parser.add_argument('--aid', dest="show_ag_idx", action='store_true',
+    parser.add_argument("--aid", dest="show_ag_idx", action="store_true",
                         help="Show agent indices or not")
-    parser.add_argument('--tid', dest="show_task_idx", action='store_true',
+    parser.add_argument("--tid", dest="show_task_idx", action="store_true",
                         help="Show task indices or not")
-    parser.add_argument('--static', dest="show_static", action='store_true',
+    parser.add_argument("--static", dest="show_static", action="store_true",
                         help="Show start locations or not")
-    parser.add_argument('--ca',  dest="show_conf_ag", action='store_true',
+    parser.add_argument("--ca",  dest="show_conf_ag", action="store_true",
                         help="Show all colliding agents")
-    parser.add_argument('--hm', dest='heat_maps', nargs='+', default=[],
-                        help='Path files for generating heatmap')
-    parser.add_argument('--hw', dest='hwy_file', type=str, default="",
-                        help='Path files for generating highway')
+    parser.add_argument("--hm", dest="heat_maps", nargs="+", default=[],
+                        help="Path files for generating heatmap")
+    parser.add_argument("--hw", dest="hwy_file", type=str, default="",
+                        help="Path files for generating highway")
+    parser.add_argument("--searchTree", dest="search_tree_files", nargs="+", default=[],
+                        help="Show the search trees")
     args = parser.parse_args()
 
     plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
-                             args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file)
+                             args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file,
+                             args.search_tree_files)
     PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
             args.show_static, args.show_conf_ag)
     tk.mainloop()
