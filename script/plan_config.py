@@ -10,6 +10,7 @@ import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
+import linecache
 import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
@@ -22,7 +23,7 @@ class PlanConfig:
     """ Plan configuration and loading and rendering functions.
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, heat_maps, hwy_file, search_tree_files):
+                 ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -54,6 +55,7 @@ class PlanConfig:
         self.height:int = -1
         self.env_map:List[List[int]] = []
         self.heat_map:List[List[int]] = []
+        self.heuristic_map:List[List[int]] = []
         self.search_trees:Dict[str,List[List[int]]] = {}
         self.highway:List[Dict[str,Tuple[int]]] = []
         self.tasks = {}
@@ -94,6 +96,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
+        self.load_heuristics(heu_file, 10)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -361,6 +364,23 @@ class PlanConfig:
                     self.heat_map[p[0]][p[1]] += 1
 
 
+    def load_heuristics(self, heu_file:str, ag:int):
+        if heu_file == "":
+            return
+        self.heuristic_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        with open(heu_file, mode="r", encoding="UTF-8") as fin:
+            for _ in range(0, ag):
+                fin.readline()
+        line = fin.readline().strip().split(",")
+        assert int(line[0]) == ag
+        for i in range(1, len(line)):
+            loc = i - 1
+            row = loc // self.width
+            col = loc % self.width
+            self.heuristic_map[row][col] = int(line[i])
+        print(self.heuristic_map)
+
+
     def load_highway(self, hwy_file:str):
         if hwy_file == "":
             return
@@ -468,9 +488,12 @@ class PlanConfig:
             logging.error("Undefined shape.")
             sys.exit()
 
+        shown_text = ""
+        if _idx_ > -1:
+            shown_text = str(_idx_)
         _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
                                             (_loc_[0]+0.5)*self.tile_size,
-                                            text=str(_idx_),
+                                            text=shown_text,
                                             fill="black",
                                             tag=("text", _tag_),
                                             state=_state_,
@@ -506,6 +529,7 @@ class PlanConfig:
                                                  (cid+1) * self.tile_size,
                                                  (rid+1) * self.tile_size,
                                                  state=tk.DISABLED,
+                                                 outline="",
                                                  fill="black")
 
         # Render coordinates
@@ -553,6 +577,7 @@ class PlanConfig:
 
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=min_val, vmax=max_val)
+        # norm = Normalize(vmin=0, vmax=115)
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -614,8 +639,8 @@ class PlanConfig:
                                      int(rgba[rid][cid][1] * 255),
                                      int(rgba[rid][cid][2] * 255))
                         _code = '#%02x%02x%02x' % cur_color
-                        _obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
-                                               0.05, "search_tree")
+                        _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                               0.0, "search_tree")  # 0.05
                         self.search_tree_grids[ag_id].append(_obj)
         print("Done!")
 

@@ -6,7 +6,7 @@ All rights reserved.
 
 import argparse
 import math
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Set
 import tkinter as tk
 from tkinter import ttk
 import time
@@ -457,13 +457,16 @@ class PlanViz:
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
+        for child_widget in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(child_widget,
+                                          font=("Arial", int(self.pcf.tile_size*1.2)))
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
         self.pcf.canvas.update()
 
 
     def show_ag_plan_by_click(self, event):
         item = self.pcf.canvas.find_closest(event.x, event.y)[0]
-        tags:set(str) = self.pcf.canvas.gettags(item)
+        tags:Set[str] = self.pcf.canvas.gettags(item)
         ag_idx = -1
         for _tt_ in tags:
             if _tt_.isnumeric():
@@ -989,11 +992,13 @@ def main() -> None:
                         help="Path files for generating highway")
     parser.add_argument("--searchTree", dest="search_tree_files", nargs="+", default=[],
                         help="Show the search trees")
+    parser.add_argument("--heu", dest="heu_file", type=str, default="",
+                        help="Show the low-level heuristics")
     args = parser.parse_args()
 
     plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
                              args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file,
-                             args.search_tree_files)
+                             args.search_tree_files, args.heu_file)
     PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
             args.show_static, args.show_conf_ag)
     tk.mainloop()
