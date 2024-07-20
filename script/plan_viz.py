@@ -47,6 +47,7 @@ class PlanViz:
         self.show_all_conf_ag = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
+        self.is_heuristic_map = tk.BooleanVar()
 
         self.is_run.set(False)
         self.is_grid.set(_grid)
@@ -56,6 +57,7 @@ class PlanViz:
         self.show_all_conf_ag.set(_conf_ag)
         self.is_heat_map.set(False)
         self.is_highway.set(False)
+        self.is_heuristic_map.set(False)
 
         gui_window = self.pcf.window
         gui_column = 1
@@ -133,7 +135,7 @@ class PlanViz:
         self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agnets",
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agents",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
@@ -155,6 +157,14 @@ class PlanViz:
                                              onvalue=True, offvalue=False,
                                              command=self.show_highway)
         self.highway_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
+        row_idx += 1
+
+        self.heuristic_map_button = tk.Checkbutton(self.frame, text="Show heuristic",
+                                                   font=("Arial",TEXT_SIZE),
+                                                   variable=self.is_heuristic_map,
+                                                   onvalue=True, offvalue=False,
+                                                   command=self.show_heuristic_map)
+        self.heuristic_map_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
         # ---------- Show low-level search trees ------------------- #
@@ -554,6 +564,17 @@ class PlanViz:
         else:
             for item in self.pcf.highway:
                 self.pcf.canvas.itemconfig(item["obj"], state=tk.HIDDEN)
+
+
+    def show_heuristic_map(self) -> None:
+        if self.is_heuristic_map.get() is True:
+            for item in self.pcf.heuristic_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
+                self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+        else:
+            for item in self.pcf.heuristic_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+                self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
 
     def show_search_tree(self, _) -> None:

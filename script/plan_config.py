@@ -10,12 +10,11 @@ import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
-import linecache
 import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, \
+from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX,\
     get_map_name, get_dir_loc, BaseObj, Agent, Task
 
 
@@ -64,6 +63,7 @@ class PlanConfig:
 
         self.grids:List = []
         self.heat_grids:List = []
+        self.heuristic_grids:List = []
         self.search_tree_grids:Dict[str,List] = {}
         self.start_loc  = {}
         self.plan_paths = {}
@@ -100,6 +100,7 @@ class PlanConfig:
         self.render_env()
         self.render_heat_map()
         self.render_highway()
+        self.render_heuristic_map()
         self.render_search_trees()
         self.render_agents()
 
@@ -371,14 +372,14 @@ class PlanConfig:
         with open(heu_file, mode="r", encoding="UTF-8") as fin:
             for _ in range(0, ag):
                 fin.readline()
-        line = fin.readline().strip().split(",")
-        assert int(line[0]) == ag
-        for i in range(1, len(line)):
-            loc = i - 1
-            row = loc // self.width
-            col = loc % self.width
-            self.heuristic_map[row][col] = int(line[i])
-        print(self.heuristic_map)
+            line = fin.readline().strip().split(",")
+            assert int(line[0]) == ag
+            assert len(line) == self.width * self.height + 1
+            for i in range(1, len(line)):
+                loc = i - 1
+                row = loc // self.width
+                col = loc % self.width
+                self.heuristic_map[row][col] = int(line[i])
 
 
     def load_highway(self, hwy_file:str):
@@ -581,14 +582,15 @@ class PlanConfig:
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
-                if cur_ele > 0:
-                    cur_color = (int(rgba[rid][cid][0] * 255),
-                                 int(rgba[rid][cid][1] * 255),
-                                 int(rgba[rid][cid][2]*255))
-                    _code = '#%02x%02x%02x' % cur_color
-                    _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
-                                                0.0, "heatmap", "grey")
-                    self.heat_grids.append(_heat_obj)
+                if cur_ele <= 0:
+                    continue
+                cur_color = (int(rgba[rid][cid][0] * 255),
+                             int(rgba[rid][cid][1] * 255),
+                             int(rgba[rid][cid][2]*255))
+                _code = '#%02x%02x%02x' % cur_color
+                _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                            0.0, "heatmap", "grey")
+                self.heat_grids.append(_heat_obj)
         print("Done!")
 
 
@@ -611,6 +613,26 @@ class PlanConfig:
                                                   tag="hwy",
                                                   state=tk.HIDDEN,
                                                   font=("Arial", int(self.tile_size)))
+        print("Done!")
+
+
+    def render_heuristic_map(self):
+        print("Rendering the heuristic map... ", end="")
+
+        cmap = cm.get_cmap("Greens")
+        norm = Normalize(vmin=0, vmax=self.width+self.height)
+        rgba = cmap(norm(self.heuristic_map))
+        for rid, cur_row in enumerate(self.heuristic_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele == INT_MAX:
+                    continue
+                cur_color = (int(rgba[rid][cid][0] * 255),
+                                int(rgba[rid][cid][1] * 255),
+                                int(rgba[rid][cid][2]*255))
+                _code = '#%02x%02x%02x' % cur_color
+                _obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                                        0.0, "heuristic", "grey")
+                self.heuristic_grids.append(_obj)
         print("Done!")
 
 

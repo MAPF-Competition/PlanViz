@@ -28,6 +28,7 @@ MAP_CONFIG: Dict[str,Dict] = {
 
 DIR_DIAMETER = 0.1
 DIR_OFFSET = 0.05
+INT_MAX = 2**31 - 1
 
 
 def get_map_name(in_file:str) -> str:
