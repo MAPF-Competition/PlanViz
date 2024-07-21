@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX,\
+from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, DBL_MAX,\
     get_map_name, get_dir_loc, BaseObj, Agent, Task
 
 
@@ -379,7 +379,7 @@ class PlanConfig:
                 loc = i - 1
                 row = loc // self.width
                 col = loc % self.width
-                self.heuristic_map[row][col] = int(line[i])
+                self.heuristic_map[row][col] = float(line[i])
 
 
     def load_highway(self, hwy_file:str):
@@ -624,13 +624,13 @@ class PlanConfig:
         rgba = cmap(norm(self.heuristic_map))
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
-                if cur_ele == INT_MAX:
+                if cur_ele == DBL_MAX:
                     continue
                 cur_color = (int(rgba[rid][cid][0] * 255),
-                                int(rgba[rid][cid][1] * 255),
-                                int(rgba[rid][cid][2]*255))
+                             int(rgba[rid][cid][1] * 255),
+                             int(rgba[rid][cid][2]*255))
                 _code = '#%02x%02x%02x' % cur_color
-                _obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
+                _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                         0.0, "heuristic", "grey")
                 self.heuristic_grids.append(_obj)
         print("Done!")
