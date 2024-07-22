@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, DBL_MAX,\
-    get_map_name, get_dir_loc, BaseObj, Agent, Task
+from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
+    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, Task
 
 
 class PlanConfig:
@@ -96,7 +96,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
-        self.load_heuristics(heu_file, 10)
+        self.load_heuristics(heu_file, 19)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -577,8 +577,8 @@ class PlanConfig:
                     max_val = cur_ele
 
         cmap = cm.get_cmap("Reds")
-        norm = Normalize(vmin=min_val, vmax=max_val)
-        # norm = Normalize(vmin=0, vmax=115)
+        # norm = Normalize(vmin=min_val, vmax=max_val)
+        norm = Normalize(vmin=0, vmax=17)
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -624,14 +624,14 @@ class PlanConfig:
         rgba = cmap(norm(self.heuristic_map))
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
-                if cur_ele == DBL_MAX:
+                if cur_ele in [DBL_MAX, INT_MAX]:
                     continue
                 cur_color = (int(rgba[rid][cid][0] * 255),
                              int(rgba[rid][cid][1] * 255),
                              int(rgba[rid][cid][2]*255))
                 _code = '#%02x%02x%02x' % cur_color
                 _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
-                                        0.0, "heuristic", "grey")
+                                       0.0, "heuristic", "grey")
                 self.heuristic_grids.append(_obj)
         print("Done!")
 
