@@ -14,15 +14,19 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
-    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, Task
+from util import\
+    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,\
+    get_map_name, get_dir_loc, state_transition, state_transition_mapf,\
+    BaseObj, Agent, Task
 
 
 class PlanConfig:
-    """ Plan configuration and loading and rendering functions.
+    """ Plan configuration for loading and rendering functions.
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
+        print("===== Initialize PlanConfig =====")
+
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -54,9 +58,9 @@ class PlanConfig:
         self.height:int = -1
         self.env_map:List[List[int]] = []
         self.heat_map:List[List[int]] = []
-        self.heuristic_map:List[List[int]] = []
-        self.search_trees:Dict[str,List[List[int]]] = {}
-        self.highway:List[Dict[str,Tuple[int]]] = []
+        self.heuristic_map:List[List] = []
+        self.search_trees:Dict[str, List[List[int]]] = {}
+        self.highway:List[Dict[str, Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
@@ -64,15 +68,15 @@ class PlanConfig:
         self.grids:List = []
         self.heat_grids:List = []
         self.heuristic_grids:List = []
-        self.search_tree_grids:Dict[str,List] = {}
+        self.search_tree_grids:Dict[str, List] = {}
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
         self.conflicts  = {}
-        self.agents:Dict[int,Agent] = {}
+        self.agents:Dict[int, Agent] = {}
         self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
-        self.cur_timestep:int = self.start_tstep
+        self.cur_tstep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
         self.conflict_agents:Set[int] = set()
         self.cur_tree:str = "None"
@@ -96,7 +100,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
-        self.load_heuristics(heu_file, 19)
+        self.load_heuristic_map(heu_file, 104)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -132,9 +136,9 @@ class PlanConfig:
     def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
 
-        state_trans = self.state_transition
+        state_trans = state_transition
         if self.agent_model == "MAPF":
-            state_trans = self.state_transition_mapf
+            state_trans = state_transition_mapf
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -193,7 +197,7 @@ class PlanConfig:
             print("No events.")
             return
 
-        # Initialize assigned events
+        # Load all the assigned events
         ag_to_timedtasks = {}
         for ag_ in range(self.team_size):
             for eve in data["events"][ag_]:
@@ -205,7 +209,7 @@ class PlanConfig:
                     ag_to_timedtasks[ag_] = []
                 ag_to_timedtasks[ag_].append((tid, tstep))
 
-        for _, timedtasks in ag_to_timedtasks.items():
+        for _, timedtasks in ag_to_timedtasks.items():  # Extract tasks between start and end timesteps
             timedtasks.sort(key=lambda x: x[1])
             st_id = 0
             ed_id = len(timedtasks)
@@ -271,21 +275,21 @@ class PlanConfig:
                 if a_time == -1:
                     continue
                 for tid in self.events["assigned"][a_time]:
-                    _task_ = data["tasks"][tid]
-                    assert tid == _task_[0]
-                    _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
-                    new_task = Task(tid, _tloc_, _tobj_)
+                    task = data["tasks"][tid]
+                    assert tid == task[0]
+                    tloc = (task[1], task[2])
+                    tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                    new_task = Task(tid, tloc, tobj)
                     self.tasks[tid] = new_task
         else:
             print("No events found. Render all tasks.", end=" ")
             for _, task_list in self.ag_to_task.items():
                 for tid in task_list:
-                    _task_ = data["tasks"][tid]
-                    assert tid == _task_[0]
-                    _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
-                    new_task = Task(tid, _tloc_, _tobj_)
+                    task = data["tasks"][tid]
+                    assert tid == task[0]
+                    tloc = (task[1], task[2])
+                    tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                    new_task = Task(tid, tloc, tobj)
                     self.tasks[tid] = new_task
 
         print("Done!")
@@ -296,8 +300,7 @@ class PlanConfig:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
-        if self.team_size == np.inf:
-            self.team_size = data["teamSize"]
+        self.team_size = min(data["teamSize"], self.team_size)
 
         if self.end_tstep == np.inf:
             if "makespan" not in data.keys():
@@ -316,8 +319,10 @@ class PlanConfig:
 
 
     def load_heat_maps(self, plan_files:List[str]):
-        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        if not plan_files:  # plan_files is empty
+            return
 
+        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
         for plan_file in plan_files:
             data = {}
             with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -336,9 +341,9 @@ class PlanConfig:
                     raise KeyError("Missing action model!")
                 self.agent_model = data['actionModel']
 
-            state_trans = self.state_transition
+            state_trans = state_transition
             if self.agent_model == "MAPF":
-                state_trans = self.state_transition_mapf
+                state_trans = state_transition_mapf
 
             for ag_id in range(data["teamSize"]):
                 start = data["start"][ag_id]  # Get start location
@@ -365,11 +370,12 @@ class PlanConfig:
                     self.heat_map[p[0]][p[1]] += 1
 
 
-    def load_heuristics(self, heu_file:str, ag:int):
+    def load_heuristic_map(self, heu_file:str, ag:int):
         if heu_file == "":
             return
-        self.heuristic_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+
         with open(heu_file, mode="r", encoding="UTF-8") as fin:
+            self.heuristic_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
             for _ in range(0, ag):
                 fin.readline()
             line = fin.readline().strip().split(",")
@@ -403,6 +409,9 @@ class PlanConfig:
 
 
     def load_search_trees(self, search_tree_files:List[str]):
+        if not search_tree_files:
+            return
+
         print("Loading search trees... ", end="")
         for fin in search_tree_files:
             search_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
@@ -416,42 +425,6 @@ class PlanConfig:
             if file_name not in self.search_trees:
                 self.search_trees[file_name] = search_map
         print("Done!")
-
-
-    def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "F":  # Forward
-            if cur_state[-1] == 0:  # Right
-                return (cur_state[0], cur_state[1]+1, cur_state[2])
-            if cur_state[-1] == 1:  # Up
-                return (cur_state[0]-1, cur_state[1], cur_state[2])
-            if cur_state[-1] == 2:  # Left
-                return (cur_state[0], cur_state[1]-1, cur_state[2])
-            if cur_state[-1] == 3:  # Down
-                return (cur_state[0]+1, cur_state[1], cur_state[2])
-        elif motion == "R":  # Clockwise
-            return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
-        elif motion == "C":  # Counter-clockwise
-            return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
-        elif motion in ["W", "T"]:
-            return cur_state
-        else:
-            logging.error("Invalid motion")
-            sys.exit()
-
-
-    def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "D":  # south (down)
-            return (cur_state[0]+1, cur_state[1], cur_state[2])
-        if motion == "L": #west (left)
-            return (cur_state[0], cur_state[1]-1, cur_state[2])
-        if motion == "R": #east (right)
-            return (cur_state[0], cur_state[1]+1, cur_state[2])
-        if motion == "U": #north (up)
-            return (cur_state[0]-1, cur_state[1], cur_state[2])
-        if motion in ["W", "T"]:
-            return cur_state
-        logging.error("Invalid motion")
-        sys.exit()
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
@@ -489,9 +462,10 @@ class PlanConfig:
             logging.error("Undefined shape.")
             sys.exit()
 
-        shown_text = ""
-        if _idx_ > -1:
-            shown_text = str(_idx_)
+        # shown_text = ""
+        # if _idx_ > -1:
+        #     shown_text = str(_idx_)
+        shown_text = str(_idx_)
         _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
                                             (_loc_[0]+0.5)*self.tile_size,
                                             text=shown_text,
@@ -562,8 +536,10 @@ class PlanConfig:
 
 
     def render_heat_map(self):
+        if not self.heat_map:
+            return
+
         print("Rendering the heatmap... ", end="")
-        # Render heat map
         min_val = np.inf
         for cur_row in self.heat_map:
             for cur_ele in cur_row:
@@ -577,8 +553,7 @@ class PlanConfig:
                     max_val = cur_ele
 
         cmap = cm.get_cmap("Reds")
-        # norm = Normalize(vmin=min_val, vmax=max_val)
-        norm = Normalize(vmin=0, vmax=17)
+        norm = Normalize(vmin=0, vmax=max_val)
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -586,7 +561,7 @@ class PlanConfig:
                     continue
                 cur_color = (int(rgba[rid][cid][0] * 255),
                              int(rgba[rid][cid][1] * 255),
-                             int(rgba[rid][cid][2]*255))
+                             int(rgba[rid][cid][2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
                 _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                             0.0, "heatmap", "grey")
@@ -595,6 +570,9 @@ class PlanConfig:
 
 
     def render_highway(self):
+        if not self.highway:
+            return
+
         print("Rendering the highway... ", end="")
         HWY_DIRECTION = {(1,0): "↓",  # Down
                          (0,1): "→",  # Right
@@ -617,27 +595,48 @@ class PlanConfig:
 
 
     def render_heuristic_map(self):
-        print("Rendering the heuristic map... ", end="")
+        if not self.heuristic_map:
+            return
 
-        cmap = cm.get_cmap("Greens")
-        norm = Normalize(vmin=0, vmax=self.width+self.height)
-        rgba = cmap(norm(self.heuristic_map))
+        print("Rendering the heuristic map... ", end="")
+        max_val = -np.inf
+        for cur_row in self.heuristic_map:
+            for cur_ele in cur_row:
+                if cur_ele in [DBL_MAX, INT_MAX]:
+                    continue
+                if cur_ele > max_val:
+                    max_val = cur_ele
+
+        min_val = np.inf
+        for cur_row in self.heuristic_map:
+            for cur_ele in cur_row:
+                if cur_ele in [DBL_MAX, INT_MAX]:
+                    continue
+                if cur_ele < min_val:
+                    min_val = cur_ele
+
+        cmap = cm.get_cmap("Greys")
+        norm = Normalize(vmin=min_val, vmax=max_val)
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
                 if cur_ele in [DBL_MAX, INT_MAX]:
                     continue
-                cur_color = (int(rgba[rid][cid][0] * 255),
-                             int(rgba[rid][cid][1] * 255),
-                             int(rgba[rid][cid][2]*255))
+                cur_rgba = cmap(norm(self.heuristic_map[rid][cid]))
+                cur_color = (int(cur_rgba[0] * 255),
+                             int(cur_rgba[1] * 255),
+                             int(cur_rgba[2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
-                _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
-                                       0.0, "heuristic", "grey")
+                _obj = self.render_obj(int(np.around(cur_ele)), (rid,cid), "rectangle", _code,
+                                       tk.HIDDEN, 0.0, "heuristic", "grey")
                 self.heuristic_grids.append(_obj)
         print("Done!")
 
 
     def render_search_trees(self):
-        print("Renderinf the search trees... ", end="")
+        if not self.search_trees:
+            return
+
+        print("Rendering the search trees... ", end="")
         # Render search trees
         min_val = np.inf
         max_val = -np.inf
