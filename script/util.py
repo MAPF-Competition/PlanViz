@@ -1,20 +1,25 @@
 # -*- coding: UTF-8 -*-
-"""Utility functions
-
-Returns:
-    _type_: _description_
+""" Utility functions
 """
+
 import math
 from typing import List, Tuple, Dict
 
-TASK_COLORS: Dict[int, str] = {"unassigned": "pink",
-                               "newlyassigned": "yellowgreen",
-                               "assigned": "orange",
-                               "finished": "grey"}
-AGENT_COLORS: Dict[str, str] = {"newlyassigned": "yellowgreen",
-                                "assigned": "deepskyblue",
-                                "collide": "red"}
+TASK_COLORS: Dict[int, str] = {
+    "unassigned": "pink",
+    "newlyassigned": "yellowgreen",
+    "assigned": "orange",
+    "finished": "grey"
+}
+
+AGENT_COLORS: Dict[str, str] = {
+    "newlyassigned": "yellowgreen",
+    "assigned": "deepskyblue",
+    "collide": "red"
+}
+
 DIRECTION: Dict[str,int] = {"E":0, "N":1, "W":2, "S":3, "N/A":-1}
+
 OBSTACLES: List[str] = ['@', 'T']
 
 MAP_CONFIG: Dict[str,Dict] = {
@@ -26,10 +31,11 @@ MAP_CONFIG: Dict[str,Dict] = {
     "sortation_large": {"pixel_per_move": 2, "moves": 2, "delay": 0.06}
 }
 
-DIR_DIAMETER = 0.1
-DIR_OFFSET = 0.05
-INT_MAX = 2**31 - 1
-DBL_MAX = 1.79769e+308
+DIR_DIAMETER:float = 0.1
+DIR_OFFSET:float = 0.05
+INT_MAX:int = 2**31 - 1
+DBL_MAX:int = 1.79769e+308
+TEXT_SIZE:int = 12
 
 
 def get_map_name(in_file:str) -> str:
@@ -114,15 +120,15 @@ class BaseObj:
         self.color = _color_
 
 class Agent:
-    def __init__(self, _idx_, ag_obj:BaseObj, st_obj:BaseObj,
-                 plan_pth:List, pth_obj:List[BaseObj], exec_pth:List, dir_obj:BaseObj=None):
-        self.idx = _idx_
+    def __init__(self, idx, ag_obj:BaseObj, st_obj:BaseObj, plan_pth:List,
+                 pth_obj:List[BaseObj], exec_pth:List, dir_obj:BaseObj=None):
+        self.idx = idx
         self.agent_obj = ag_obj
         self.start_obj = st_obj
         self.plan_path = plan_pth
         self.path_objs = pth_obj
         self.exec_path = exec_pth
-        self.dir_obj = dir_obj  # oval on canvas
+        self.dir_obj = dir_obj  # Oval on canvas showing the direction of an agent
         self.path = self.exec_path  # Set execution path as default
 
 class Task:

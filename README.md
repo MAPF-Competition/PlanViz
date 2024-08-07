@@ -14,7 +14,7 @@ Please refer to the [PlanViz instruction manual](./PlanViz.md) for details about
 
 Open a terminal and type the following command:
 ```bash
-python3 script/plan_viz.py --map example/warehouse_small.map --plan example/warehouse_small.json --grid --aid --static --ca
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small.json --grid --aid --static --ca
 ```
 
 # Tracker Transfer

@@ -23,6 +23,8 @@ class PlanConfig:
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
+        print("===== Initialize PlanConfig =====")
+
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
@@ -55,8 +57,8 @@ class PlanConfig:
         self.env_map:List[List[int]] = []
         self.heat_map:List[List[int]] = []
         self.heuristic_map:List[List] = []
-        self.search_trees:Dict[str,List[List[int]]] = {}
-        self.highway:List[Dict[str,Tuple[int]]] = []
+        self.search_trees:Dict[str, List[List[int]]] = {}
+        self.highway:List[Dict[str, Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
@@ -64,12 +66,12 @@ class PlanConfig:
         self.grids:List = []
         self.heat_grids:List = []
         self.heuristic_grids:List = []
-        self.search_tree_grids:Dict[str,List] = {}
+        self.search_tree_grids:Dict[str, List] = {}
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
         self.conflicts  = {}
-        self.agents:Dict[int,Agent] = {}
+        self.agents:Dict[int, Agent] = {}
         self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
         self.cur_timestep:int = self.start_tstep
@@ -96,7 +98,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
-        self.load_heuristics(heu_file, 0)
+        self.load_heuristic_map(heu_file, 0)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -316,8 +318,10 @@ class PlanConfig:
 
 
     def load_heat_maps(self, plan_files:List[str]):
-        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        if not plan_files:  # plan_files is empty
+            return
 
+        self.heat_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
         for plan_file in plan_files:
             data = {}
             with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -365,11 +369,12 @@ class PlanConfig:
                     self.heat_map[p[0]][p[1]] += 1
 
 
-    def load_heuristics(self, heu_file:str, ag:int):
+    def load_heuristic_map(self, heu_file:str, ag:int):
         if heu_file == "":
             return
-        self.heuristic_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+
         with open(heu_file, mode="r", encoding="UTF-8") as fin:
+            self.heuristic_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
             for _ in range(0, ag):
                 fin.readline()
             line = fin.readline().strip().split(",")
@@ -403,6 +408,9 @@ class PlanConfig:
 
 
     def load_search_trees(self, search_tree_files:List[str]):
+        if not search_tree_files:
+            return
+
         print("Loading search trees... ", end="")
         for fin in search_tree_files:
             search_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
@@ -562,6 +570,9 @@ class PlanConfig:
 
 
     def render_heat_map(self):
+        if not self.heat_map:
+            return
+
         print("Rendering the heatmap... ", end="")
         min_val = np.inf
         for cur_row in self.heat_map:
@@ -593,6 +604,9 @@ class PlanConfig:
 
 
     def render_highway(self):
+        if not self.highway:
+            return
+
         print("Rendering the highway... ", end="")
         HWY_DIRECTION = {(1,0): "↓",  # Down
                          (0,1): "→",  # Right
@@ -615,8 +629,10 @@ class PlanConfig:
 
 
     def render_heuristic_map(self):
-        print("Rendering the heuristic map... ", end="")
+        if not self.heuristic_map:
+            return
 
+        print("Rendering the heuristic map... ", end="")
         max_val = -np.inf
         for cur_row in self.heuristic_map:
             for cur_ele in cur_row:
@@ -643,6 +659,9 @@ class PlanConfig:
 
 
     def render_search_trees(self):
+        if not self.search_trees:
+            return
+
         print("Renderinf the search trees... ", end="")
         # Render search trees
         min_val = np.inf

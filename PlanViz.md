@@ -46,6 +46,7 @@ The user interface supports a variety of operations to control and focus the dis
 - `--delay` (type: *float*):  Wait time for each timestep after agents' movements.
 - `--start` (type: *int*): Start timestep for visualization (*default*: 0).
 - `--end` (type: *int*): End timestep for visualization (*default*: 100).
+- `--hm` (type: *List[str]*): A list of path files (ends with `.json`) for generating heatmap.
 
 If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problems),
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
@@ -53,5 +54,5 @@ then we have default values for `ppm`, `mv`, and `delay`, so the user does not n
 ## Run
 To run PlanViz, open a terminal under the directory `PlanViz/script` and type the following example command:
 ```bash
-python3 plan_viz.py --map ../example/warehouse_small.map --plan ../example/warehouse_small.json --grid --aid --static --ca
+python3 run.py --map ../example/warehouse_small.map --plan ../example/warehouse_small.json --grid --aid --static --ca
 ```
