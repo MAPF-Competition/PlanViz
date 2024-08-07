@@ -2,6 +2,7 @@
 """ Utility functions
 """
 
+import sys
 import math
 from typing import List, Tuple, Dict
 
@@ -111,6 +112,42 @@ def get_rotation(cur_dir:int, next_dir:int):
             return 1
         if next_dir == 2:
             return -1
+
+
+def state_transition(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
+    if motion == "F":  # Forward
+        if cur_state[-1] == 0:  # Right
+            return (cur_state[0], cur_state[1]+1, cur_state[2])
+        if cur_state[-1] == 1:  # Up
+            return (cur_state[0]-1, cur_state[1], cur_state[2])
+        if cur_state[-1] == 2:  # Left
+            return (cur_state[0], cur_state[1]-1, cur_state[2])
+        if cur_state[-1] == 3:  # Down
+            return (cur_state[0]+1, cur_state[1], cur_state[2])
+    elif motion == "R":  # Clockwise
+        return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
+    elif motion == "C":  # Counter-clockwise
+        return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
+    elif motion in ["W", "T"]:
+        return cur_state
+    else:
+        print("Invalid motion")
+        sys.exit()
+
+
+def state_transition_mapf(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
+    if motion == "D":  # south (down)
+        return (cur_state[0]+1, cur_state[1], cur_state[2])
+    if motion == "L": #west (left)
+        return (cur_state[0], cur_state[1]-1, cur_state[2])
+    if motion == "R": #east (right)
+        return (cur_state[0], cur_state[1]+1, cur_state[2])
+    if motion == "U": #north (up)
+        return (cur_state[0]-1, cur_state[1], cur_state[2])
+    if motion in ["W", "T"]:
+        return cur_state
+    print("Invalid motion")
+    sys.exit()
 
 
 class BaseObj:

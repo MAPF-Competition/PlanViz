@@ -57,6 +57,7 @@ class PlanConfig2:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
+        self.tasks = {}
 
         self.grids:List = []
         self.start_loc  = {}
@@ -183,9 +184,36 @@ class PlanConfig2:
             if released_time > self.end_tstep:
                 continue
             task_locs = []
+            task_objs = []
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                task_locs.append(tloc)
-
                 tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                task_locs.append(tloc)
+                task_objs.append(tobj)
+            self.tasks[tid] = SequentialTask(tid, task_locs, task_objs)
+        print("Done!")
+
+
+    def load_plan(self, plan_file):
+        data = {}
+        with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
+            data = json.load(fin)
+
+        if self.team_size == np.inf:
+            self.team_size = data["teamSize"]
+
+        if self.end_tstep == np.inf:
+            if "makespan" not in data.keys():
+                raise KeyError("Missing makespan!")
+            self.end_tstep = data["makespan"]
+
+        if self.agent_model == "":
+            if 'actionModel' not in data.keys():
+                raise KeyError("Missing action model!")
+            self.agent_model = data['actionModel']
+
+        self.load_paths(data)
+        self.load_errors(data)
+        self.load_sequential_tasks(data)
+

@@ -14,8 +14,10 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
-    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, Task, SequentialTask
+from util import\
+    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,\
+    get_map_name, get_dir_loc, state_transition, state_transition_mapf,\
+    BaseObj, Agent, Task
 
 
 class PlanConfig:
@@ -134,9 +136,9 @@ class PlanConfig:
     def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
 
-        state_trans = self.state_transition
+        state_trans = state_transition
         if self.agent_model == "MAPF":
-            state_trans = self.state_transition_mapf
+            state_trans = state_transition_mapf
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -424,42 +426,6 @@ class PlanConfig:
             if file_name not in self.search_trees:
                 self.search_trees[file_name] = search_map
         print("Done!")
-
-
-    def state_transition(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "F":  # Forward
-            if cur_state[-1] == 0:  # Right
-                return (cur_state[0], cur_state[1]+1, cur_state[2])
-            if cur_state[-1] == 1:  # Up
-                return (cur_state[0]-1, cur_state[1], cur_state[2])
-            if cur_state[-1] == 2:  # Left
-                return (cur_state[0], cur_state[1]-1, cur_state[2])
-            if cur_state[-1] == 3:  # Down
-                return (cur_state[0]+1, cur_state[1], cur_state[2])
-        elif motion == "R":  # Clockwise
-            return (cur_state[0], cur_state[1], (cur_state[2]+3)%4)
-        elif motion == "C":  # Counter-clockwise
-            return (cur_state[0], cur_state[1], (cur_state[2]+1)%4)
-        elif motion in ["W", "T"]:
-            return cur_state
-        else:
-            logging.error("Invalid motion")
-            sys.exit()
-
-
-    def state_transition_mapf(self, cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
-        if motion == "D":  # south (down)
-            return (cur_state[0]+1, cur_state[1], cur_state[2])
-        if motion == "L": #west (left)
-            return (cur_state[0], cur_state[1]-1, cur_state[2])
-        if motion == "R": #east (right)
-            return (cur_state[0], cur_state[1]+1, cur_state[2])
-        if motion == "U": #north (up)
-            return (cur_state[0]-1, cur_state[1], cur_state[2])
-        if motion in ["W", "T"]:
-            return cur_state
-        logging.error("Invalid motion")
-        sys.exit()
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
