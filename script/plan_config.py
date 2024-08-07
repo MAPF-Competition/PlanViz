@@ -54,7 +54,7 @@ class PlanConfig:
         self.height:int = -1
         self.env_map:List[List[int]] = []
         self.heat_map:List[List[int]] = []
-        self.heuristic_map:List[List[int]] = []
+        self.heuristic_map:List[List] = []
         self.search_trees:Dict[str,List[List[int]]] = {}
         self.highway:List[Dict[str,Tuple[int]]] = []
         self.tasks = {}
@@ -96,7 +96,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
-        self.load_heuristics(heu_file, 19)
+        self.load_heuristics(heu_file, 0)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -563,7 +563,6 @@ class PlanConfig:
 
     def render_heat_map(self):
         print("Rendering the heatmap... ", end="")
-        # Render heat map
         min_val = np.inf
         for cur_row in self.heat_map:
             for cur_ele in cur_row:
@@ -577,8 +576,7 @@ class PlanConfig:
                     max_val = cur_ele
 
         cmap = cm.get_cmap("Reds")
-        # norm = Normalize(vmin=min_val, vmax=max_val)
-        norm = Normalize(vmin=0, vmax=17)
+        norm = Normalize(vmin=0, vmax=max_val)
         rgba = cmap(norm(self.heat_map))
         for rid, cur_row in enumerate(self.heat_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -619,8 +617,16 @@ class PlanConfig:
     def render_heuristic_map(self):
         print("Rendering the heuristic map... ", end="")
 
-        cmap = cm.get_cmap("Greens")
-        norm = Normalize(vmin=0, vmax=self.width+self.height)
+        max_val = -np.inf
+        for cur_row in self.heuristic_map:
+            for cur_ele in cur_row:
+                if cur_ele in [DBL_MAX, INT_MAX]:
+                    continue
+                if cur_ele > max_val:
+                    max_val = cur_ele
+
+        cmap = cm.get_cmap("Greys")
+        norm = Normalize(vmin=0, vmax=max_val)
         rgba = cmap(norm(self.heuristic_map))
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
@@ -630,8 +636,8 @@ class PlanConfig:
                              int(rgba[rid][cid][1] * 255),
                              int(rgba[rid][cid][2]*255))
                 _code = '#%02x%02x%02x' % cur_color
-                _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
-                                       0.0, "heuristic", "grey")
+                _obj = self.render_obj(int(np.around(cur_ele)), (rid,cid), "rectangle", _code,
+                                       tk.HIDDEN, 0.0, "heuristic", "grey")
                 self.heuristic_grids.append(_obj)
         print("Done!")
 
