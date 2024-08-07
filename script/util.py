@@ -112,12 +112,14 @@ def get_rotation(cur_dir:int, next_dir:int):
         if next_dir == 2:
             return -1
 
+
 class BaseObj:
     def __init__(self, _obj_, _text_, _loc_, _color_) -> None:
         self.obj = _obj_
         self.text = _text_
         self.loc = _loc_
         self.color = _color_
+
 
 class Agent:
     def __init__(self, idx, ag_obj:BaseObj, st_obj:BaseObj, plan_pth:List,
@@ -131,6 +133,7 @@ class Agent:
         self.dir_obj = dir_obj  # Oval on canvas showing the direction of an agent
         self.path = self.exec_path  # Set execution path as default
 
+
 class Task:
     def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,
                  assigned:Tuple[int,int]=(math.inf,math.inf),
@@ -142,3 +145,20 @@ class Task:
                        "finished": {"agent": finished[0], "timestep": finished[1]}}
         self.task_obj = task_obj
         self.state = state
+
+
+class SequentialTask:
+    def __init__(self,
+                 idx:int=-1,
+                 locs:List[Tuple[int,int]]=[],
+                 task_objs:List[BaseObj]=[],
+                 assigned:Tuple[int,int]=(math.inf,math.inf),
+                 finished:Tuple[int,int]=(math.inf,math.inf),
+                 state:int=0) -> None:
+        self.idx = idx
+        self.locs = locs
+        self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
+                       "finished": {"agent": finished[0], "timestep": finished[1]}}
+        self.task_objs = task_objs
+        self.state = state
+        self.seq_id = 0  # current sequence ID that the agent is handling

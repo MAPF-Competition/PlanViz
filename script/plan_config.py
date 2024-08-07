@@ -15,11 +15,11 @@ import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
 from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
-    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, Task
+    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, Task, SequentialTask
 
 
 class PlanConfig:
-    """ Plan configuration and loading and rendering functions.
+    """ Plan configuration for loading and rendering functions.
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
@@ -195,7 +195,7 @@ class PlanConfig:
             print("No events.")
             return
 
-        # Initialize assigned events
+        # Load all the assigned events
         ag_to_timedtasks = {}
         for ag_ in range(self.team_size):
             for eve in data["events"][ag_]:
@@ -207,7 +207,7 @@ class PlanConfig:
                     ag_to_timedtasks[ag_] = []
                 ag_to_timedtasks[ag_].append((tid, tstep))
 
-        for _, timedtasks in ag_to_timedtasks.items():
+        for _, timedtasks in ag_to_timedtasks.items():  # Extract tasks between start and end timesteps
             timedtasks.sort(key=lambda x: x[1])
             st_id = 0
             ed_id = len(timedtasks)
@@ -273,21 +273,21 @@ class PlanConfig:
                 if a_time == -1:
                     continue
                 for tid in self.events["assigned"][a_time]:
-                    _task_ = data["tasks"][tid]
-                    assert tid == _task_[0]
-                    _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
-                    new_task = Task(tid, _tloc_, _tobj_)
+                    task = data["tasks"][tid]
+                    assert tid == task[0]
+                    tloc = (task[1], task[2])
+                    tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                    new_task = Task(tid, tloc, tobj)
                     self.tasks[tid] = new_task
         else:
             print("No events found. Render all tasks.", end=" ")
             for _, task_list in self.ag_to_task.items():
                 for tid in task_list:
-                    _task_ = data["tasks"][tid]
-                    assert tid == _task_[0]
-                    _tloc_ = (_task_[1], _task_[2])
-                    _tobj_ = self.render_obj(tid, _tloc_, "rectangle", TASK_COLORS["unassigned"])
-                    new_task = Task(tid, _tloc_, _tobj_)
+                    task = data["tasks"][tid]
+                    assert tid == task[0]
+                    tloc = (task[1], task[2])
+                    tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                    new_task = Task(tid, tloc, tobj)
                     self.tasks[tid] = new_task
 
         print("Done!")
