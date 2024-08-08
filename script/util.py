@@ -175,7 +175,7 @@ class Task:
     def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,
                  assigned:Tuple[int,int]=(math.inf,math.inf),
                  finished:Tuple[int,int]=(math.inf,math.inf),
-                 state:int=0):
+                 state:str="unassigned"):
         self.idx = idx
         self.loc = loc
         self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
@@ -185,17 +185,13 @@ class Task:
 
 
 class SequentialTask:
-    def __init__(self,
-                 idx:int=-1,
-                 locs:List[Tuple[int,int]]=[],
-                 task_objs:List[BaseObj]=[],
-                 assigned:Tuple[int,int]=(math.inf,math.inf),
-                 finished:Tuple[int,int]=(math.inf,math.inf),
-                 state:int=0) -> None:
+    def __init__(self, idx:int, locs:List[Tuple[int,int]], task_objs:List[BaseObj],
+                 assigned:Tuple[int,int]=(math.inf,math.inf), finished:Tuple[int,int]=(math.inf,math.inf),
+                 state:str="unassigned", seq_id=0) -> None:
         self.idx = idx
         self.locs = locs
         self.events = {"assigned": {"agent": assigned[0], "timestep": assigned[1]},
                        "finished": {"agent": finished[0], "timestep": finished[1]}}
         self.task_objs = task_objs
         self.state = state
-        self.seq_id = 0  # current sequence ID that the agent is handling
+        self.seq_id = seq_id  # current sequence ID (sequence [0, ..., seq_id-1] have done)

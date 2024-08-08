@@ -14,6 +14,7 @@ from tkinter import ttk
 import time
 from util import TASK_COLORS, AGENT_COLORS, DIR_OFFSET, TEXT_SIZE, \
     get_angle, get_dir_loc, get_rotation
+from plan_config import PlanConfig
 
 
 class PlanViz:
@@ -23,7 +24,7 @@ class PlanViz:
         print("===== Initialize PlanViz    =====")
 
         # Load the yaml file or the input arguments
-        self.pcf = plan_config
+        self.pcf:PlanConfig = plan_config
         self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
 
         # This is what enables using the mouse:
@@ -499,7 +500,7 @@ class PlanViz:
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
 
-        # Reset the tasks
+        # Reset the tasks if no agent needs to show its path
         if not self.pcf.shown_path_agents:
             for ag_ in range(self.pcf.team_size):
                 for tid_ in self.pcf.ag_to_task[ag_]:

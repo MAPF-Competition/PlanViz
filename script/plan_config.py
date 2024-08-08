@@ -300,8 +300,7 @@ class PlanConfig:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
-        if self.team_size == np.inf:
-            self.team_size = data["teamSize"]
+        self.team_size = min(data["teamSize"], self.team_size)
 
         if self.end_tstep == np.inf:
             if "makespan" not in data.keys():
@@ -342,9 +341,9 @@ class PlanConfig:
                     raise KeyError("Missing action model!")
                 self.agent_model = data['actionModel']
 
-            state_trans = self.state_transition
+            state_trans = state_transition
             if self.agent_model == "MAPF":
-                state_trans = self.state_transition_mapf
+                state_trans = state_transition_mapf
 
             for ag_id in range(data["teamSize"]):
                 start = data["start"][ag_id]  # Get start location
@@ -628,7 +627,7 @@ class PlanConfig:
         if not self.search_trees:
             return
 
-        print("Renderinf the search trees... ", end="")
+        print("Rendering the search trees... ", end="")
         # Render search trees
         min_val = np.inf
         max_val = -np.inf

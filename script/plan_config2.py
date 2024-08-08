@@ -14,8 +14,10 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
-from util import TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
-    INT_MAX, DBL_MAX, get_map_name, get_dir_loc, BaseObj, Agent, SequentialTask
+from util import\
+    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,\
+    get_map_name, get_dir_loc, state_transition, state_transition_mapf,\
+    BaseObj, Agent, SequentialTask
 
 
 class PlanConfig2:
@@ -57,7 +59,7 @@ class PlanConfig2:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
-        self.tasks = {}
+        self.tasks:Dict[int, SequentialTask] = {}
 
         self.grids:List = []
         self.start_loc  = {}
@@ -69,6 +71,7 @@ class PlanConfig2:
         self.makespan:int = -1
         self.cur_timestep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
+        self.shown_tasks_seq:Set[int] = set()
         self.conflict_agents:Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
@@ -87,6 +90,10 @@ class PlanConfig2:
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+
+        # Render instance on canvas
+        self.render_env()
+        self.render_agents()
 
 
     def load_map(self, map_file:str) -> None:
@@ -116,9 +123,9 @@ class PlanConfig2:
     def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
 
-        state_trans = self.state_transition
+        state_trans = state_transition
         if self.agent_model == "MAPF":
-            state_trans = self.state_transition_mapf
+            state_trans = state_transition_mapf
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -188,7 +195,7 @@ class PlanConfig2:
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"])
+                tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0.05, str(tid))
                 task_locs.append(tloc)
                 task_objs.append(tobj)
             self.tasks[tid] = SequentialTask(tid, task_locs, task_objs)
@@ -217,3 +224,159 @@ class PlanConfig2:
         self.load_errors(data)
         self.load_sequential_tasks(data)
 
+
+    def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
+                   _color_:str="blue", _state_=tk.NORMAL,
+                   offset:float=0.05, _tag_:str="obj", _outline_:str=""):
+        """Mark certain positions on the visualizer
+
+        Args:
+            _idx_ (int, required): The index of the object
+            _loc_ (List, required): A list of locations on the map.
+            _shape_ (str, optional): The shape of marked on each location. Defaults to "rectangle".
+            _color_ (str, optional): The color of the mark. Defaults to "blue".
+            _state_ (str, optional): Whether to show the object or not. Defaults to tk.NORMAL
+        """
+        _tmp_canvas_ = None
+        if _shape_ == "rectangle":
+            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[1]+offset) * self.tile_size,
+                                                        (_loc_[0]+offset) * self.tile_size,
+                                                        (_loc_[1]+1-offset) * self.tile_size,
+                                                        (_loc_[0]+1-offset) * self.tile_size,
+                                                        fill=_color_,
+                                                        tag=_tag_,
+                                                        state=_state_,
+                                                        outline=_outline_)
+        elif _shape_ == "oval":
+            _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
+                                                   (_loc_[0]+offset) * self.tile_size,
+                                                   (_loc_[1]+1-offset) * self.tile_size,
+                                                   (_loc_[0]+1-offset) * self.tile_size,
+                                                   fill=_color_,
+                                                   tag=_tag_,
+                                                   state=_state_,
+                                                   outline=_outline_)
+        else:
+            logging.error("Undefined shape.")
+            sys.exit()
+
+        shown_text = ""
+        if _idx_ > -1:
+            shown_text = str(_idx_)
+        _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
+                                            (_loc_[0]+0.5)*self.tile_size,
+                                            text=shown_text,
+                                            fill="black",
+                                            tag=("text", _tag_),
+                                            state=_state_,
+                                            font=("Arial", int(self.tile_size // 2)))
+
+        return BaseObj(_tmp_canvas_, _tmp_text_, _loc_, _color_)
+
+
+    def render_env(self) -> None:
+        print("Rendering the environment ... ", end="")
+        # Render grids
+        for rid in range(self.height):  # Render horizontal lines
+            _line_ = self.canvas.create_line(0, rid * self.tile_size,
+                                             self.width * self.tile_size, rid * self.tile_size,
+                                             tags="grid",
+                                             state= tk.NORMAL,
+                                             fill="grey")
+            self.grids.append(_line_)
+        for cid in range(self.width):  # Render vertical lines
+            _line_ = self.canvas.create_line(cid * self.tile_size, 0,
+                                             cid * self.tile_size, self.height * self.tile_size,
+                                             tags="grid",
+                                             state= tk.NORMAL,
+                                             fill="grey")
+            self.grids.append(_line_)
+
+        # Render features
+        for rid, cur_row in enumerate(self.env_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele == 0:  # obstacles
+                    self.canvas.create_rectangle(cid * self.tile_size,
+                                                 rid * self.tile_size,
+                                                 (cid+1) * self.tile_size,
+                                                 (rid+1) * self.tile_size,
+                                                 state=tk.DISABLED,
+                                                 outline="",
+                                                 fill="black")
+
+        # Render coordinates
+        for cid in range(self.width):
+            self.canvas.create_text((cid+0.5)*self.tile_size,
+                                    (self.height+0.5)*self.tile_size,
+                                    text=str(cid),
+                                    fill="black",
+                                    tag="text",
+                                    state=tk.DISABLED,
+                                    font=("Arial", int(self.tile_size//2)))
+        for rid in range(self.height):
+            self.canvas.create_text((self.width+0.5)*self.tile_size,
+                                    (rid+0.5)*self.tile_size,
+                                    text=str(rid),
+                                    fill="black",
+                                    tag="text",
+                                    state=tk.DISABLED,
+                                    font=("Arial", int(self.tile_size//2)))
+        self.canvas.create_line(self.width * self.tile_size, 0,
+                                self.width * self.tile_size, self.height * self.tile_size,
+                                state=tk.DISABLED,
+                                fill="black")
+        self.canvas.create_line(0, self.height * self.tile_size,
+                                self.width * self.tile_size, self.height * self.tile_size,
+                                state=tk.DISABLED,
+                                fill="black")
+        print("Done!")
+
+
+    def render_agents(self):
+        print("Rendering the agents... ", end="")
+        # Separate the render of static locations and agents so that agents can overlap
+        start_objs = []
+        path_objs = []
+
+        for ag_id in range(self.team_size):
+            start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", tk.DISABLED)
+            start_objs.append(start)
+
+            ag_path = []  # Render paths as purple rectangles
+            for _pid_ in range(len(self.exec_paths[ag_id])):
+                p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
+                p_obj = None
+                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
+                                             self.exec_paths[ag_id][_pid_-1][1]):
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
+                else:  # non-wait action, smaller rectangle
+                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
+                if p_obj is not None:
+                    self.canvas.tag_lower(p_obj.obj)
+                    self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
+                    self.canvas.delete(p_obj.text)
+                    ag_path.append(p_obj)
+            path_objs.append(ag_path)
+
+        if self.team_size != len(self.exec_paths):
+            raise ValueError("Missing actual paths!")
+
+        for ag_id in range(self.team_size):  # Render the actual agents
+            agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
+                                        AGENT_COLORS["assigned"], tk.DISABLED, 0.05, str(ag_id))
+            dir_obj = None
+            if self.agent_model == "MAPF_T":
+                dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
+                dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
+                                                dir_loc[1] * self.tile_size,
+                                                dir_loc[2] * self.tile_size,
+                                                dir_loc[3] * self.tile_size,
+                                                fill="navy",
+                                                tag="dir",
+                                                state=tk.DISABLED,
+                                                outline="")
+
+            agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
+                          path_objs[ag_id], self.exec_paths[ag_id], dir_obj)
+            self.agents[ag_id] = agent
+        print("Done!")
