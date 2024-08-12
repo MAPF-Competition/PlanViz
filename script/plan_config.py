@@ -595,7 +595,7 @@ class PlanConfig:
                     continue
                 cur_color = (int(rgba[rid][cid][0] * 255),
                              int(rgba[rid][cid][1] * 255),
-                             int(rgba[rid][cid][2]*255))
+                             int(rgba[rid][cid][2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
                 _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                             0.0, "heatmap", "grey")
