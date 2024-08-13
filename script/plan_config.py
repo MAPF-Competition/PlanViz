@@ -100,7 +100,7 @@ class PlanConfig:
         self.load_heat_maps(heat_maps)  # Load heat map with exec_paths and others json files
         self.load_highway(hwy_file)
         self.load_search_trees(search_tree_files)
-        self.load_heuristic_map(heu_file, 0)
+        self.load_heuristic_map(heu_file, 104)
         self.render_env()
         self.render_heat_map()
         self.render_highway()
@@ -560,7 +560,7 @@ class PlanConfig:
                     continue
                 cur_color = (int(rgba[rid][cid][0] * 255),
                              int(rgba[rid][cid][1] * 255),
-                             int(rgba[rid][cid][2]*255))
+                             int(rgba[rid][cid][2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
                 _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                             0.0, "heatmap", "grey")
@@ -608,14 +608,14 @@ class PlanConfig:
 
         cmap = cm.get_cmap("Greys")
         norm = Normalize(vmin=0, vmax=max_val)
-        rgba = cmap(norm(self.heuristic_map))
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
                 if cur_ele in [DBL_MAX, INT_MAX]:
                     continue
-                cur_color = (int(rgba[rid][cid][0] * 255),
-                             int(rgba[rid][cid][1] * 255),
-                             int(rgba[rid][cid][2]*255))
+                cur_rgba = cmap(norm(self.heuristic_map[rid][cid]))
+                cur_color = (int(cur_rgba[0] * 255),
+                             int(cur_rgba[1] * 255),
+                             int(cur_rgba[2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
                 _obj = self.render_obj(int(np.around(cur_ele)), (rid,cid), "rectangle", _code,
                                        tk.HIDDEN, 0.0, "heuristic", "grey")
