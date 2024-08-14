@@ -23,7 +23,7 @@ from util import\
 class PlanConfig2:
     """ Plan configuration for loading and rendering functions
 
-    This is for LORR 2025.
+    This is for LORR 2025, and I am like a clown (not even a joker).
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay):
@@ -195,7 +195,9 @@ class PlanConfig2:
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                tobj = self.render_obj(tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0.05, str(tid))
+                tobj = self.render_obj(
+                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0.05, str(tid)
+                )
                 task_locs.append(tloc)
                 task_objs.append(tobj)
             self.tasks[tid] = SequentialTask(tid, task_locs, task_objs)
@@ -347,7 +349,7 @@ class PlanConfig2:
                 p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
                 p_obj = None
                 if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
-                                             self.exec_paths[ag_id][_pid_-1][1]):
+                                           self.exec_paths[ag_id][_pid_-1][1]):
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
