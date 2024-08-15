@@ -25,8 +25,8 @@ class PlanViz2:
 
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2 = plan_config
-        # self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
-        self.pcf.canvas.bind("<Button-3>", self.show_task_seq_by_click)
+        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
+        # self.pcf.canvas.bind("<Button-3>", self.show_task_seq_by_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)

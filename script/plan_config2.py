@@ -206,7 +206,7 @@ class PlanConfig2:
                     assign_tstep <= self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"]:
                     continue
 
-                for seq_id in range(len(self.seq_tasks[task_id].tasks)):
+                for seq_id, _ in enumerate(self.seq_tasks[task_id].tasks):
                     global_task_id = self.max_seq_num * task_id + seq_id
                     if assign_tstep not in self.events["assigned"]:
                         self.events["assigned"][assign_tstep] = {}
