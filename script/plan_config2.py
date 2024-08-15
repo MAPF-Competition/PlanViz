@@ -10,14 +10,14 @@ import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
-import numpy as np
+import math
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
 from util import\
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,\
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,\
-    BaseObj, Agent, SequentialTask
+    BaseObj, Agent, Task, SequentialTask
 
 
 class PlanConfig2:
@@ -59,7 +59,12 @@ class PlanConfig2:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
-        self.tasks:Dict[int, SequentialTask] = {}
+
+        self.max_seq_num = -1
+        self.seq_tasks:Dict[int, SequentialTask] = {}
+        self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
+        self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
+        self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
 
         self.grids:List = []
         self.start_loc  = {}
@@ -90,6 +95,7 @@ class PlanConfig2:
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        # self.load_errors()
 
         # Render instance on canvas
         self.render_env()
@@ -153,6 +159,7 @@ class PlanConfig2:
             else:
                 print("No planner paths.", end=" ")
 
+        # Slice the paths according to the start and end timestep
         for ag_id in range(self.team_size):
             self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
             self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
@@ -177,6 +184,51 @@ class PlanConfig2:
         print("Done!")
 
 
+    def load_schedule(self, data:Dict):
+        print("Loading schedule", end="...")
+
+        if "actualSchedule" not in data:
+            print("No actualSchedule.")
+            return
+
+        for ag_id, schedule in enumerate(data["actualSchedule"]):
+            for ele in schedule.split(","):
+                assign_tstep = int(ele.split(":")[0])
+                if assign_tstep > self.end_tstep:
+                    continue
+                task_id = int(ele.split(":")[1])
+                if assign_tstep not in self.actual_schedule:
+                    self.actual_schedule[assign_tstep] = []
+                self.actual_schedule[assign_tstep].append((task_id, ag_id))
+
+                # Only consider the maximum assign timestep
+                assert task_id in self.seq_tasks
+                if self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"] != math.inf and \
+                    assign_tstep <= self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"]:
+                    continue
+
+                for seq_id in range(len(self.seq_tasks[task_id].tasks)):
+                    global_task_id = self.max_seq_num * task_id + seq_id
+                    if assign_tstep not in self.events["assigned"]:
+                        self.events["assigned"][assign_tstep] = {}
+                    self.events["assigned"][assign_tstep][global_task_id] = ag_id
+        self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
+        self.event_tracker["aTime"].append(-1)
+
+
+    def load_events(self, data:Dict):
+        print("Loading event", end="...")
+
+        assert self.max_seq_num > -1
+        for (finish_tstep, ag_id, task_id, seq_id) in data["events"]:
+            global_task_id = self.max_seq_num * task_id + seq_id
+            if finish_tstep not in self.events["finished"]:
+                self.events["finished"][finish_tstep] = {}
+            self.events["finished"][finish_tstep][global_task_id] = ag_id
+        self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
+        self.event_tracker["fTime"].append(-1)
+
+
     def load_sequential_tasks(self, data:Dict):
         print("Loading tasks", end="...")
 
@@ -184,23 +236,22 @@ class PlanConfig2:
             print("No tasks.")
             return
 
-        print("No events found. Render all tasks with released time inside.", end=" ")
+        assert self.max_seq_num == -1
         for task in data["tasks"]:  # Now we need to use the released time of each task
             tid = task[0]
-            released_time = task[1]
-            if released_time > self.end_tstep:
+            release_tstep = task[1]
+            if release_tstep > self.end_tstep:
                 continue
-            task_locs = []
-            task_objs = []
+            tasks = []
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
                 tobj = self.render_obj(
                     tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0.05, str(tid)
                 )
-                task_locs.append(tloc)
-                task_objs.append(tobj)
-            self.tasks[tid] = SequentialTask(tid, task_locs, task_objs)
+                tasks.append(Task(tid, tloc, tobj))
+            self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)
+            self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
 
 
@@ -209,10 +260,10 @@ class PlanConfig2:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
-        if self.team_size == np.inf:
+        if self.team_size == math.inf:
             self.team_size = data["teamSize"]
 
-        if self.end_tstep == np.inf:
+        if self.end_tstep == math.inf:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
             self.end_tstep = data["makespan"]
@@ -225,6 +276,8 @@ class PlanConfig2:
         self.load_paths(data)
         self.load_errors(data)
         self.load_sequential_tasks(data)
+        self.load_schedule(data)
+        self.load_events(data)
 
 
     def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
