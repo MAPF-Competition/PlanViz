@@ -221,8 +221,8 @@ class PlanConfig2:
         print("Loading event", end="...")
 
         assert self.max_seq_num > -1
-        for (finish_tstep, ag_id, task_id, seq_id) in data["events"]:
-            seq_id -= 1
+        for (finish_tstep, ag_id, task_id, nxt_errand_id) in data["events"]:
+            seq_id = nxt_errand_id - 1
             global_task_id = self.max_seq_num * task_id + seq_id
             if finish_tstep not in self.events["finished"]:
                 self.events["finished"][finish_tstep] = {}
