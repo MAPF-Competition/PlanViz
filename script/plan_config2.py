@@ -72,7 +72,6 @@ class PlanConfig2:
         self.exec_paths = {}
         self.conflicts  = {}
         self.agents:Dict[int, Agent] = {}
-        self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
         self.cur_timestep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
@@ -212,6 +211,8 @@ class PlanConfig2:
                     if assign_tstep not in self.events["assigned"]:
                         self.events["assigned"][assign_tstep] = {}
                     self.events["assigned"][assign_tstep][global_task_id] = ag_id
+                    self.seq_tasks[task_id].tasks[seq_id].events["assigned"]["agent"] = ag_id
+                    self.seq_tasks[task_id].tasks[seq_id].events["assigned"]["timestep"] = assign_tstep
         self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
         self.event_tracker["aTime"].append(-1)
 
@@ -221,10 +222,13 @@ class PlanConfig2:
 
         assert self.max_seq_num > -1
         for (finish_tstep, ag_id, task_id, seq_id) in data["events"]:
+            seq_id -= 1
             global_task_id = self.max_seq_num * task_id + seq_id
             if finish_tstep not in self.events["finished"]:
                 self.events["finished"][finish_tstep] = {}
             self.events["finished"][finish_tstep][global_task_id] = ag_id
+            self.seq_tasks[task_id].tasks[seq_id].events["finished"]["agent"] = ag_id
+            self.seq_tasks[task_id].tasks[seq_id].events["finished"]["timestep"] = finish_tstep
         self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
         self.event_tracker["fTime"].append(-1)
 
@@ -280,68 +284,72 @@ class PlanConfig2:
         self.load_events(data)
 
 
-    def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
-                   _color_:str="blue", _state_=tk.NORMAL,
-                   offset:float=0.05, _tag_:str="obj", _outline_:str=""):
+    def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",
+                   color:str="blue", state=tk.NORMAL,
+                   offset:float=0.05, tag:str="obj", outline:str=""):
         """Mark certain positions on the visualizer
 
         Args:
-            _idx_ (int, required): The index of the object
-            _loc_ (List, required): A list of locations on the map.
-            _shape_ (str, optional): The shape of marked on each location. Defaults to "rectangle".
-            _color_ (str, optional): The color of the mark. Defaults to "blue".
-            _state_ (str, optional): Whether to show the object or not. Defaults to tk.NORMAL
+            idx (int, required): The index of the object
+            loc (List, required): A list of locations on the map.
+            shape (str, optional): The shape of marked on each location. Defaults to "rectangle".
+            color (str, optional): The color of the mark. Defaults to "blue".
+            state (str, optional): Whether to show the object or not. Defaults to tk.NORMAL
         """
-        _tmp_canvas_ = None
-        if _shape_ == "rectangle":
-            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[1]+offset) * self.tile_size,
-                                                        (_loc_[0]+offset) * self.tile_size,
-                                                        (_loc_[1]+1-offset) * self.tile_size,
-                                                        (_loc_[0]+1-offset) * self.tile_size,
-                                                        fill=_color_,
-                                                        tag=_tag_,
-                                                        state=_state_,
-                                                        outline=_outline_)
-        elif _shape_ == "oval":
-            _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
-                                                   (_loc_[0]+offset) * self.tile_size,
-                                                   (_loc_[1]+1-offset) * self.tile_size,
-                                                   (_loc_[0]+1-offset) * self.tile_size,
-                                                   fill=_color_,
-                                                   tag=_tag_,
-                                                   state=_state_,
-                                                   outline=_outline_)
+        tmp_canvas = None
+        if shape == "rectangle":
+            tmp_canvas = self.canvas.create_rectangle((loc[1]+offset)*self.tile_size,
+                                                      (loc[0]+offset)*self.tile_size,
+                                                      (loc[1]+1-offset)*self.tile_size,
+                                                      (loc[0]+1-offset)*self.tile_size,
+                                                      fill=color,
+                                                      tag=tag,
+                                                      state=state,
+                                                      outline=outline)
+        elif shape == "oval":
+            tmp_canvas = self.canvas.create_oval((loc[1]+offset)*self.tile_size,
+                                                 (loc[0]+offset)*self.tile_size,
+                                                 (loc[1]+1-offset)*self.tile_size,
+                                                 (loc[0]+1-offset)*self.tile_size,
+                                                 fill=color,
+                                                 tag=tag,
+                                                 state=state,
+                                                 outline=outline)
         else:
             logging.error("Undefined shape.")
             sys.exit()
 
         shown_text = ""
-        if _idx_ > -1:
-            shown_text = str(_idx_)
-        _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
-                                            (_loc_[0]+0.5)*self.tile_size,
-                                            text=shown_text,
-                                            fill="black",
-                                            tag=("text", _tag_),
-                                            state=_state_,
-                                            font=("Arial", int(self.tile_size // 2)))
+        if idx > -1:
+            shown_text = str(idx)
+        tmp_text = self.canvas.create_text((loc[1]+0.5)*self.tile_size,
+                                           (loc[0]+0.5)*self.tile_size,
+                                           text=shown_text,
+                                           fill="black",
+                                           tag=("text", tag),
+                                           state=state,
+                                           font=("Arial", int(self.tile_size // 2)))
 
-        return BaseObj(_tmp_canvas_, _tmp_text_, _loc_, _color_)
+        return BaseObj(tmp_canvas, tmp_text, loc, color)
 
 
     def render_env(self) -> None:
         print("Rendering the environment ... ", end="")
         # Render grids
         for rid in range(self.height):  # Render horizontal lines
-            _line_ = self.canvas.create_line(0, rid * self.tile_size,
-                                             self.width * self.tile_size, rid * self.tile_size,
+            _line_ = self.canvas.create_line(0,
+                                             rid * self.tile_size,
+                                             self.width * self.tile_size,
+                                             rid * self.tile_size,
                                              tags="grid",
                                              state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
-            _line_ = self.canvas.create_line(cid * self.tile_size, 0,
-                                             cid * self.tile_size, self.height * self.tile_size,
+            _line_ = self.canvas.create_line(cid * self.tile_size,
+                                             0,
+                                             cid * self.tile_size,
+                                             self.height * self.tile_size,
                                              tags="grid",
                                              state= tk.NORMAL,
                                              fill="grey")
@@ -367,7 +375,7 @@ class PlanConfig2:
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", int(self.tile_size//2)))
+                                    font=("Arial", self.tile_size//2))
         for rid in range(self.height):
             self.canvas.create_text((self.width+0.5)*self.tile_size,
                                     (rid+0.5)*self.tile_size,
@@ -375,13 +383,17 @@ class PlanConfig2:
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", int(self.tile_size//2)))
-        self.canvas.create_line(self.width * self.tile_size, 0,
-                                self.width * self.tile_size, self.height * self.tile_size,
+                                    font=("Arial", self.tile_size//2))
+        self.canvas.create_line(self.width * self.tile_size,
+                                0,
+                                self.width * self.tile_size,
+                                self.height * self.tile_size,
                                 state=tk.DISABLED,
                                 fill="black")
-        self.canvas.create_line(0, self.height * self.tile_size,
-                                self.width * self.tile_size, self.height * self.tile_size,
+        self.canvas.create_line(0,
+                                self.height * self.tile_size,
+                                self.width * self.tile_size,
+                                self.height * self.tile_size,
                                 state=tk.DISABLED,
                                 fill="black")
         print("Done!")

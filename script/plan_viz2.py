@@ -387,10 +387,10 @@ class PlanViz2:
         self.pcf.shown_path_agents.clear()
 
         # Reset the tasks
-        # if self.pcf.event_tracker:
-        #     for ag_ in range(self.pcf.team_size):
-        #         for tid_ in self.pcf.ag_to_task[ag_]:
-        #             self.show_single_task(tid_)
+        if self.pcf.event_tracker:
+            for task_id, seq_task in self.pcf.seq_tasks.items():
+                for seq_id, _ in enumerate(seq_task.tasks):
+                    self.show_single_task(task_id, seq_id)
 
         self.update_curtime()
 
@@ -502,21 +502,21 @@ class PlanViz2:
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
 
-        # Reset the tasks
+        # Reset the tasks if no specific path of an agent is shown
         if not self.pcf.shown_path_agents:
-            for ag_ in range(self.pcf.team_size):
-                for tid_ in self.pcf.ag_to_task[ag_]:
-                    self.show_single_task(tid_)
+            for task_id, seq_task in self.pcf.seq_tasks.items():
+                for seq_id, task in enumerate(seq_task.tasks):
+                    self.show_single_task(task_id, seq_id)
             return
 
         # Hide tasks that are not in ag_id
-        # for ag_ in range(self.pcf.team_size):
-        #     if ag_ in self.pcf.shown_path_agents:
-        #         for tid_ in self.pcf.ag_to_task[ag_]:
-        #             self.show_single_task(tid_)
-        #     else:
-        #         for tid_ in self.pcf.ag_to_task[ag_]:
-        #             self.hide_single_task(tid_)
+        for task_id, seq_task in self.pcf.seq_tasks.items():
+            for seq_id, task in enumerate(seq_task.tasks):
+                if task.events["assigned"]["agent"] in self.pcf.shown_path_agents or \
+                    task.events["finished"]["agent"] in self.pcf.shown_path_agents:
+                    self.show_single_task(task_id, seq_id)
+                else:
+                    self.hide_single_task(task_id, seq_id)
 
 
     def mark_conf_agents(self) -> None:
@@ -686,7 +686,7 @@ class PlanViz2:
         self.show_tasks()
 
 
-    def show_single_task(self, task_id, seq_id=0) -> None:
+    def show_single_task(self, task_id:int, seq_id:int=0) -> None:
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
         if self.task_shown.get() == "all":
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
@@ -734,6 +734,8 @@ class PlanViz2:
 
 
     def show_static_loc(self) -> None:
+        """ Show the static locations (e.g., start locations)
+        """
         _os_ = tk.DISABLED if self.show_static.get() is True else tk.HIDDEN
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
@@ -743,6 +745,8 @@ class PlanViz2:
 
 
     def move_agents_per_timestep(self) -> None:
+        """ Move agents forward from cur_timestep, adding cur_timestep by 1.
+        """
         if self.pcf.cur_timestep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
@@ -829,6 +833,8 @@ class PlanViz2:
 
 
     def back_agents_per_timestep(self) -> None:
+        """ Move agents in one reversed timestep, reducing cur_timestep by 1.
+        """
         if self.pcf.cur_timestep == self.pcf.start_tstep:
             return
 
@@ -923,8 +929,7 @@ class PlanViz2:
 
 
     def move_agents(self) -> None:
-        """
-        Move agents from cur_timestep to cur_timestep+1 and increase the cur_timestep by 1
+        """ Move agents constantly until pause or end_tstep is reached.
         """
         self.run_button.config(state=tk.DISABLED)
         self.pause_button.config(state=tk.NORMAL)
@@ -961,6 +966,8 @@ class PlanViz2:
 
 
     def update_curtime(self) -> None:
+        """ Update the agents and tasks' colors to the cur_timestep
+        """
         if self.new_time.get() > self.pcf.end_tstep:
             print("The target timestep is larger than the ending timestep")
             self.new_time.set(self.pcf.end_tstep)
