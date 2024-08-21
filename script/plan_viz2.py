@@ -15,7 +15,7 @@ from tkinter import ttk
 from plan_config2 import PlanConfig2
 from util import TASK_COLORS, AGENT_COLORS, DIR_OFFSET, TEXT_SIZE, \
     get_angle, get_dir_loc, get_rotation
-
+import platform
 
 class PlanViz2:
     """ This is the control panel of PlanViz2
@@ -23,19 +23,7 @@ class PlanViz2:
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz2    =====")
 
-        # Load the yaml file or the input arguments
-        self.pcf:PlanConfig2 = plan_config
-        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
-        # self.pcf.canvas.bind("<Button-3>", self.show_task_seq_by_click)
-
-        # This is what enables using the mouse:
-        self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
-        self.pcf.canvas.bind("<B1-Motion>", self.__move_to)
-        # linux scroll
-        self.pcf.canvas.bind("<Button-4>", self.__wheel)
-        self.pcf.canvas.bind("<Button-5>", self.__wheel)
-        # windows scroll
-        self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
+        self.init_pcf(plan_config)
 
         # Generate the UI panel
         print("Rendering the panel... ", end="")
@@ -69,42 +57,94 @@ class PlanViz2:
             gui_column = 0
         self.frame = tk.Frame(gui_window)
         self.frame.grid(row=0, column=gui_column,sticky="nsew")
-        row_idx = 0
+        self.row_idx = 0
 
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.pcf.cur_tstep:03d}",
                                        font=("Arial", TEXT_SIZE + 10))
-        self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
-        row_idx += 1
+        self.timestep_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.row_idx += 1
 
+        self.init_button()
+        self.init_label()
+
+        self.show_grid()
+        self.show_static_loc()
+        self.show_tasks()
+        self.mark_conf_agents()
+        self.resume_zoom()
+
+        self.new_time.set(self.pcf.start_tstep)
+        self.update_curtime()
+
+        self.frame.update()  # Adjust window size
+        # Use width and height for scaling
+        wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
+                        self.pcf.window.winfo_screenwidth())
+        wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
+        if gui_column == 1:
+            wd_width += self.frame.winfo_width() + 3
+            wd_height = max(wd_height, self.frame.winfo_height()) + 5
+        wd_width = str(wd_width)
+        wd_height = str(wd_height)
+        self.pcf.window.geometry(wd_width + "x" + wd_height)
+        self.pcf.window.title("PlanViz")
+        print("=====          DONE         =====")
+
+
+    def init_pcf(self, plan_config):
+        # Load the yaml file or the input arguments
+        self.pcf:PlanConfig2 = plan_config
+        # self.pcf.canvas.bind_all("<Button>", lambda event: print(f"Button {event.num} clicked"))
+        # self.pcf.canvas.bind_all("<MouseWheel>", lambda event: print(f"Button {event.delta} clicked"))
+        if platform.system() == "Darwin":
+            self.pcf.canvas.event_add("<<RightClick>>", "<Button-2>")
+            self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-3>")
+        else:
+            self.pcf.canvas.event_add("<<RightClick>>", "<Button-3>")
+            self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
+            
+        self.pcf.canvas.bind("<<RightClick>>", self.show_ag_plan_by_click)
+        # self.pcf.canvas.bind("<<RightClick>>", self.show_task_seq_by_click)
+
+        # This is what enables using the mouse:
+        self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
+        self.pcf.canvas.bind("<B1-Motion>", self.__move_to)
+        # linux scroll
+        self.pcf.canvas.bind("<Button-4>", self.__wheel)
+        self.pcf.canvas.bind("<Button-5>", self.__wheel)
+        # windows scroll
+        self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
+
+    def init_button(self):
         # ---------- List of buttons ------------------------------- #
         self.run_button = tk.Button(self.frame, text="Play",
                                     font=("Arial",TEXT_SIZE),
                                     command=self.move_agents)
-        self.run_button.grid(row=row_idx, column=0, sticky="nsew")
+        self.run_button.grid(row=self.row_idx, column=0, sticky="nsew")
         self.pause_button = tk.Button(self.frame, text="Pause",
                                       font=("Arial",TEXT_SIZE),
                                       command=self.pause_agents)
-        self.pause_button.grid(row=row_idx, column=1, sticky="nsew")
+        self.pause_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
                                             font=("Arial",TEXT_SIZE),
                                             command=self.resume_zoom)
-        self.resume_zoom_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
-        row_idx += 1
+        self.resume_zoom_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
+        self.row_idx += 1
 
         self.next_button = tk.Button(self.frame, text="Next",
                                      font=("Arial",TEXT_SIZE),
                                      command=self.move_agents_per_timestep)
-        self.next_button.grid(row=row_idx, column=0, sticky="nsew")
+        self.next_button.grid(row=self.row_idx, column=0, sticky="nsew")
         self.prev_button = tk.Button(self.frame, text="Prev",
                                      font=("Arial",TEXT_SIZE),
                                      command=self.back_agents_per_timestep)
-        self.prev_button.grid(row=row_idx, column=1, sticky="nsew")
+        self.prev_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.restart_button = tk.Button(self.frame, text="Restart",
                                         font=("Arial",TEXT_SIZE),
                                         command=self.restart_timestep)
-        self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
-        row_idx += 1
+        self.restart_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
+        self.row_idx += 1
 
         # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
@@ -112,41 +152,80 @@ class PlanViz2:
                                           variable=self.is_grid,
                                           onvalue=True, offvalue=False,
                                           command=self.show_grid)
-        self.grid_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
+        self.grid_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
         self.id_button = tk.Checkbutton(self.frame, text="Show agent indices",
                                         font=("Arial",TEXT_SIZE),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                         command=self.show_agent_index)
-        self.id_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
+        self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
         self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
                                          font=("Arial",TEXT_SIZE),
                                          variable=self.show_task_idx, onvalue=True, offvalue=False,
                                          command=self.show_task_index)
-        self.id_button2.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
+        self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",TEXT_SIZE),
                                             variable=self.show_static, onvalue=True, offvalue=False,
                                             command=self.show_static_loc)
-        self.static_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
+        self.static_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agents",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
                                                       command=self.mark_conf_agents)
-        self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
+        self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+
+        self.heat_map_button = tk.Checkbutton(self.frame, text="Show heatmap",
+                                              font=("Arial",TEXT_SIZE),
+                                              variable=self.is_heat_map,
+                                              onvalue=True, offvalue=False,
+                                              command=self.show_heat_map)
+        self.heat_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+
+        self.highway_button = tk.Checkbutton(self.frame, text="Show highway",
+                                             font=("Arial",TEXT_SIZE),
+                                             variable=self.is_highway,
+                                             onvalue=True, offvalue=False,
+                                             command=self.show_highway)
+        self.highway_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+
+        self.heuristic_map_button = tk.Checkbutton(self.frame, text="Show heuristic",
+                                                   font=("Arial",TEXT_SIZE),
+                                                   variable=self.is_heuristic_map,
+                                                   onvalue=True, offvalue=False,
+                                                   command=self.show_heuristic_map)
+        self.heuristic_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+
+    def init_label(self):
+        # ---------- Show low-level search trees ------------------- #
+        # tree_label = tk.Label(self.frame, text="Search trees", font=("Arial", TEXT_SIZE))
+        # tree_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
+
+        # tree_combobox = ["None"]
+        # for tree_ele in self.pcf.search_tree_grids.keys():
+        #     tree_combobox.append(tree_ele)
+        # self.tree_shown = ttk.Combobox(self.frame, width=8, state="readonly",
+        #                                values=tree_combobox)
+        # self.tree_shown.current(0)
+        # self.tree_shown.bind("<<ComboboxSelected>>", self.show_search_tree)
+        # self.tree_shown.grid(row=self.row_idx, column=1, sticky="w")
+        # self.row_idx += 1
 
         # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
-        task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
                                        values=["assigned",
                                                "all",
@@ -156,25 +235,25 @@ class PlanViz2:
                                                "none"])
         self.task_shown.current(0)
         self.task_shown.bind("<<ComboboxSelected>>", self.show_tasks_by_click)
-        self.task_shown.grid(row=row_idx, column=1, sticky="w")
-        row_idx += 1
+        self.task_shown.grid(row=self.row_idx, column=1, sticky="w")
+        self.row_idx += 1
 
         # ---------- Set the starting timestep --------------------- #
         st_label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
-        st_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
+        st_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar()
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
                                          font=("Arial",TEXT_SIZE))
-        self.start_time_entry.grid(row=row_idx, column=1, sticky="w")
+        self.start_time_entry.grid(row=self.row_idx, column=1, sticky="w")
         self.update_button = tk.Button(self.frame, text="Go", font=("Arial",TEXT_SIZE),
                                        command=self.update_curtime)
-        self.update_button.grid(row=row_idx, column=2, sticky="w")
-        row_idx += 1
+        self.update_button.grid(row=self.row_idx, column=2, sticky="w")
+        self.row_idx += 1
 
         # ---------- Show the list of errors ----------------------- #
         err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
-        err_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
-        row_idx += 1
+        err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
@@ -219,15 +298,15 @@ class PlanViz2:
                 self.conflict_listbox.insert(conf_id, conf_str)
                 self.shown_conflicts[conf_str] = [conf, False]
 
-        self.conflict_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
+        self.conflict_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
         self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
-        scrollbar.grid(row=row_idx, column=5, sticky="w")
-        row_idx += 1
+        scrollbar.grid(row=self.row_idx, column=5, sticky="w")
+        self.row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
         event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
@@ -425,15 +504,15 @@ class PlanViz2:
         """
         scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
-        if event.num == 5 or event.delta == -120:  # scroll down, smaller
+        if event.num == 5 or event.delta < 0:  # scroll down, smaller
             threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
             if threshold < 30:
                 return  # image is less than 30 pixels
-            scale /= 1.10
-            self.pcf.tile_size /= 1.10
-        if event.num == 4 or event.delta == 120:  # scroll up, bigger
-            scale *= 1.10
-            self.pcf.tile_size *= 1.10
+            scale /= 1.05
+            self.pcf.tile_size /= 1.05
+        if event.num == 4 or event.delta > 0:  # scroll up, bigger
+            scale *= 1.05
+            self.pcf.tile_size *= 1.05
         self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
