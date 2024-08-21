@@ -643,6 +643,11 @@ class PlanViz:
 
     def show_single_task(self, tid) -> None:
         tsk = self.pcf.tasks[tid]
+        self.hide_single_task(tid)
+
+        if self.task_shown.get() == "none":
+            return
+
         if self.task_shown.get() == "all":
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
@@ -652,12 +657,6 @@ class PlanViz:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
-        if self.task_shown.get() == "none":
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            return
-
         if self.task_shown.get() == "assigned":
             if tsk.state in ["assigned", "newlyassigned"]:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
@@ -665,9 +664,6 @@ class PlanViz:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
                 else:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
         if tsk.state == self.task_shown.get():
@@ -676,10 +672,7 @@ class PlanViz:
                 self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
             else:
                 self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-        else:
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-            self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-        return
+            return
 
 
     def hide_single_task(self, tid) -> None:
@@ -795,7 +788,7 @@ class PlanViz:
                 assert self.pcf.tasks[tid].state == "finished"
                 self.pcf.tasks[tid].state = "assigned"
                 self.change_task_color(tid, TASK_COLORS["assigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
             self.pcf.event_tracker["fid"] = prev_fid
 
@@ -805,7 +798,7 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "unassigned"
                 self.change_task_color(tid, TASK_COLORS["unassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
             self.pcf.event_tracker["aid"] = prev_aid
             prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
@@ -817,7 +810,7 @@ class PlanViz:
                 self.pcf.tasks[tid].state = "newlyassigned"
                 self.change_task_color(tid, TASK_COLORS["newlyassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
 
         # Compute the previous location
@@ -866,7 +859,7 @@ class PlanViz:
 
 
     def move_agents(self) -> None:
-        """Move agents from cur_timstep to cur_tstep+1 and increase the cur_tstep by 1
+        """ Move agents constantly until pause or end_tstep is reached.
         """
         self.run_button.config(state=tk.DISABLED)
         self.pause_button.config(state=tk.NORMAL)
@@ -903,6 +896,8 @@ class PlanViz:
 
 
     def update_curtime(self) -> None:
+        """ Update the agents and tasks' colors to the cur_tstep
+        """
         if self.new_time.get() > self.pcf.end_tstep:
             print("The target timestep is larger than the ending timestep")
             self.new_time.set(self.pcf.end_tstep)
@@ -911,9 +906,10 @@ class PlanViz:
         self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
 
         # Change tasks' and agents' colors according to assigned timesteps
-        for (tid_, task_) in self.pcf.tasks.items():  # Initialize all the task states to unassigned
-            task_.state = "unassigned"
-            self.change_task_color(tid_, TASK_COLORS["unassigned"])
+        for (tid, task) in self.pcf.tasks.items():  # Initialize all the task states to unassigned
+            task.state = "unassigned"
+            self.change_task_color(tid, TASK_COLORS["unassigned"])
+            self.hide_single_task(tid)
 
         if self.pcf.event_tracker:
             for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
