@@ -4,18 +4,14 @@ This script contains the configurations for PlanViz, a visualizer for the League
 All rights reserved.
 """
 
-import os
 import sys
 import logging
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
 import math
-import pandas as pd
-from matplotlib.colors import Normalize
-from matplotlib import cm
 from util import\
-    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,\
+    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG,\
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,\
     BaseObj, Agent, Task, SequentialTask
 
@@ -73,7 +69,7 @@ class PlanConfig2:
         self.conflicts  = {}
         self.agents:Dict[int, Agent] = {}
         self.makespan:int = -1
-        self.cur_timestep:int = self.start_tstep
+        self.cur_tstep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
         self.shown_tasks_seq:Set[int] = set()
         self.conflict_agents:Set[int] = set()

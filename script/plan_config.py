@@ -76,7 +76,7 @@ class PlanConfig:
         self.agents:Dict[int, Agent] = {}
         self.ag_to_task:Dict[int, List[int]] = {}
         self.makespan:int = -1
-        self.cur_timestep:int = self.start_tstep
+        self.cur_tstep:int = self.start_tstep
         self.shown_path_agents:Set[int] = set()
         self.conflict_agents:Set[int] = set()
         self.cur_tree:str = "None"

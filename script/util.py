@@ -185,8 +185,7 @@ class Task:
 
 
 class SequentialTask:
-    def __init__(self, idx:int, tasks:List[Task], release_tstep:int=-1, seq_id=0) -> None:
+    def __init__(self, idx:int, tasks:List[Task], release_tstep:int=-1) -> None:
         self.idx = idx
         self.tasks = tasks
         self.release_tstep = release_tstep
-        self.seq_id = seq_id  # current sequence ID (sequence [0, ..., seq_id-1] have done)

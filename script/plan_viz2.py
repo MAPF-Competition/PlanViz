@@ -72,7 +72,7 @@ class PlanViz2:
         row_idx = 0
 
         self.timestep_label = tk.Label(self.frame,
-                                       text = f"Timestep: {self.pcf.cur_timestep:03d}",
+                                       text = f"Timestep: {self.pcf.cur_tstep:03d}",
                                        font=("Arial", TEXT_SIZE + 10))
         self.timestep_label.grid(row=row_idx, column=0, columnspan=10, sticky="w")
         row_idx += 1
@@ -100,7 +100,7 @@ class PlanViz2:
                                      font=("Arial",TEXT_SIZE),
                                      command=self.back_agents_per_timestep)
         self.prev_button.grid(row=row_idx, column=1, sticky="nsew")
-        self.restart_button = tk.Button(self.frame, text="Reset",
+        self.restart_button = tk.Button(self.frame, text="Restart",
                                         font=("Arial",TEXT_SIZE),
                                         command=self.restart_timestep)
         self.restart_button.grid(row=row_idx, column=2, columnspan=2, sticky="nsew")
@@ -230,47 +230,55 @@ class PlanViz2:
         row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
-        # event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
-        # event_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
-        # row_idx += 1
+        event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
+        event_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
+        row_idx += 1
 
-        # self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
-        # self.event_listbox = tk.Listbox(self.frame,
-        #                                 width=30,
-        #                                 height=9,
-        #                                 font=("Arial",TEXT_SIZE),
-        #                                 selectmode=tk.EXTENDED)
-        # eve_id = 0
-        # time_list = list(self.pcf.events["assigned"])
-        # time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
-        # time_list = sorted(time_list, reverse=False)
-        # for tstep in time_list:
-        #     if tstep in self.pcf.events["assigned"]:
-        #         cur_events = self.pcf.events["assigned"][tstep]
-        #         for tid in sorted(cur_events.keys(), reverse=False):
-        #             ag_id = cur_events[tid]
-        #             e_str = "task "+str(tid) + " assigned to a"+str(ag_id) + " at t:"+str(tstep)
-        #             self.shown_events[e_str] = (tstep, tid, ag_id, "assigned")
-        #             self.event_listbox.insert(eve_id, e_str)
-        #             eve_id += 1
-        #     if tstep in self.pcf.events["finished"]:
-        #         cur_events = self.pcf.events["finished"][tstep]
-        #         for tid in sorted(cur_events.keys(), reverse=False):
-        #             ag_id = cur_events[tid]
-        #             e_str = "task "+str(tid) + "   is done by a"+str(ag_id) + " at t:"+str(tstep)
-        #             self.shown_events[e_str] = (tstep, tid, ag_id, "finished")
-        #             self.event_listbox.insert(eve_id, e_str)
-        #             eve_id += 1
+        self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
+        self.event_listbox = tk.Listbox(self.frame,
+                                        width=30,
+                                        height=9,
+                                        font=("Arial",TEXT_SIZE),
+                                        selectmode=tk.EXTENDED)
+        eve_id = 0
+        time_list = list(self.pcf.events["assigned"])
+        time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
+        time_list = sorted(time_list, reverse=False)
+        for tstep in time_list:
+            if tstep in self.pcf.events["assigned"]:
+                cur_events= self.pcf.events["assigned"][tstep]
+                for global_task_id in sorted(cur_events.keys(), reverse=False):
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    ag_id = cur_events[global_task_id]
+                    if seq_id == 0:
+                        e_str = "task " + str(task_id) + \
+                            " is assigned to ag:" + str(ag_id) + " at t:" + str(tstep)
+                        self.shown_events[e_str] = (tstep, task_id, ag_id, "assigned")
+                        self.event_listbox.insert(eve_id, e_str)
+                        eve_id += 1
+            if tstep in self.pcf.events["finished"]:
+                cur_events = self.pcf.events["finished"][tstep]
+                for global_task_id in sorted(cur_events.keys(), reverse=False):
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    ag_id = cur_events[global_task_id]
+                    if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
+                        e_str = "task "+str(task_id) + \
+                            " is done by ag:" + str(ag_id) + " at t:"+str(tstep)
+                        self.shown_events[e_str] = (tstep, task_id, ag_id, "finished")
+                        self.event_listbox.insert(eve_id, e_str)
+                        eve_id += 1
 
-        # self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
-        # self.event_listbox.bind("<Double-1>", self.move_to_event)
+        self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
+        self.event_listbox.bind("<Double-1>", self.move_to_event)
 
-        # scrollbar = tk.Scrollbar(self.frame, orient="vertical")
-        # self.event_listbox.config(yscrollcommand = scrollbar.set)
-        # scrollbar.config(command=self.event_listbox.yview)
-        # scrollbar.grid(row=row_idx, column=5, sticky="w")
-        # row_idx += 1
-        # print("Done!")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
+        self.event_listbox.config(yscrollcommand = scrollbar.set)
+        scrollbar.config(command=self.event_listbox.yview)
+        scrollbar.grid(row=row_idx, column=5, sticky="w")
+        row_idx += 1
+        print("Done!")
 
         self.show_grid()
         self.show_static_loc()
@@ -297,6 +305,12 @@ class PlanViz2:
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
+        """ Change the color of the agent if collisions are not shown
+
+        Args:
+            ag_idx (int): the index of the agent
+            color (str): the color to be changed
+        """
         ag_color = color
         if (self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents) or \
             self.pcf.canvas.itemcget(self.pcf.agents[ag_idx].agent_obj.obj, "fill") \
@@ -385,27 +399,30 @@ class PlanViz2:
         self.update_curtime()
 
 
-    # def move_to_event(self, event):
-    #     if self.is_run.get() is True:
-    #         return
-    #     _sid_ = event.widget.curselection()[0]  # get all selected indices
-    #     eve_str:str = self.event_listbox.get(_sid_)
-    #     cur_eve:Tuple[int,int,int,str] = self.shown_events[eve_str]
-    #     new_t = max(cur_eve[0]-1, 0)  # move to one timestep ahead the event
-    #     self.new_time.set(new_t)
-    #     self.update_curtime()
+    def move_to_event(self, event):
+        if self.is_run.get() is True:
+            return
+        selected_idx = event.widget.curselection()[0]  # get all selected indices
+        eve_str:str = self.event_listbox.get(selected_idx)
+        cur_eve:Tuple[int,int,int,str] = self.shown_events[eve_str]
+        new_t = max(cur_eve[0]-1, 0)  # move to one timestep ahead the event
+        self.new_time.set(new_t)
+        self.update_curtime()
 
     def __move_from(self, event):
-        """ Remember previous coordinates for scrolling with the mouse """
+        """ Remember previous coordinates for scrolling with the mouse
+        """
         self.pcf.canvas.scan_mark(event.x, event.y)
 
     def __move_to(self, event):
-        """ Drag (move) canvas to the new position """
+        """ Drag (move) canvas to the new position
+        """
         self.pcf.canvas.scan_dragto(event.x, event.y, gain=1)
 
 
     def __wheel(self, event):
-        """ Zoom with mouse wheel """
+        """ Zoom with mouse wheel
+        """
         scale = 1.0
         # Respond to Linux (event.num) or Windows (event.delta) wheel event
         if event.num == 5 or event.delta == -120:  # scroll down, smaller
@@ -462,7 +479,7 @@ class PlanViz2:
                 self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
-            for _pid_ in range(self.pcf.cur_timestep+1, len(self.pcf.agents[ag_idx].path_objs)):
+            for _pid_ in range(self.pcf.cur_tstep+1, len(self.pcf.agents[ag_idx].path_objs)):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
@@ -586,25 +603,6 @@ class PlanViz2:
                 self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
 
-    # def show_search_tree(self, _) -> None:
-    #     if self.pcf.cur_tree == self.tree_shown.get():
-    #         return
-
-    #     # Hide previous search tree
-    #     if self.pcf.cur_tree != "None":
-    #         for item in self.pcf.search_tree_grids[self.pcf.cur_tree]:
-    #             self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-    #             self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
-
-    #     # Show new search tree
-    #     self.pcf.cur_tree = self.tree_shown.get()
-    #     if self.pcf.cur_tree == "None":
-    #         return
-    #     for item in self.pcf.search_tree_grids[self.pcf.cur_tree]:
-    #         self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
-    #         self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
-
-
     def show_agent_index(self) -> None:
         _state_ = tk.DISABLED if self.show_ag_idx.get() is True else tk.HIDDEN
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
@@ -653,6 +651,11 @@ class PlanViz2:
 
     def show_single_task(self, task_id:int, seq_id:int=0) -> None:
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
+        self.hide_single_task(task_id, seq_id)
+
+        if self.task_shown.get() == "none":
+            return
+
         if self.task_shown.get() == "all":
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
@@ -662,12 +665,6 @@ class PlanViz2:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
-        if self.task_shown.get() == "none":
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == "disabled":
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            return
-
         if self.task_shown.get() == "assigned":
             if tsk.state in ["assigned", "newlyassigned"]:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
@@ -675,9 +672,6 @@ class PlanViz2:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
                 else:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
         if tsk.state == self.task_shown.get():
@@ -686,10 +680,7 @@ class PlanViz2:
                 self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
             else:
                 self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-        else:
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-            self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-        return
+            return
 
 
     def hide_single_task(self, task_id, seq_id) -> None:
@@ -710,9 +701,9 @@ class PlanViz2:
 
 
     def move_agents_per_timestep(self) -> None:
-        """ Move agents forward from cur_timestep, adding cur_timestep by 1.
+        """ Move agents forward from cur_tstep, adding cur_tstep by 1.
         """
-        if self.pcf.cur_timestep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
+        if self.pcf.cur_tstep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
         self.next_button.config(state=tk.DISABLED)
@@ -721,12 +712,12 @@ class PlanViz2:
         # Update the next timestep for each agent
         next_tstep = {}
         for (ag_id, agent) in self.pcf.agents.items():
-            next_t = min(self.pcf.cur_timestep+1 - self.pcf.start_tstep, len(agent.path)-1)
+            next_t = min(self.pcf.cur_tstep+1 - self.pcf.start_tstep, len(agent.path)-1)
             next_tstep[ag_id] = next_t
 
         for _m_ in range(self.pcf.moves):
             if _m_ == self.pcf.moves // 2:
-                self.timestep_label.config(text = f"Timestep: {self.pcf.cur_timestep+1:03d}")
+                self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep+1:03d}")
 
             for (ag_id, agent) in self.pcf.agents.items():
                 cur_angle = get_angle(agent.agent_obj.loc[2])
@@ -754,30 +745,30 @@ class PlanViz2:
             agent.agent_obj.loc = (agent.path[next_tstep[ag_id]][0],
                                    agent.path[next_tstep[ag_id]][1],
                                    agent.path[next_tstep[ag_id]][2])
-        self.pcf.cur_timestep += 1
+        self.pcf.cur_tstep += 1
         self.next_button.config(state=tk.NORMAL)
 
-        # Change tasks' states after cur_timestep += 1
+        # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
             return
 
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
-        if self.pcf.cur_timestep-1 == self.pcf.event_tracker["aTime"][prev_aid]:
+        if self.pcf.cur_tstep-1 == self.pcf.event_tracker["aTime"][prev_aid]:
             # from newly assigned to assigned
-            for (global_tid, ag_id) in self.pcf.events["assigned"][self.pcf.cur_timestep-1].items():
-                task_id:int = global_tid // self.pcf.max_seq_num
-                seq_id:int = global_tid % self.pcf.max_seq_num
+            for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep-1].items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
 
-        if self.pcf.cur_timestep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
+        if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to newly assigned
-            for (global_tid, ag_id) in self.pcf.events["assigned"][self.pcf.cur_timestep].items():
-                task_id = global_tid // self.pcf.max_seq_num
-                seq_id = global_tid % self.pcf.max_seq_num
+            for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "newlyassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["newlyassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
@@ -785,11 +776,11 @@ class PlanViz2:
                     self.show_single_task(task_id)
             self.pcf.event_tracker["aid"] += 1
 
-        if self.pcf.cur_timestep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
+        if self.pcf.cur_tstep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
             # from assigned to finished
-            for global_tid in self.pcf.events["finished"][self.pcf.cur_timestep]:
-                task_id = global_tid // self.pcf.max_seq_num
-                seq_id = global_tid % self.pcf.max_seq_num
+            for global_task_id in self.pcf.events["finished"][self.pcf.cur_tstep]:
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "finished"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["finished"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
@@ -798,13 +789,13 @@ class PlanViz2:
 
 
     def back_agents_per_timestep(self) -> None:
-        """ Move agents in one reversed timestep, reducing cur_timestep by 1.
+        """ Move agents in one reversed timestep, reducing cur_tstep by 1.
         """
-        if self.pcf.cur_timestep == self.pcf.start_tstep:
+        if self.pcf.cur_tstep == self.pcf.start_tstep:
             return
 
         self.prev_button.config(state=tk.DISABLED)
-        prev_timestep = max(self.pcf.cur_timestep-1, 0)
+        prev_timestep = max(self.pcf.cur_tstep-1, 0)
 
         # Move the event tracker backward
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
@@ -812,10 +803,10 @@ class PlanViz2:
         prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
         prev_fin_time = self.pcf.event_tracker["fTime"][prev_fid]
 
-        if self.pcf.cur_timestep == prev_fin_time:  # from finished to assigned
-            for (global_tid, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
-                task_id = global_tid // self.pcf.max_seq_num
-                seq_id  = global_tid % self.pcf.max_seq_num
+        if self.pcf.cur_tstep == prev_fin_time:  # from finished to assigned
+            for (global_task_id, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id  = global_task_id % self.pcf.max_seq_num
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "finished"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
@@ -823,10 +814,10 @@ class PlanViz2:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["fid"] = prev_fid
 
-        if self.pcf.cur_timestep == prev_agn_time:  # from newly assigned to unassigned
-            for (global_tid, ag_id) in self.pcf.events["assigned"][prev_agn_time].items():
-                task_id = global_tid // self.pcf.max_seq_num
-                seq_id = global_tid % self.pcf.max_seq_num
+        if self.pcf.cur_tstep == prev_agn_time:  # from newly assigned to unassigned
+            for (global_task_id, ag_id) in self.pcf.events["assigned"][prev_agn_time].items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "newlyassigned"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "unassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
@@ -838,9 +829,9 @@ class PlanViz2:
             prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
 
         if prev_timestep == prev_agn_time:  # from assigned to newly assigned
-            for (global_tid, ag_id) in self.pcf.events["assigned"][prev_agn_time].items():
-                task_id = global_tid // self.pcf.max_seq_num
-                seq_id = global_tid % self.pcf.max_seq_num
+            for (global_task_id, ag_id) in self.pcf.events["assigned"][prev_agn_time].items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "assigned"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "newlyassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["newlyassigned"])
@@ -888,7 +879,7 @@ class PlanViz2:
         for (ag_id, agent) in self.pcf.agents.items():
             agent.agent_obj.loc = prev_loc[ag_id]
 
-        self.pcf.cur_timestep = prev_timestep
+        self.pcf.cur_tstep = prev_timestep
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
@@ -905,7 +896,7 @@ class PlanViz2:
         self.task_shown.config(state=tk.DISABLED)
 
         self.is_run.set(True)
-        while self.pcf.cur_timestep < min(self.pcf.makespan, self.pcf.end_tstep):
+        while self.pcf.cur_tstep < min(self.pcf.makespan, self.pcf.end_tstep):
             if self.is_run.get() is True:
                 self.move_agents_per_timestep()
                 time.sleep(self.pcf.delay * 2)
@@ -931,26 +922,27 @@ class PlanViz2:
 
 
     def update_curtime(self) -> None:
-        """ Update the agents and tasks' colors to the cur_timestep
+        """ Update the agents and tasks' colors to the cur_tstep
         """
         if self.new_time.get() > self.pcf.end_tstep:
             print("The target timestep is larger than the ending timestep")
             self.new_time.set(self.pcf.end_tstep)
 
-        self.pcf.cur_timestep = self.new_time.get()
-        self.timestep_label.config(text = f"Timestep: {self.pcf.cur_timestep:03d}")
+        self.pcf.cur_tstep = self.new_time.get()
+        self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
 
         # Change tasks' and agents' colors according to assigned timesteps
         for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for (seq_id, task) in enumerate(seq_task.tasks):
                 task.state = "unassigned"  # Initialize all the task states to unassigned
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
+                self.hide_single_task(task_id, seq_id)
 
         for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
             if a_time == -1:
                 self.pcf.event_tracker["aid"] = a_id
                 break
-            if a_time < self.pcf.cur_timestep:
+            if a_time < self.pcf.cur_tstep:
                 for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
                     task_id = global_task_id // self.pcf.max_seq_num
                     seq_id = global_task_id % self.pcf.max_seq_num
@@ -959,7 +951,7 @@ class PlanViz2:
                     self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
                     if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                         self.show_single_task(task_id, seq_id)
-            elif a_time == self.pcf.cur_timestep:
+            elif a_time == self.pcf.cur_tstep:
                 for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
                     task_id = global_task_id // self.pcf.max_seq_num
                     seq_id = global_task_id % self.pcf.max_seq_num
@@ -968,7 +960,7 @@ class PlanViz2:
                     self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
                     if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                         self.show_single_task(task_id, seq_id)
-            else:  # a_time > self.pcf.cur_timestep
+            else:  # a_time > self.pcf.cur_tstep
                 self.pcf.event_tracker["aid"] = a_id
                 break
 
@@ -976,7 +968,7 @@ class PlanViz2:
         for f_id, f_time in enumerate(self.pcf.event_tracker["fTime"]):
             if f_time == -1:
                 break
-            if f_time <= self.pcf.cur_timestep:
+            if f_time <= self.pcf.cur_tstep:
                 for (global_task_id, ag_id) in self.pcf.events["finished"][f_time].items():
                     task_id = global_task_id // self.pcf.max_seq_num
                     seq_id = global_task_id % self.pcf.max_seq_num
@@ -996,7 +988,7 @@ class PlanViz2:
                 show_collide = True
 
             # Re-generate agent objects
-            tstep = min(self.pcf.cur_timestep - self.pcf.start_tstep, len(agent_.path)-1)
+            tstep = min(self.pcf.cur_tstep - self.pcf.start_tstep, len(agent_.path)-1)
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
