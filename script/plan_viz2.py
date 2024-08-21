@@ -144,52 +144,14 @@ class PlanViz2:
         self.show_all_conf_ag_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
         row_idx += 1
 
-        self.heat_map_button = tk.Checkbutton(self.frame, text="Show heatmap",
-                                              font=("Arial",TEXT_SIZE),
-                                              variable=self.is_heat_map,
-                                              onvalue=True, offvalue=False,
-                                              command=self.show_heat_map)
-        self.heat_map_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
-
-        self.highway_button = tk.Checkbutton(self.frame, text="Show highway",
-                                             font=("Arial",TEXT_SIZE),
-                                             variable=self.is_highway,
-                                             onvalue=True, offvalue=False,
-                                             command=self.show_highway)
-        self.highway_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
-
-        self.heuristic_map_button = tk.Checkbutton(self.frame, text="Show heuristic",
-                                                   font=("Arial",TEXT_SIZE),
-                                                   variable=self.is_heuristic_map,
-                                                   onvalue=True, offvalue=False,
-                                                   command=self.show_heuristic_map)
-        self.heuristic_map_button.grid(row=row_idx, column=0, columnspan=2, sticky="w")
-        row_idx += 1
-
-        # ---------- Show low-level search trees ------------------- #
-        # tree_label = tk.Label(self.frame, text="Search trees", font=("Arial", TEXT_SIZE))
-        # tree_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
-
-        # tree_combobox = ["None"]
-        # for tree_ele in self.pcf.search_tree_grids.keys():
-        #     tree_combobox.append(tree_ele)
-        # self.tree_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-        #                                values=tree_combobox)
-        # self.tree_shown.current(0)
-        # self.tree_shown.bind("<<ComboboxSelected>>", self.show_search_tree)
-        # self.tree_shown.grid(row=row_idx, column=1, sticky="w")
-        # row_idx += 1
-
         # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-                                       values=["all",
+                                       values=["assigned",
+                                               "all",
                                                "unassigned",
                                                "newlyassigned",
-                                               "assigned",
                                                "finished",
                                                "none"])
         self.task_shown.current(0)
@@ -386,11 +348,14 @@ class PlanViz2:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
         self.pcf.shown_path_agents.clear()
 
-        # Reset the tasks
-        if self.pcf.event_tracker:
-            for task_id, seq_task in self.pcf.seq_tasks.items():
-                for seq_id, _ in enumerate(seq_task.tasks):
-                    self.show_single_task(task_id, seq_id)
+        self.pcf.event_tracker["aid"] = 0
+        self.pcf.event_tracker["fid"] = 0
+
+        # Hide all the tasks
+        for task_id, seq_task in self.pcf.seq_tasks.items():
+            for seq_id, task in enumerate(seq_task.tasks):
+                task.state = "unassigned"
+                self.hide_single_task(task_id, seq_id)
 
         self.update_curtime()
 
@@ -854,7 +819,7 @@ class PlanViz2:
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "finished"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["fid"] = prev_fid
 
@@ -866,7 +831,7 @@ class PlanViz2:
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "unassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] = prev_aid
             prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
@@ -880,7 +845,7 @@ class PlanViz2:
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "newlyassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["newlyassigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["newlyassigned"])
-                if self.pcf.shown_path_agents and ag_id in self.pcf.shown_path_agents:
+                if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
 
         # Compute the previous location
@@ -981,48 +946,47 @@ class PlanViz2:
                 task.state = "unassigned"  # Initialize all the task states to unassigned
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
 
-        if self.pcf.event_tracker:
-            for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
-                if a_time == -1:
-                    self.pcf.event_tracker["aid"] = a_id
-                    break
-                if a_time < self.pcf.cur_timestep:
-                    for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
-                        task_id = global_task_id // self.pcf.max_seq_num
-                        seq_id = global_task_id % self.pcf.max_seq_num
-                        self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
-                        self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                        self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
-                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                            self.show_single_task(task_id, seq_id)
-                elif a_time == self.pcf.cur_timestep:
-                    for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
-                        task_id = global_task_id // self.pcf.max_seq_num
-                        seq_id = global_task_id % self.pcf.max_seq_num
-                        self.pcf.seq_tasks[task_id].tasks[seq_id].state = "newlyassigned"
-                        self.change_task_color(task_id, seq_id, TASK_COLORS["newlyassigned"])
-                        self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
-                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                            self.show_single_task(task_id, seq_id)
-                else:  # a_time > self.pcf.cur_timestep
-                    self.pcf.event_tracker["aid"] = a_id
-                    break
+        for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
+            if a_time == -1:
+                self.pcf.event_tracker["aid"] = a_id
+                break
+            if a_time < self.pcf.cur_timestep:
+                for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
+                    self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
+                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
+                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(task_id, seq_id)
+            elif a_time == self.pcf.cur_timestep:
+                for (global_task_id, ag_id) in self.pcf.events["assigned"][a_time].items():
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    self.pcf.seq_tasks[task_id].tasks[seq_id].state = "newlyassigned"
+                    self.change_task_color(task_id, seq_id, TASK_COLORS["newlyassigned"])
+                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["newlyassigned"]
+                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(task_id, seq_id)
+            else:  # a_time > self.pcf.cur_timestep
+                self.pcf.event_tracker["aid"] = a_id
+                break
 
-            # Change tasks' colors according to finished timesteps
-            for f_id, f_time in enumerate(self.pcf.event_tracker["fTime"]):
-                if f_time == -1:
-                    break
-                if f_time <= self.pcf.cur_timestep:
-                    for (global_task_id, ag_id) in self.pcf.events["finished"][f_time].items():
-                        task_id = global_task_id // self.pcf.max_seq_num
-                        seq_id = global_task_id % self.pcf.max_seq_num
-                        self.pcf.seq_tasks[task_id].tasks[seq_id].state = "finished"
-                        self.change_task_color(task_id, seq_id, TASK_COLORS["finished"])
-                        if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                            self.show_single_task(task_id, seq_id)
-                else:
-                    self.pcf.event_tracker["fid"] = f_id
-                    break
+        # Change tasks' colors according to finished timesteps
+        for f_id, f_time in enumerate(self.pcf.event_tracker["fTime"]):
+            if f_time == -1:
+                break
+            if f_time <= self.pcf.cur_timestep:
+                for (global_task_id, ag_id) in self.pcf.events["finished"][f_time].items():
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    self.pcf.seq_tasks[task_id].tasks[seq_id].state = "finished"
+                    self.change_task_color(task_id, seq_id, TASK_COLORS["finished"])
+                    if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
+                        self.show_single_task(task_id, seq_id)
+            else:
+                self.pcf.event_tracker["fid"] = f_id
+                break
 
         for (ag_id, agent_) in self.pcf.agents.items():
             # Check colliding agents
