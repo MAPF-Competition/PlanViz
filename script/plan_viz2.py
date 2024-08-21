@@ -49,14 +49,14 @@ class PlanViz2:
         self.is_heuristic_map.set(False)
 
         gui_window = self.pcf.window
-        gui_column = 1
+        self.gui_column = 1
         if (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
             gui_window = tk.Toplevel()
             gui_window.title("UI Panel")
             gui_window.config(width=300, height=(self.pcf.height+1) * self.pcf.tile_size)
-            gui_column = 0
+            self.gui_column = 0
         self.frame = tk.Frame(gui_window)
-        self.frame.grid(row=0, column=gui_column,sticky="nsew")
+        self.frame.grid(row=0, column=self.gui_column,sticky="nsew")
         self.row_idx = 0
 
         self.timestep_label = tk.Label(self.frame,
@@ -82,7 +82,7 @@ class PlanViz2:
         wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
                         self.pcf.window.winfo_screenwidth())
         wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
-        if gui_column == 1:
+        if self.gui_column == 1:
             wd_width += self.frame.winfo_width() + 3
             wd_height = max(wd_height, self.frame.winfo_height()) + 5
         wd_width = str(wd_width)
@@ -310,8 +310,8 @@ class PlanViz2:
 
         # ---------- Show the list of events ----------------------- #
         event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
-        event_label.grid(row=row_idx, column=0, columnspan=3, sticky="w")
-        row_idx += 1
+        event_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
 
         self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
@@ -349,14 +349,14 @@ class PlanViz2:
                         self.event_listbox.insert(eve_id, e_str)
                         eve_id += 1
 
-        self.event_listbox.grid(row=row_idx, column=0, columnspan=5, sticky="w")
+        self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind("<Double-1>", self.move_to_event)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical")
         self.event_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.event_listbox.yview)
-        scrollbar.grid(row=row_idx, column=5, sticky="w")
-        row_idx += 1
+        scrollbar.grid(row=self.row_idx, column=5, sticky="w")
+        self.row_idx += 1
         print("Done!")
 
         self.show_grid()
@@ -373,7 +373,7 @@ class PlanViz2:
         wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
                         self.pcf.window.winfo_screenwidth())
         wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
-        if gui_column == 1:
+        if self.gui_column == 1:
             wd_width += self.frame.winfo_width() + 3
             wd_height = max(wd_height, self.frame.winfo_height()) + 5
         wd_width = str(wd_width)
