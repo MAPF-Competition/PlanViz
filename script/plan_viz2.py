@@ -105,6 +105,7 @@ class PlanViz2:
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
             
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
+        self.pcf.canvas.bind("<<RightClick>>", self.right_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -510,23 +511,6 @@ class PlanViz2:
         for _tt_ in tags:
             if _tt_.isnumeric():
                 ag_idx = int(_tt_)  # get the id of the agent
-                self.show_ag_plan(ag_idx)
-                return ag_idx
-        return ag_idx
-        
-
-    def show_colorful_errands(self, event, ag_idx):
-        if ag_idx == -1: return
-        all_tsk = self.pcf.seq_tasks
-        agent_tasks = self.pcf.agent_assigned_task[ag_idx]
-        agent_tasks = sorted(agent_tasks)
-        tsk_idx = -1
-        for t, task_idx in agent_tasks:
-            if self.pcf.cur_tstep >= t-1:
-                tsk_idx = task_idx
-        if task_idx == -1: return
-        self.show_task_seq(tsk_idx)
-        
                 self.show_ag_plan(ag_idx)
                 return ag_idx
         return ag_idx
