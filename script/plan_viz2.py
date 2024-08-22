@@ -184,30 +184,6 @@ class PlanViz2:
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
-        self.heat_map_button = tk.Checkbutton(self.frame, text="Show heatmap",
-                                              font=("Arial",TEXT_SIZE),
-                                              variable=self.is_heat_map,
-                                              onvalue=True, offvalue=False,
-                                              command=self.show_heat_map)
-        self.heat_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-
-        self.highway_button = tk.Checkbutton(self.frame, text="Show highway",
-                                             font=("Arial",TEXT_SIZE),
-                                             variable=self.is_highway,
-                                             onvalue=True, offvalue=False,
-                                             command=self.show_highway)
-        self.highway_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-
-        self.heuristic_map_button = tk.Checkbutton(self.frame, text="Show heuristic",
-                                                   font=("Arial",TEXT_SIZE),
-                                                   variable=self.is_heuristic_map,
-                                                   onvalue=True, offvalue=False,
-                                                   command=self.show_heuristic_map)
-        self.heuristic_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-
 
     def init_label(self):
         # ---------- Show tasks according to their states ---------- #
