@@ -503,7 +503,6 @@ class PlanViz2:
         ag_idx = self.show_ag_plan_by_click(event)
         self.show_colorful_errands(event, ag_idx)
     
-    
     def show_ag_plan_by_click(self, event):
         item = self.pcf.canvas.find_closest(event.x, event.y)[0]
         tags:Set[str] = self.pcf.canvas.gettags(item)
@@ -511,6 +510,23 @@ class PlanViz2:
         for _tt_ in tags:
             if _tt_.isnumeric():
                 ag_idx = int(_tt_)  # get the id of the agent
+                self.show_ag_plan(ag_idx)
+                return ag_idx
+        return ag_idx
+        
+
+    def show_colorful_errands(self, event, ag_idx):
+        if ag_idx == -1: return
+        all_tsk = self.pcf.seq_tasks
+        agent_tasks = self.pcf.agent_assigned_task[ag_idx]
+        agent_tasks = sorted(agent_tasks)
+        tsk_idx = -1
+        for t, task_idx in agent_tasks:
+            if self.pcf.cur_tstep >= t-1:
+                tsk_idx = task_idx
+        if task_idx == -1: return
+        self.show_task_seq(tsk_idx)
+        
                 self.show_ag_plan(ag_idx)
                 return ag_idx
         return ag_idx
