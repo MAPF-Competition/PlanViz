@@ -67,6 +67,7 @@ class PlanConfig2:
         self.plan_paths = {}
         self.exec_paths = {}
         self.conflicts  = {}
+        self.agent_assigned_task = {}
         self.agents:Dict[int, Agent] = {}
         self.makespan:int = -1
         self.cur_tstep:int = self.start_tstep
@@ -187,6 +188,7 @@ class PlanConfig2:
             return
 
         for ag_id, schedule in enumerate(data["actualSchedule"]):
+            self.agent_assigned_task[ag_id] = []
             for ele in schedule.split(","):
                 assign_tstep = int(ele.split(":")[0])
                 if assign_tstep > self.end_tstep:
@@ -195,7 +197,7 @@ class PlanConfig2:
                 if assign_tstep not in self.actual_schedule:
                     self.actual_schedule[assign_tstep] = []
                 self.actual_schedule[assign_tstep].append((task_id, ag_id))
-
+                self.agent_assigned_task[ag_id].append((assign_tstep, task_id))
                 # Only consider the maximum assign timestep
                 assert task_id in self.seq_tasks
                 if self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"] != math.inf and \

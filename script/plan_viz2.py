@@ -103,8 +103,8 @@ class PlanViz2:
         else:
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-3>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
-
-        self.pcf.canvas.bind("<<RightClick>>", self.show_ag_plan_by_click)
+            
+        self.pcf.canvas.bind("<<RightClick>>", self.right_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -499,6 +499,11 @@ class PlanViz2:
         self.pcf.canvas.update()
 
 
+    def right_click(self, event):
+        ag_idx = self.show_ag_plan_by_click(event)
+        self.show_colorful_errands(event, ag_idx)
+    
+    
     def show_ag_plan_by_click(self, event):
         item = self.pcf.canvas.find_closest(event.x, event.y)[0]
         tags:Set[str] = self.pcf.canvas.gettags(item)
@@ -506,11 +511,23 @@ class PlanViz2:
         for _tt_ in tags:
             if _tt_.isnumeric():
                 ag_idx = int(_tt_)  # get the id of the agent
-                break
-        if ag_idx == -1:
-            return
-        self.show_ag_plan(ag_idx)
+                self.show_ag_plan(ag_idx)
+                return ag_idx
+        return ag_idx
+        
 
+    def show_colorful_errands(self, event, ag_idx):
+        if ag_idx == -1: return
+        all_tsk = self.pcf.seq_tasks
+        agent_tasks = self.pcf.agent_assigned_task[ag_idx]
+        agent_tasks = sorted(agent_tasks)
+        tsk_idx = -1
+        for t, task_idx in agent_tasks:
+            if self.pcf.cur_tstep >= t-1:
+                tsk_idx = task_idx
+        if task_idx == -1: return
+        self.show_task_seq(tsk_idx)
+        
 
     def show_ag_plan(self, ag_idx):
         if ag_idx in self.pcf.shown_path_agents:  # Remove ag_id if it's already in the set
@@ -563,20 +580,7 @@ class PlanViz2:
             conf[1] = False
 
 
-    def show_task_seq_by_click(self, event):
-        item = self.pcf.canvas.find_closest(event.x, event.y)[0]
-        tags:Set[str] = self.pcf.canvas.gettags(item)
-        tsk_idx = -1
-        for _tt_ in tags:
-            if _tt_.isnumeric():
-                tsk_idx = int(_tt_)  # get the id of the task
-                break
-        if tsk_idx == -1:
-            return
-        self.show_task_seq(tsk_idx)
-
-
-    def show_task_seq(self, task_idx):
+    def show_task_seq(self, task_idx):        
         if task_idx in self.pcf.shown_tasks_seq:
             self.pcf.shown_tasks_seq.remove(task_idx)
             for tsk in self.pcf.seq_tasks[task_idx].tasks:
@@ -587,18 +591,11 @@ class PlanViz2:
             for tsk in self.pcf.seq_tasks[task_idx].tasks:
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
 
-        # Reset the tasks if no task needs to show
-        if not self.pcf.shown_tasks_seq:
-            for task_id, tsk in self.pcf.seq_tasks.items():
-                for seq_id in range(len(tsk.tasks)):
-                    self.show_single_task(task_id, seq_id)
-            return
-
         # Hide tasks that are not in ag_id
         for task_id, seq_task in self.pcf.seq_tasks.items():
             if task_id in self.pcf.shown_tasks_seq:
                 for seq_id in range(len(seq_task.tasks)):
-                    self.show_single_task(task_id, seq_id)
+                    self.show_single_task(task_id, seq_id, ignore=1)
             else:
                 for seq_id in range(len(seq_task.tasks)):
                     self.hide_single_task(task_id, seq_id)
@@ -690,14 +687,12 @@ class PlanViz2:
         self.show_tasks()
 
 
-    def show_single_task(self, task_id:int, seq_id:int=0) -> None:
+    def show_single_task(self, task_id:int, seq_id:int=0, ignore:int=0) -> None:
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
         self.hide_single_task(task_id, seq_id)
 
-        if self.task_shown.get() == "none":
-            return
 
-        if self.task_shown.get() == "all":
+        if self.task_shown.get() == "all" or ignore:
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
                 if self.show_task_idx.get():
@@ -714,7 +709,10 @@ class PlanViz2:
                 else:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
-
+        
+        if self.task_shown.get() == "none":
+            return
+        
         if tsk.state == self.task_shown.get():
             self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
             if self.show_task_idx.get():
