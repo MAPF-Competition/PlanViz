@@ -8,14 +8,16 @@ Please enjoy my monkey dance and don't forget to star the repo.
 """
 
 import math
+import platform
 import time
-from typing import List, Tuple, Dict, Set
 import tkinter as tk
 from tkinter import ttk
+from typing import Dict, List, Set, Tuple
+
 from plan_config2 import PlanConfig2
-from util import TASK_COLORS, AGENT_COLORS, DIR_OFFSET, TEXT_SIZE, \
-    get_angle, get_dir_loc, get_rotation
-import platform
+from util import (AGENT_COLORS, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
+                  get_dir_loc, get_rotation)
+
 
 class PlanViz2:
     """ This is the control panel of PlanViz2
@@ -95,17 +97,14 @@ class PlanViz2:
     def init_pcf(self, plan_config):
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2 = plan_config
-        # self.pcf.canvas.bind_all("<Button>", lambda event: print(f"Button {event.num} clicked"))
-        # self.pcf.canvas.bind_all("<MouseWheel>", lambda event: print(f"Button {event.delta} clicked"))
         if platform.system() == "Darwin":
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-2>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-3>")
         else:
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-3>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
-            
+
         self.pcf.canvas.bind("<<RightClick>>", self.show_ag_plan_by_click)
-        # self.pcf.canvas.bind("<<RightClick>>", self.show_task_seq_by_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -115,6 +114,7 @@ class PlanViz2:
         self.pcf.canvas.bind("<Button-5>", self.__wheel)
         # windows scroll
         self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
+
 
     def init_button(self):
         # ---------- List of buttons ------------------------------- #
@@ -208,21 +208,8 @@ class PlanViz2:
         self.heuristic_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
+
     def init_label(self):
-        # ---------- Show low-level search trees ------------------- #
-        # tree_label = tk.Label(self.frame, text="Search trees", font=("Arial", TEXT_SIZE))
-        # tree_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
-
-        # tree_combobox = ["None"]
-        # for tree_ele in self.pcf.search_tree_grids.keys():
-        #     tree_combobox.append(tree_ele)
-        # self.tree_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-        #                                values=tree_combobox)
-        # self.tree_shown.current(0)
-        # self.tree_shown.bind("<<ComboboxSelected>>", self.show_search_tree)
-        # self.tree_shown.grid(row=self.row_idx, column=1, sticky="w")
-        # self.row_idx += 1
-
         # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
@@ -380,7 +367,6 @@ class PlanViz2:
         wd_height = str(wd_height)
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
-        print("=====          DONE         =====")
 
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
