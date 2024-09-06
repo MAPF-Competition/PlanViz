@@ -68,6 +68,7 @@ class PlanConfig2:
         self.exec_paths = {}
         self.conflicts  = {}
         self.agent_assigned_task = {}
+        self.agent_shown_task_arrow = {}
         self.agents:Dict[int, Agent] = {}
         self.makespan:int = -1
         self.cur_tstep:int = self.start_tstep
@@ -189,6 +190,7 @@ class PlanConfig2:
 
         for ag_id, schedule in enumerate(data["actualSchedule"]):
             self.agent_assigned_task[ag_id] = []
+            self.agent_shown_task_arrow[ag_id] = []
             for ele in schedule.split(","):
                 assign_tstep = int(ele.split(":")[0])
                 if assign_tstep > self.end_tstep:
