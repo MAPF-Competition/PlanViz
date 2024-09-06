@@ -462,9 +462,10 @@ class PlanConfig:
             logging.error("Undefined shape.")
             sys.exit()
 
-        shown_text = ""
-        if _idx_ > -1:
-            shown_text = str(_idx_)
+        # shown_text = ""
+        # if _idx_ > -1:
+        #     shown_text = str(_idx_)
+        shown_text = str(_idx_)
         _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
                                             (_loc_[0]+0.5)*self.tile_size,
                                             text=shown_text,
@@ -606,8 +607,16 @@ class PlanConfig:
                 if cur_ele > max_val:
                     max_val = cur_ele
 
+        min_val = np.inf
+        for cur_row in self.heuristic_map:
+            for cur_ele in cur_row:
+                if cur_ele in [DBL_MAX, INT_MAX]:
+                    continue
+                if cur_ele < min_val:
+                    min_val = cur_ele
+
         cmap = cm.get_cmap("Greys")
-        norm = Normalize(vmin=0, vmax=max_val)
+        norm = Normalize(vmin=min_val, vmax=max_val)
         for rid, cur_row in enumerate(self.heuristic_map):
             for cid, cur_ele in enumerate(cur_row):
                 if cur_ele in [DBL_MAX, INT_MAX]:
