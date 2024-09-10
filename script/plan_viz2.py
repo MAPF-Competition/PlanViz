@@ -633,7 +633,7 @@ class PlanViz2:
                         x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
                         last_obj = tsk.task_obj.obj
                         x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
-                        _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=2, fill="green")
+                        _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=1, fill="green")
                         arrows.append(_arrow)
                     self.change_task_color(task_idx,idx, "pink")
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
