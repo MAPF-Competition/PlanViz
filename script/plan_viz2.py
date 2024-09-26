@@ -37,6 +37,7 @@ class PlanViz2:
         self.show_task_idx = tk.BooleanVar()
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
+        self.show_agent_path = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
@@ -164,17 +165,25 @@ class PlanViz2:
                                                       command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
+        
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show agent path",
+                                                      font=("Arial",TEXT_SIZE),
+                                                      variable=self.show_agent_path,
+                                                      onvalue=True, offvalue=False,
+                                                      command=self.off_agent_path)
+        self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
 
     def init_label(self):
         # ---------- Show tasks according to their states ---------- #
-        task_label = tk.Label(self.frame, text = "Shown tasks", font = ("Arial", TEXT_SIZE))
+        task_label = tk.Label(self.frame, text = "Shown", font = ("Arial", TEXT_SIZE))
         task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
-        self.task_shown = ttk.Combobox(self.frame, width=8, state="readonly",
-                                       values=["current",
+        self.task_shown = ttk.Combobox(self.frame, width=15, state="readonly",
+                                       values=["Next Errand",
                                             #    "newlyassigned",
-                                               "assigned",
-                                               "all",
+                                               "Assigned Tasks",
+                                               "All Tasks",
                                             #    "unassigned",
                                             #    "finished",
                                             #    "none"
@@ -484,19 +493,22 @@ class PlanViz2:
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
         self.pcf.canvas.update()
 
-    def clear_agent_selection(self):
+    def clear_agent_selection(self, moving=False):
         for ag_idx in self.pcf.shown_path_agents:
             for task_idx in self.pcf.shown_tasks_seq:
                 for arrow_id in self.pcf.agent_shown_task_arrow[ag_idx]:
                     self.pcf.canvas.delete(arrow_id)
-                for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+                for _, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
                     self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
                     self.pcf.canvas.tag_lower(tsk.task_obj.obj)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(_p_.obj)
-        self.pcf.shown_tasks_seq.clear()
-        self.pcf.shown_path_agents.clear()
+        if not moving:
+            self.pcf.shown_tasks_seq.clear()
+            self.pcf.shown_path_agents.clear()
+            self.new_time.set(self.pcf.cur_tstep)
+            self.update_curtime()
 
     def right_click(self, event):
         ag_idx = self.get_ag_idx(event)
@@ -519,7 +531,7 @@ class PlanViz2:
         return ag_idx
 
 
-    def show_colorful_errands(self, ag_idx):
+    def show_colorful_errands(self, ag_idx, moving=False):
         agent_tasks = self.pcf.agent_assigned_task[ag_idx]
         agent_tasks = sorted(agent_tasks)
         tsk_idx = -1
@@ -529,37 +541,37 @@ class PlanViz2:
         if tsk_idx == -1:
             return
         t = []
-        for task in self.pcf.seq_tasks[tsk_idx].tasks:
-            t.append(1e9)
-            agent_path = self.pcf.exec_paths[ag_idx][self.pcf.cur_tstep:]
-            for i, loc in enumerate(agent_path):
-                if loc[0] == task.loc[0] and loc[1] == task.loc[1]:
-                    t[-1] = i
-                    break
-        t = np.array(t)
-        first_errand = t.argmin()
-        first_errand_t = t.min()
-        if (t.min() > 1e8):
-            first_errand = -1
-            first_errand_t = -1
-        self.pcf.agent_shown_task_arrow[ag_idx] = self.show_task_seq(ag_idx, tsk_idx, first_errand)
-        return first_errand_t
+        first_errand = -1
+        first_errand_t = -1
+        for i, task in enumerate(self.pcf.seq_tasks[tsk_idx].tasks):
+            task_t = task.events["finished"]["timestep"]
+            if task_t == float("inf"):
+                task_t = 1e9
+            if self.pcf.cur_tstep < task_t:
+                first_errand = i
+                first_errand_t = task_t
+                break
+        self.pcf.agent_shown_task_arrow[ag_idx] = self.show_task_seq(ag_idx, tsk_idx, first_errand, moving)
+        return int(first_errand_t)
 
 
-    def show_ag_plan(self, ag_idx, first_errand_t):
-        if ag_idx in self.pcf.shown_path_agents:  # Remove ag_id if it's already in the set
+    def show_ag_plan(self, ag_idx, first_errand_t, moving=False):
+        if ag_idx in self.pcf.shown_path_agents and (not moving):  # Remove ag_id if it's already in the set
             self.pcf.shown_path_agents.remove(ag_idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
-            for _pid_ in range(self.pcf.cur_tstep+1, self.pcf.cur_tstep+first_errand_t+1):
+            if not self.show_agent_path.get(): 
+                return
+            ml = min(self.pcf.cur_tstep+first_errand_t+1, len(self.pcf.agents[ag_idx].path_objs))
+            for _pid_ in range(self.pcf.cur_tstep+1, ml):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
         
-        
+
 
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
@@ -582,7 +594,14 @@ class PlanViz2:
             conf[1] = False
 
 
-    def show_task_seq(self, agent_idx, task_idx, first_errand):
+    def off_agent_path(self):
+        self.clear_agent_selection(moving=True)
+        for ag_idx in self.pcf.shown_path_agents:
+            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
+            if first_errand_t != -1:
+                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+
+    def show_task_seq(self, agent_idx, task_idx, first_errand, moving=False):
         def get_center_coords(canvas, item_id):
             # Get the coordinates of the bounding box of the item
             coords = canvas.coords(item_id)
@@ -593,7 +612,7 @@ class PlanViz2:
         
         arrows = []
         
-        if task_idx in self.pcf.shown_tasks_seq:
+        if task_idx in self.pcf.shown_tasks_seq and (not moving):
             self.pcf.shown_tasks_seq.remove(task_idx)
             for arrow_id in self.pcf.agent_shown_task_arrow[agent_idx]:
                 self.pcf.canvas.delete(arrow_id)
@@ -601,26 +620,32 @@ class PlanViz2:
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(tsk.task_obj.obj)
         else:
-            self.pcf.shown_tasks_seq.add(task_idx)       
-            last_obj = -1     
+            self.pcf.shown_tasks_seq.add(task_idx)
+            last_obj = self.pcf.agents[agent_idx].agent_obj.obj
             for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+                task_t = tsk.events["finished"]["timestep"]
+                if self.pcf.cur_tstep >= task_t:
+                    self.change_task_color(task_idx, idx, TASK_COLORS["finished"])
+                    continue
+                
+                self.change_task_color(task_idx,idx, "pink")
                 if idx == first_errand:
                     self.change_task_color(task_idx,idx, "orange")
-                    last_obj = tsk.task_obj.obj
-                else :
-                    if last_obj != -1:
-                        x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
-                        last_obj = tsk.task_obj.obj
-                        x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
-                        _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=1, fill="green")
-                        arrows.append(_arrow)
-                    self.change_task_color(task_idx,idx, "pink")
+
+                x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
+                last_obj = tsk.task_obj.obj
+                x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
+                _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=2, fill="#4eb1a6")
+                arrows.append(_arrow)
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
 
         # Hide tasks that are not in ag_id
         for task_id, seq_task in self.pcf.seq_tasks.items():
             if task_id in self.pcf.shown_tasks_seq:
-                for seq_id in range(len(seq_task.tasks)):
+                for seq_id, tsk in enumerate(seq_task.tasks):
+                    task_t = tsk.events["finished"]["timestep"]
+                    if self.pcf.cur_tstep >= task_t:
+                        continue
                     self.show_single_task(task_id, seq_id, ignore=1)
             else:
                 for seq_id in range(len(seq_task.tasks)):
@@ -678,18 +703,16 @@ class PlanViz2:
 
     def show_task_index(self) -> None:
         for (_, seq_task) in self.pcf.seq_tasks.items():
-            b = 0
             for i, task in enumerate(seq_task.tasks):
                 self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
                 task_t = task.events["finished"]["timestep"]
-                if self.task_shown.get() == "current" and b == 0 and task_t >= self.pcf.cur_tstep:
-                    b = 1
+                if self.task_shown.get() == "Next Errand" and task_t >= self.pcf.cur_tstep:
                     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
-                elif self.task_shown.get() == "all":
+                elif self.task_shown.get() == "All Tasks":
                     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
                 elif self.task_shown.get() == "none":
                     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
-                elif self.task_shown.get() == "assigned":
+                elif self.task_shown.get() == "Assigned Tasks" and task_t >= self.pcf.cur_tstep:
                     if task.state in ["assigned", "newlyassigned"]:
                         self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
                 # elif task.state == self.task_shown.get():
@@ -698,23 +721,27 @@ class PlanViz2:
 
     def show_tasks(self) -> None:
         for (_, seq_task) in self.pcf.seq_tasks.items():
-            b = 0
             for i, task in enumerate(seq_task.tasks):
                 self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
+
+        for (_, seq_task) in self.pcf.seq_tasks.items():
+            for i, task in enumerate(seq_task.tasks):
                 task_t = task.events["finished"]["timestep"]
-                if self.task_shown.get() == "current" and b == 0 and task_t >= self.pcf.cur_tstep:
-                    b = 1
-                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-                elif self.task_shown.get() == "all":
+                if self.task_shown.get() == "Next Errand" and task_t > self.pcf.cur_tstep:
+                    if task.state in ["assigned", "newlyassigned"]:
+                        self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+                        break
+                elif self.task_shown.get() == "All Tasks":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                 elif self.task_shown.get() == "none":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
-                elif self.task_shown.get() == "assigned":
-                    if task.state in ["assigned", "newlyassigned"]:
+                elif self.task_shown.get() == "Assigned Tasks":
+                    if task.state in ["assigned", "newlyassigned"] and task_t >= self.pcf.cur_tstep:
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                 # elif task.state == self.task_shown.get():
                 #     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-        self.show_task_index()
+        if self.show_task_idx.get():
+            self.show_task_index()
 
 
     def show_tasks_by_click(self, _) -> None:
@@ -725,8 +752,7 @@ class PlanViz2:
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
         self.hide_single_task(task_id, seq_id)
 
-
-        if self.task_shown.get() == "all" or ignore:
+        if self.task_shown.get() == "All Tasks" or ignore:
             if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
                 if self.show_task_idx.get():
@@ -735,7 +761,7 @@ class PlanViz2:
                     self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
-        if self.task_shown.get() == "current":
+        if self.task_shown.get() == "Next Errand":
             if seq_id == 0:
                 if tsk.state in ["assigned", "newlyassigned"]:
                     self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
@@ -756,7 +782,7 @@ class PlanViz2:
                         self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             return
 
-        if self.task_shown.get() == "assigned":
+        if self.task_shown.get() == "Assigned Tasks":
             if tsk.state in ["assigned", "newlyassigned"]:
                 self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
                 if self.show_task_idx.get():
@@ -831,6 +857,14 @@ class PlanViz2:
                 if self.pcf.agent_model == "MAPF_T":
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
+                    
+            
+            self.clear_agent_selection(moving=True)
+            for ag_idx in self.pcf.shown_path_agents:
+                first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
+                if first_errand_t != -1:
+                    self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+                    
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
 
@@ -856,7 +890,7 @@ class PlanViz2:
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
                 self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
-                    self.show_single_task(task_id)
+                    self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] += 1
 
         if self.pcf.cur_tstep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
@@ -872,7 +906,7 @@ class PlanViz2:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
-
+        
 
     def back_agents_per_timestep(self) -> None:
         """ Move agents in one reversed timestep, reducing cur_tstep by 1.
@@ -955,6 +989,13 @@ class PlanViz2:
             agent.agent_obj.loc = prev_loc[ag_id]
 
         self.pcf.cur_tstep = prev_timestep
+        
+        self.clear_agent_selection(moving=True)
+        for ag_idx in self.pcf.shown_path_agents:
+            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
+            if first_errand_t != -1:
+                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+        
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
@@ -1014,7 +1055,6 @@ class PlanViz2:
                 self.hide_single_task(task_id, seq_id)
 
         for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
-            
             if a_time == -1:
                 self.pcf.event_tracker["aid"] = a_id
                 break

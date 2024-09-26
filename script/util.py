@@ -7,7 +7,7 @@ import math
 from typing import List, Tuple, Dict
 
 TASK_COLORS: Dict[int, str] = {
-    "unassigned": "pink",
+    "unassigned": "#eeeaa2",
     "newlyassigned": "yellowgreen",
     "assigned": "orange",
     "finished": "grey"
