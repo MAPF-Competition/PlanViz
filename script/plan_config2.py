@@ -222,10 +222,12 @@ class PlanConfig2:
 
         assert self.max_seq_num > -1
         for (finish_tstep, ag_id, task_id, nxt_errand_id) in data["events"]:
+            if (finish_tstep > self.end_tstep):
+                continue
             seq_id = nxt_errand_id - 1
             global_task_id = self.max_seq_num * task_id + seq_id
             if finish_tstep not in self.events["finished"]:
-                self.events["finished"][finish_tstep] = {}
+                self.events["finished"][finish_tstep] = {}      
             self.events["finished"][finish_tstep][global_task_id] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["agent"] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["timestep"] = finish_tstep

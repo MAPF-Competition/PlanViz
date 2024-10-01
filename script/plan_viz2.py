@@ -12,7 +12,7 @@ import platform
 import numpy as np
 import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk,font
 from typing import Dict, List, Set, Tuple
 
 from plan_config2 import PlanConfig2
@@ -264,45 +264,17 @@ class PlanViz2:
         self.row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
-        event_label = tk.Label(self.frame, text="List of events", font=("Arial",TEXT_SIZE))
+        event_label = tk.Label(self.frame, text="Most recent of events", font=("Arial",TEXT_SIZE))
         event_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
-        self.shown_events:Dict[str, Tuple[int,int,int,str]] = {}
+        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
                                         width=30,
                                         height=9,
                                         font=("Arial",TEXT_SIZE),
                                         selectmode=tk.EXTENDED)
-        eve_id = 0
-        time_list = list(self.pcf.events["assigned"])
-        time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
-        time_list = sorted(time_list, reverse=False)
-        for tstep in time_list:
-            if tstep in self.pcf.events["assigned"]:
-                cur_events= self.pcf.events["assigned"][tstep]
-                for global_task_id in sorted(cur_events.keys(), reverse=False):
-                    task_id = global_task_id // self.pcf.max_seq_num
-                    seq_id = global_task_id % self.pcf.max_seq_num
-                    ag_id = cur_events[global_task_id]
-                    if seq_id == 0:
-                        e_str = "task " + str(task_id) + \
-                            " is assigned to ag:" + str(ag_id) + " at t:" + str(tstep)
-                        self.shown_events[e_str] = (tstep, task_id, ag_id, "assigned")
-                        self.event_listbox.insert(eve_id, e_str)
-                        eve_id += 1
-            if tstep in self.pcf.events["finished"]:
-                cur_events = self.pcf.events["finished"][tstep]
-                for global_task_id in sorted(cur_events.keys(), reverse=False):
-                    task_id = global_task_id // self.pcf.max_seq_num
-                    seq_id = global_task_id % self.pcf.max_seq_num
-                    ag_id = cur_events[global_task_id]
-                    if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
-                        e_str = "task "+str(task_id) + \
-                            " is done by ag:" + str(ag_id) + " at t:"+str(tstep)
-                        self.shown_events[e_str] = (tstep, task_id, ag_id, "finished")
-                        self.event_listbox.insert(eve_id, e_str)
-                        eve_id += 1
+        
 
         self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind("<Double-1>", self.move_to_event)
@@ -336,6 +308,54 @@ class PlanViz2:
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
 
+    def update_event_list(self):
+        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        self.eve_id = 0
+        self.event_listbox.delete(0, tk.END)
+        
+        monospace_font = font.Font(family='Courier')
+        self.event_listbox.config(font=monospace_font)
+        header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
+        self.event_listbox.insert(self.eve_id, header)
+        self.eve_id += 1
+        self.event_listbox.insert(self.eve_id, "-" * 34)  # Separator line
+        self.eve_id += 1
+        
+        time_list = list(self.pcf.events["assigned"])
+        time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
+        time_list = sorted(time_list, reverse=False)
+        for tstep in range(self.pcf.cur_tstep, -1, -1):
+            if tstep in self.pcf.events["assigned"]:
+                cur_events= self.pcf.events["assigned"][tstep]
+                for global_task_id in sorted(cur_events.keys(), reverse=False):
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    ag_id = cur_events[global_task_id]
+                    if seq_id == 0:
+                        e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
+                        self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "assigned")
+                        self.event_listbox.insert(self.eve_id, e_str)
+                        if tstep == self.pcf.cur_tstep:
+                            self.event_listbox.itemconfigure(self.eve_id, background='yellow')
+                            
+                        self.eve_id += 1
+            if tstep in self.pcf.events["finished"]:
+                cur_events = self.pcf.events["finished"][tstep]
+                for global_task_id in sorted(cur_events.keys(), reverse=False):
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    ag_id = cur_events[global_task_id]
+                    if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
+                        e_str = f"{tstep:<6}{ag_id:<8}{'T-Finished':<12}{task_id:<8}"
+                        self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "task_finished")
+                    else:
+                        e_str = f"{tstep:<6}{ag_id:<8}{'E-Finished':<12}{task_id:<8}"
+                        self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "errand_finished")
+                        
+                    self.event_listbox.insert(self.eve_id, e_str)
+                    if tstep == self.pcf.cur_tstep:
+                            self.event_listbox.itemconfigure(self.eve_id, background='yellow')
+                    self.eve_id += 1
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         """ Change the color of the agent if collisions are not shown
@@ -365,6 +385,7 @@ class PlanViz2:
         cur_task_obj = self.pcf.seq_tasks[task_id].tasks[seq_id].task_obj.obj
         if self.pcf.canvas.itemcget(cur_task_obj, "fill") != color:
             self.pcf.canvas.itemconfig(cur_task_obj, fill=color)
+        return cur_task_obj
 
     def select_conflict(self, event):
         selected_indices = event.widget.curselection()  # Get all selected indices
@@ -440,7 +461,7 @@ class PlanViz2:
             return
         selected_idx = event.widget.curselection()[0]  # get all selected indices
         eve_str:str = self.event_listbox.get(selected_idx)
-        cur_eve:Tuple[int,int,int,str] = self.shown_events[eve_str]
+        cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str]
         new_t = max(cur_eve[0]-1, 0)  # move to one timestep ahead the event
         self.new_time.set(new_t)
         self.update_curtime()
@@ -879,7 +900,7 @@ class PlanViz2:
         # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
             return
-
+        self.update_event_list()
 
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
@@ -996,6 +1017,8 @@ class PlanViz2:
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t, moving=True)
         
+        self.update_event_list()
+        
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
@@ -1046,7 +1069,7 @@ class PlanViz2:
 
         self.pcf.cur_tstep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
-
+        
         # Change tasks' and agents' colors according to assigned timesteps
         for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for (seq_id, task) in enumerate(seq_task.tasks):
@@ -1117,4 +1140,5 @@ class PlanViz2:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
 
         self.show_agent_index()
+        
         self.pcf.canvas.update()
