@@ -253,7 +253,7 @@ class PlanConfig2:
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
                 tobj = self.render_obj(
-                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0.05, str(tid)
+                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
                 )
                 tasks.append(Task(tid, tloc, tobj))
             self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)

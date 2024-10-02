@@ -293,6 +293,7 @@ class PlanViz2:
         self.resume_zoom()
 
         self.new_time.set(self.pcf.start_tstep)
+        self.max_event_t = 0
         self.update_curtime()
 
         self.frame.update()  # Adjust window size
@@ -310,6 +311,7 @@ class PlanViz2:
 
     def update_event_list(self):
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         self.eve_id = 0
         self.event_listbox.delete(0, tk.END)
         
@@ -324,7 +326,7 @@ class PlanViz2:
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
-        for tstep in range(self.pcf.cur_tstep, -1, -1):
+        for tstep in range(self.max_event_t, -1, -1):
             if tstep in self.pcf.events["assigned"]:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -356,6 +358,7 @@ class PlanViz2:
                     if tstep == self.pcf.cur_tstep:
                             self.event_listbox.itemconfigure(self.eve_id, background='yellow')
                     self.eve_id += 1
+            
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         """ Change the color of the agent if collisions are not shown
@@ -428,6 +431,7 @@ class PlanViz2:
                 task.state = "unassigned"
                 self.hide_single_task(task_id, seq_id)
 
+        self.max_event_t = 0
         self.update_curtime()
 
 
@@ -461,10 +465,16 @@ class PlanViz2:
             return
         selected_idx = event.widget.curselection()[0]  # get all selected indices
         eve_str:str = self.event_listbox.get(selected_idx)
-        cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str]
-        new_t = max(cur_eve[0]-1, 0)  # move to one timestep ahead the event
+        cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
+        new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
+        self.clear_agent_selection()
         self.new_time.set(new_t)
         self.update_curtime()
+        ag_idx = cur_eve[1]
+        first_errand_t = self.show_colorful_errands(ag_idx)
+        if first_errand_t != -1:
+            self.show_ag_plan(ag_idx, first_errand_t)
+        
 
     def __move_from(self, event):
         """ Remember previous coordinates for scrolling with the mouse
@@ -586,7 +596,7 @@ class PlanViz2:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
             if not self.show_agent_path.get(): 
                 return
-            ml = min(self.pcf.cur_tstep+first_errand_t+1, len(self.pcf.agents[ag_idx].path_objs))
+            ml = min(first_errand_t+1, len(self.pcf.agents[ag_idx].path_objs))
             for _pid_ in range(self.pcf.cur_tstep+1, ml):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state=tk.DISABLED)
@@ -1140,5 +1150,5 @@ class PlanViz2:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
 
         self.show_agent_index()
-        
+        self.update_event_list()
         self.pcf.canvas.update()
