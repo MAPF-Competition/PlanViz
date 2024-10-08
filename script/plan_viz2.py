@@ -144,12 +144,12 @@ class PlanViz2:
         self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
-        self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
-                                         font=("Arial",TEXT_SIZE),
-                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
-                                         command=self.show_task_index)
-        self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
+        # self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
+        #                                  font=("Arial",TEXT_SIZE),
+        #                                  variable=self.show_task_idx, onvalue=True, offvalue=False,
+        #                                  command=self.show_task_index)
+        # self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        # self.row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",TEXT_SIZE),
@@ -212,7 +212,7 @@ class PlanViz2:
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
-                                           width=30,
+                                           width=35,
                                            height=9,
                                            font=("Arial",TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
@@ -257,10 +257,10 @@ class PlanViz2:
         self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
         self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
 
-        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
         self.conflict_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
-        scrollbar.grid(row=self.row_idx, column=5, sticky="w")
+        scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
@@ -270,7 +270,7 @@ class PlanViz2:
 
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
-                                        width=30,
+                                        width=35,
                                         height=9,
                                         font=("Arial",TEXT_SIZE),
                                         selectmode=tk.EXTENDED)
@@ -279,10 +279,10 @@ class PlanViz2:
         self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind("<Double-1>", self.move_to_event)
 
-        scrollbar = tk.Scrollbar(self.frame, orient="vertical")
+        scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
         self.event_listbox.config(yscrollcommand = scrollbar.set)
         scrollbar.config(command=self.event_listbox.yview)
-        scrollbar.grid(row=self.row_idx, column=5, sticky="w")
+        scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
         print("Done!")
 
@@ -463,7 +463,10 @@ class PlanViz2:
     def move_to_event(self, event):
         if self.is_run.get() is True:
             return
-        selected_idx = event.widget.curselection()[0]  # get all selected indices
+        selected_idx = event.widget.curselection()  # get all selected indices
+        if len(selected_idx) < 1:
+            return 
+        selected_idx = selected_idx[0]
         eve_str:str = self.event_listbox.get(selected_idx)
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
