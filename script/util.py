@@ -4,6 +4,7 @@
 
 import sys
 import math
+from pathlib import Path
 from typing import List, Tuple, Dict
 
 TASK_COLORS: Dict[int, str] = {
@@ -39,7 +40,7 @@ DBL_MAX:int = 1.79769e+308
 TEXT_SIZE:int = 12
 
 
-def get_map_name(in_file:str) -> str:
+def get_map_name(in_file: str) -> str:
     """Get the map name from the file name
 
     Args:
@@ -48,7 +49,9 @@ def get_map_name(in_file:str) -> str:
     Returns:
         str: the name of the map
     """
-    return in_file.split("/")[-1].split(".")[0]
+    path_obj: Path = Path() / in_file
+    name: str = path_obj.name
+    return name.replace(path_obj.suffix, '')
 
 
 def get_angle(glob_dir:int):
