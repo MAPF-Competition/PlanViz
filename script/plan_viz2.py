@@ -2,9 +2,6 @@
 """ Plan Visualizer with rotation agents
 This is a script for visualizing the plan for the League of Robot Runners.
 All rights reserved.
-
-I sacrifice my research and create PlanViz to entertain Daniel and you guys.
-Please enjoy my monkey dance and don't forget to star the repo.
 """
 
 import math
