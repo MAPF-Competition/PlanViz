@@ -196,6 +196,8 @@ class PlanConfig2:
                 if assign_tstep > self.end_tstep:
                     continue
                 task_id = int(ele.split(":")[1])
+                if task_id == -1:
+                    continue
                 if assign_tstep not in self.actual_schedule:
                     self.actual_schedule[assign_tstep] = []
                 self.actual_schedule[assign_tstep].append((task_id, ag_id))
