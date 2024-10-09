@@ -178,12 +178,8 @@ class PlanViz2:
         task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=15, state="readonly",
                                        values=["Next Errand",
-                                            #    "newlyassigned",
                                                "Assigned Tasks",
-                                               "All Tasks",
-                                            #    "unassigned",
-                                            #    "finished",
-                                            #    "none"
+                                               "All Tasks"
                                                ])
         self.task_shown.current(0)
         self.task_shown.bind("<<ComboboxSelected>>", self.show_tasks_by_click)
@@ -385,7 +381,7 @@ class PlanViz2:
         cur_task_obj = self.pcf.seq_tasks[task_id].tasks[seq_id].task_obj.obj
         if self.pcf.canvas.itemcget(cur_task_obj, "fill") != color:
             self.pcf.canvas.itemconfig(cur_task_obj, fill=color)
-        return cur_task_obj
+        # return cur_task_obj
 
     def select_conflict(self, event):
         selected_indices = event.widget.curselection()  # Get all selected indices
