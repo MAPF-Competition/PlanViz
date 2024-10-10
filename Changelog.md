@@ -1,5 +1,15 @@
 # Changelog
 
+Version 2.0.0 - 2023-10-10
+---
+Added:
+- `run2.py` for parsing and visualising JSON output from LORR Start-kit V2.0.0
+- Task schedule visualisation: scheduler error and errands visualisation.
+- Right click on agents to show current paths and scheduled tasks for the selected agents.
+- Right click on empty tiles to cancel all selections.
+
+Changes:
+- `run.py` for parsing and visualising JSON output from LORR Start-kit V1.
 
 Version 1.3.0 - 2023-10-21
 ---
