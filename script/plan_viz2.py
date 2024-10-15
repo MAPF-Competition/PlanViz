@@ -548,7 +548,9 @@ class PlanViz2:
         self.show_ag_plan(ag_idx, first_errand_t)
 
     def get_ag_idx(self, event):
-        item = self.pcf.canvas.find_closest(event.x, event.y)[0]
+        x_adjusted = self.pcf.canvas.canvasx(event.x)
+        y_adjusted = self.pcf.canvas.canvasy(event.y)
+        item = self.pcf.canvas.find_closest(x_adjusted, y_adjusted)[0]
         tags:Set[str] = self.pcf.canvas.gettags(item)
         ag_idx = -1
         for _tt_ in tags:
@@ -561,15 +563,15 @@ class PlanViz2:
     def show_colorful_errands(self, ag_idx, moving=False):
         agent_tasks = self.pcf.agent_assigned_task[ag_idx]
         agent_tasks = sorted(agent_tasks)
+        first_errand = -1
+        first_errand_t = -1
         tsk_idx = -1
         for t, i in agent_tasks:
             if self.pcf.cur_tstep >= t-1:
                 tsk_idx = i
         if tsk_idx == -1:
-            return
+            return int(first_errand_t)
         t = []
-        first_errand = -1
-        first_errand_t = -1
         for i, task in enumerate(self.pcf.seq_tasks[tsk_idx].tasks):
             task_t = task.events["finished"]["timestep"]
             if task_t == float("inf"):
