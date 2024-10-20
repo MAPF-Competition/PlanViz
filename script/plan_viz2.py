@@ -163,7 +163,7 @@ class PlanViz2:
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
         
-        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show agent path",
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show selected agent path",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_agent_path,
                                                       onvalue=True, offvalue=False,
