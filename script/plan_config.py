@@ -940,11 +940,12 @@ class PlanConfig2024:
 
     def load_sequential_tasks(self, data:Dict):
         print("Loading tasks", end="...")
-
+        self.grid2task = {}
         if "tasks" not in data:
             print("No tasks.")
             return
-
+        
+        
         assert self.max_seq_num == -1
         for task in data["tasks"]:  # Now we need to use the released time of each task
             tid = task[0]
@@ -958,6 +959,9 @@ class PlanConfig2024:
                 tobj = self.render_obj(
                     tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
                 )
+                if not (tloc in self.grid2task.keys()):
+                    self.grid2task[tobj.obj] = []
+                self.grid2task[tobj.obj].append(tid)
                 tasks.append(Task(tid, tloc, tobj))
             self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)
             self.max_seq_num = max(self.max_seq_num, len(tasks))

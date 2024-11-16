@@ -1040,13 +1040,16 @@ class PlanViz2024:
         self.pcf:PlanConfig2024 = plan_config
         if platform.system() == "Darwin":
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-2>")
+            self.pcf.canvas.event_add("<<CtrlRightClick>>", "<Control-Button-2>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-3>")
         else:
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-3>")
+            self.pcf.canvas.event_add("<<CtrlRightClick>>", "<Control-Button-3>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
 
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
-        self.pcf.canvas.bind("<<RightClick>>", self.right_click)
+        self.right_click_status = "right"
+        self.pcf.canvas.bind("<<CtrlRightClick>>", self.ctrlright_click)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -1267,7 +1270,11 @@ class PlanViz2024:
 
     def update_event_list(self):
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
-        self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
+        if self.right_click_status == "ctrlright":
+            end_tstep = self.pcf.end_tstep
+        if self.right_click_status == "right":
+            self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
+            end_tstep = self.max_event_t
         self.eve_id = 0
         self.event_listbox.delete(0, tk.END)
         
@@ -1282,11 +1289,12 @@ class PlanViz2024:
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
-        for tstep in range(self.max_event_t, -1, -1):
+        for tstep in range(end_tstep, -1, -1):
             if tstep in self.pcf.events["assigned"]:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
+                    if self.right_click_status == "ctrlright" and not (task_id in self.right_click_all_tasks_idx): continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     if seq_id == 0:
@@ -1301,6 +1309,7 @@ class PlanViz2024:
                 cur_events = self.pcf.events["finished"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
+                    if self.right_click_status == "ctrlright" and not (task_id in self.right_click_all_tasks_idx): continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
@@ -1424,6 +1433,8 @@ class PlanViz2024:
             return 
         selected_idx = selected_idx[0]
         eve_str:str = self.event_listbox.get(selected_idx)
+        if "------" in eve_str: 
+            return
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
         self.clear_agent_selection()
@@ -1501,6 +1512,7 @@ class PlanViz2024:
             self.update_curtime()
 
     def right_click(self, event):
+        self.right_click_status = "right"
         ag_idx = self.get_ag_idx(event)
         if ag_idx == -1:
             self.clear_agent_selection()
@@ -1510,16 +1522,80 @@ class PlanViz2024:
             return
         self.show_ag_plan(ag_idx, first_errand_t)
 
+    def ctrlright_click_show_task_seq(self, task_idx):
+        def get_center_coords(canvas, item_id):
+            # Get the coordinates of the bounding box of the item
+            coords = canvas.coords(item_id)
+            # Calculate the center
+            x_center = (coords[0] + coords[2]) / 2
+            y_center = (coords[1] + coords[3]) / 2
+            return x_center, y_center
+        
+        arrows = []
+        self.pcf.shown_tasks_seq.add(task_idx)
+        last_obj = None
+        for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+            task_t = tsk.events["finished"]["timestep"]
+            if self.pcf.cur_tstep >= task_t:
+                continue
+            
+            self.change_task_color(task_idx,idx, "pink")
+            if last_obj == None:
+                last_obj = tsk.task_obj.obj
+                self.change_task_color(task_idx,idx, "orange")
+                self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
+                continue
+
+            x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
+            last_obj = tsk.task_obj.obj
+            x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
+            # _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=2, fill="#4eb1a6")
+            # arrows.append(_arrow)
+            self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
+
+        # Hide tasks that are not in ag_id
+        for task_id, seq_task in self.pcf.seq_tasks.items():
+            if task_id in self.pcf.shown_tasks_seq:
+                for seq_id, tsk in enumerate(seq_task.tasks):
+                    task_t = tsk.events["finished"]["timestep"]
+                    if self.pcf.cur_tstep >= task_t:
+                        continue
+                    self.show_single_task(task_id, seq_id, ignore=1)
+            else:
+                for seq_id in range(len(seq_task.tasks)):
+                    self.hide_single_task(task_id, seq_id)
+        return arrows
+
+            
+
+    
+
+    def ctrlright_click(self, event):
+        x_adjusted = self.pcf.canvas.canvasx(event.x)
+        y_adjusted = self.pcf.canvas.canvasy(event.y)
+        item = self.pcf.canvas.find_closest(x_adjusted, y_adjusted)[0]
+        all_tasks_idx = []
+        if item in self.pcf.grid2task.keys():
+            all_tasks_idx = self.pcf.grid2task[item]
+        all_tasks_idx = set(all_tasks_idx)
+        if len(all_tasks_idx) > 0:
+            self.right_click_status = "ctrlright"
+            self.right_click_all_tasks_idx = all_tasks_idx
+            self.update_event_list()
+        
+        
+
     def get_ag_idx(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
         item = self.pcf.canvas.find_closest(x_adjusted, y_adjusted)[0]
         tags:Set[str] = self.pcf.canvas.gettags(item)
         ag_idx = -1
-        for _tt_ in tags:
-            if _tt_.isnumeric():
-                ag_idx = int(_tt_)  # get the id of the agent
-                return ag_idx
+        if len(tags) > 1:
+            for _tt_ in tags[1:]:
+                if _tt_.isnumeric():
+                    ag_idx = int(_tt_)  # get the id of the agent
+                    return ag_idx
         return ag_idx
 
 
