@@ -1,4 +1,13 @@
 # Changelog
+Version 2.1.0 - 2023-11-17
+---
+Added:
+- Event list is refactored to better support the visualization of the task schedule.
+- Click a locations show agents with tasks including the location.
+
+Changes:
+- merge `run.py` and `run2.py` into `run.py`. PlanViz now checks the version of the JSON file and parses it accordingly.
+- Fix a few bugs in 2.0.0.
 
 Version 2.0.0 - 2023-10-10
 ---

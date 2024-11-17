@@ -34,26 +34,6 @@ class PlanConfig2023:
 
         self.agent_model:str = ""
 
-        self.ppm:int = ppm
-        if self.ppm is None:
-            if map_name in MAP_CONFIG:
-                self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
-            else:
-                raise TypeError("Missing variable: pixel_per_move.")
-        self.moves = moves
-        if self.moves is None:
-            if map_name in MAP_CONFIG:
-                self.moves = MAP_CONFIG[map_name]["moves"]
-            else:
-                raise TypeError("Missing variable: moves.")
-        self.delay:int = delay
-        if self.delay is None:
-            if map_name in MAP_CONFIG:
-                self.delay = MAP_CONFIG[map_name]["delay"]
-            else:
-                raise TypeError("Missing variable: delay.")
-
-        self.tile_size:int = self.ppm * self.moves
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
@@ -85,6 +65,33 @@ class PlanConfig2023:
 
         # Initialize the window
         self.window = tk.Tk()
+
+        self.screen_width = self.window.winfo_screenwidth()
+
+        pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
+
+        self.moves = moves
+        if self.moves is None:
+            if map_name in MAP_CONFIG:
+                self.moves = MAP_CONFIG[map_name]["moves"]
+            else:
+                self.moves = 3
+        
+        self.ppm:int = ppm
+        if self.ppm is None:
+            if map_name in MAP_CONFIG:
+                self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
+            else:
+                self.ppm = pixel_per_grid // self.moves
+
+        self.delay:int = delay
+        if self.delay is None:
+            if map_name in MAP_CONFIG:
+                self.delay = MAP_CONFIG[map_name]["delay"]
+            else:
+                self.delay = 0.06
+        self.tile_size:int = self.ppm * self.moves
+
 
         # Show MAPF instance
         # Use width and height for scaling
@@ -733,26 +740,6 @@ class PlanConfig2024:
 
         self.agent_model:str = ""
 
-        self.ppm:int = ppm
-        if self.ppm is None:
-            if map_name in MAP_CONFIG:
-                self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
-            else:
-                raise TypeError("Missing variable: pixel_per_move.")
-        self.moves = moves
-        if self.moves is None:
-            if map_name in MAP_CONFIG:
-                self.moves = MAP_CONFIG[map_name]["moves"]
-            else:
-                raise TypeError("Missing variable: moves.")
-        self.delay:int = delay
-        if self.delay is None:
-            if map_name in MAP_CONFIG:
-                self.delay = MAP_CONFIG[map_name]["delay"]
-            else:
-                raise TypeError("Missing variable: delay.")
-
-        self.tile_size:int = self.ppm * self.moves
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
@@ -778,9 +765,36 @@ class PlanConfig2024:
         self.conflict_agents:Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
-
+        
         # Initialize the window
         self.window = tk.Tk()
+
+        self.screen_width = self.window.winfo_screenwidth()
+
+        pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
+
+
+        self.moves = moves
+        if self.moves is None:
+            if map_name in MAP_CONFIG:
+                self.moves = MAP_CONFIG[map_name]["moves"]
+            else:
+                self.moves = 3
+        
+        self.ppm:int = ppm
+        if self.ppm is None:
+            if map_name in MAP_CONFIG:
+                self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
+            else:
+                self.ppm = pixel_per_grid // self.moves
+
+        self.delay:int = delay
+        if self.delay is None:
+            if map_name in MAP_CONFIG:
+                self.delay = MAP_CONFIG[map_name]["delay"]
+            else:
+                self.delay = 0.06
+        self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
         # Use width and height for scaling
