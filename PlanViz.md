@@ -65,11 +65,7 @@ then we have default values for `ppm`, `mv`, and `delay`, so the user does not n
 To run PlanViz, open a terminal under the directory `PlanViz/` and type the following example command:
 
 ```bash
-# For League of Robot Runners 2024
-python3 script/run2.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
-
-# For League of Robot Runners 2023
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2023.json --grid --aid --tid
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
 ```
 
 Please keep in mind the formats of `JSON` files are different between 2023 and 2024.
