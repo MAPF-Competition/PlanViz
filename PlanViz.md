@@ -1,7 +1,7 @@
 # PlanViz
 The primary purpose of PlanViz is to help participants in the [League of Robot Runners competition](https://leagueofrobotrunners.org) better understand the planned paths and executed commands of their robots. PlanViz offers insights into problem solving strategies, by showing how robots move across the map, and by highlighting and exploring the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). 
 
-Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a `JSON` formatted log file, which is produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result. An example of the application in action is shown in the following video.
+Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
@@ -11,10 +11,16 @@ PlanViz provides a variety of visual markers to help users understand the result
 
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
-- A task is plotted in a colored square with a number being the task index. Each task is initially marked in pink, and turns yellowgreen when it is newly assigned to an agent, orange after it is assigned to an agent, and grey when it is completed.
-- When PlanViz is in fullsize, right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
+- All errands of tasks are represented by colored squares. Errands for a task are initially marked in yellow, turn orange when the task is assigned to an agent, and turn to white once the errand is completed and there is no further errand at this location.
 
-![scenario](images/scenario.png)
+![scenario](images/scenario_2.png)
+
+- Right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
+- Right-clicking on non-agent grids will cancel all agents selections.
+
+
+
+![scenario](images/scenario_1.png)
 
 ## UI Options and Controls
 
@@ -27,12 +33,12 @@ The user interface supports a variety of operations to control and focus the dis
   - `Fullsize`: Reset the scenario to fullsize
   - `Next`: Move the scenario to the next timestep
   - `Prev`: Move the scenario to the previous timestep
-  - `Reset`: Reset the scenario to timestep 0
+  - `Restart`: Reset the scenario to timestep 0
 - The checkbox controls what to be shown in the scenario.
 - `Start timestep`: Input the desire start timestep and move the scenario to.
 - `List of errors` contains collisions and timeout issues from the Start-Kit. When the scenario is paused, you can double-click an error to see the invalid movements.
 - A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
-- `List of events` contains information of task assignments and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to one timestep before such event occurs.
+- `Most recent events` contains information of task assignments, errands completion and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to the timestep when such event occurs.
 
 ## Arguments
 
@@ -59,11 +65,7 @@ then we have default values for `ppm`, `mv`, and `delay`, so the user does not n
 To run PlanViz, open a terminal under the directory `PlanViz/` and type the following example command:
 
 ```bash
-# For League of Robot Runners 2024
-python3 script/run2.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
-
-# For League of Robot Runners 2023
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2023.json --grid --aid --tid
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
 ```
 
 Please keep in mind the formats of `JSON` files are different between 2023 and 2024.

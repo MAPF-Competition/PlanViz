@@ -35,6 +35,17 @@ class TrackerTransfer:
                 self.makespan = len(path)
             self.actual_path.append(list(path.upper()))
             self.planner_path.append(list(path.upper()))
+            for i in range(len(self.actual_path[-1])):
+                if self.actual_path[-1][i] == "U":
+                    self.actual_path[-1][i] = "D"
+                elif self.actual_path[-1][i] == "D":
+                    self.actual_path[-1][i] = "U"
+            for i in range(len(self.planner_path[-1])):
+                if self.planner_path[-1][i] == "U":
+                    self.planner_path[-1][i] = "D"
+                elif self.planner_path[-1][i] == "D":
+                    self.planner_path[-1][i] = "U"
+                    
             event = []
             event.append([len(self.events),0,"assigned"])
             event.append([len(self.events),len(path),"finished"])

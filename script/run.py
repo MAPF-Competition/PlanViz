@@ -5,8 +5,9 @@
 import argparse
 import tkinter as tk
 import numpy as np
-from plan_config import PlanConfig
-from plan_viz import PlanViz
+import json
+from plan_config import PlanConfig2023, PlanConfig2024
+from plan_viz import PlanViz2023, PlanViz2024
 
 
 def main() -> None:
@@ -14,6 +15,7 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description="Plan visualizer for a MAPF instance")
     parser.add_argument("--map", type=str, help="Path to the map file")
+    parser.add_argument("--version", type=str, default=None, help="Plan file version, '2024 LoRR' or '2023 LoRR'")
     parser.add_argument("--plan", type=str, help="Path to the planned path file")
     parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
@@ -42,11 +44,30 @@ def main() -> None:
                         help="Show the low-level heuristics")
     args = parser.parse_args()
 
-    plan_config = PlanConfig(args.map, args.plan, args.team_size, args.start, args.end,
-                             args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file,
-                             args.search_tree_files, args.heu_file)
-    PlanViz(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
-            args.show_static, args.show_conf_ag)
+    version = None
+    # read the json file specied by --plan, read only the version field
+    with open(args.plan, "r") as f:
+        plan = json.load(f)
+        if "version" in plan:
+            version = plan["version"]
+    
+    if args.version != None:
+        version = args.version
+
+    if version == "2024 LoRR":
+        plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
+                              args.ppm, args.moves, args.delay)
+        PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
+                args.show_static, args.show_conf_ag)
+    else:
+        if version != "2023 LoRR":
+            print("Year not specified, defaulting to 2023 LoRR")
+        plan_config = PlanConfig2023(args.map, args.plan, args.team_size, args.start, args.end,
+                                args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file,
+                                args.search_tree_files, args.heu_file)
+        PlanViz2023(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
+                args.show_static, args.show_conf_ag)
+        
     tk.mainloop()
 
 
