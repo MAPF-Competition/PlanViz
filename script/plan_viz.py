@@ -1107,12 +1107,12 @@ class PlanViz2024:
         self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
-        # self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
-        #                                  font=("Arial",TEXT_SIZE),
-        #                                  variable=self.show_task_idx, onvalue=True, offvalue=False,
-        #                                  command=self.show_task_index)
-        # self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        # self.row_idx += 1
+        self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
+                                         font=("Arial",TEXT_SIZE),
+                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
+                                         command=self.show_task_index)
+        self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",TEXT_SIZE),
@@ -1502,6 +1502,7 @@ class PlanViz2024:
                 for _, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
                     self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
                     self.pcf.canvas.tag_lower(tsk.task_obj.obj)
+                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(_p_.obj)
@@ -1573,29 +1574,32 @@ class PlanViz2024:
     def ctrlright_click(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
-        item = self.pcf.canvas.find_closest(x_adjusted, y_adjusted)[0]
-        all_tasks_idx = []
-        if item in self.pcf.grid2task.keys():
-            all_tasks_idx = self.pcf.grid2task[item]
-        all_tasks_idx = set(all_tasks_idx)
-        if len(all_tasks_idx) > 0:
-            self.right_click_status = "ctrlright"
-            self.right_click_all_tasks_idx = all_tasks_idx
-            self.update_event_list()
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+                                                 x_adjusted+0.1, y_adjusted+0.1)
+        for item in items:
+            all_tasks_idx = []
+            if item in self.pcf.grid2task.keys():
+                all_tasks_idx = self.pcf.grid2task[item]
+            all_tasks_idx = set(all_tasks_idx)
+            if len(all_tasks_idx) > 0:
+                self.right_click_status = "ctrlright"
+                self.right_click_all_tasks_idx = all_tasks_idx
+                self.update_event_list()
+                return 
         
         
 
     def get_ag_idx(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
-        item = self.pcf.canvas.find_closest(x_adjusted, y_adjusted)[0]
-        tags:Set[str] = self.pcf.canvas.gettags(item)
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+                                                 x_adjusted+0.1, y_adjusted+0.1)
         ag_idx = -1
-        if len(tags) > 1:
-            for _tt_ in tags[1:]:
-                if _tt_.isnumeric():
-                    ag_idx = int(_tt_)  # get the id of the agent
-                    return ag_idx
+        for item in items:
+            tags:Set[str] = self.pcf.canvas.gettags(item)
+            if len(tags) > 1 and tags[1] == "current" and tags[0].isnumeric():
+                ag_idx = int(tags[0])  # get the id of the agent
+                return ag_idx
         return ag_idx
 
 
@@ -1770,19 +1774,23 @@ class PlanViz2024:
 
 
     def show_task_index(self) -> None:
+        _state_ = tk.DISABLED if self.show_task_idx.get() is True else tk.HIDDEN
+        
         for (_, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
                 self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
                 task_t = task.events["finished"]["timestep"]
                 if self.task_shown.get() == "Next Errand" and task_t >= self.pcf.cur_tstep:
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
+                    if task.state in ["assigned", "newlyassigned"]:
+                        self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
+                        break
                 elif self.task_shown.get() == "All Tasks":
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
+                    self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
                 elif self.task_shown.get() == "none":
                     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
                 elif self.task_shown.get() == "Assigned Tasks" and task_t >= self.pcf.cur_tstep:
                     if task.state in ["assigned", "newlyassigned"]:
-                        self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
+                        self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
                 # elif task.state == self.task_shown.get():
                 #     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
 
@@ -2187,6 +2195,7 @@ class PlanViz2024:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
 
         self.show_agent_index()
+        self.show_task_index()
         self.update_event_list()
         self.pcf.canvas.update()
 
