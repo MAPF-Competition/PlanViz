@@ -9,18 +9,22 @@ Being an offline tool, PlanViz takes as input a grid map (part of the competitio
 
 PlanViz provides a variety of visual markers to help users understand the results of their planning strategies.
 
+![scenario](images/scenario_2.png)
+
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
 - An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
 - All errands of tasks are represented by colored squares. Errands for a task are initially marked in yellow, turn orange when the task is assigned to an agent, and turn to white once the errand is completed and there is no further errand at this location.
 
-![scenario](images/scenario_2.png)
+![scenario](images/scenario_1.png)
 
 - Right-click an agent to see/hide its path. The paths are presented with a sequence of purple squares, with the locations where the agent rotates or waits being larger.
 - Right-clicking on non-agent grids will cancel all agents selections.
 
+![scenario](images/scenario_4.png)
 
+- Ctrl + Right-click an errand will show all related events
+- Right-clicking on white grids will cancel selection.
 
-![scenario](images/scenario_1.png)
 
 ## UI Options and Controls
 
@@ -65,7 +69,7 @@ then we have default values for `ppm`, `mv`, and `delay`, so the user does not n
 To run PlanViz, open a terminal under the directory `PlanViz/` and type the following example command:
 
 ```bash
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
+python script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --ca --version "2024 LoRR"
 ```
 
 Please keep in mind the formats of `JSON` files are different between 2023 and 2024.
