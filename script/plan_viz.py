@@ -1624,7 +1624,7 @@ class PlanViz2024:
             self.pop_gui_window.title("Pop Window")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
-            width=300
+            width=300 
             height=5 * self.pcf.tile_size
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
