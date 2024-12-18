@@ -1446,7 +1446,7 @@ class PlanViz2024:
             if self.show_hover_loc.get():
                 self.pcf.canvas.create_text((grid_x + 0.5) * self.pcf.tile_size, 
                                         (grid_y + 0.5) * self.pcf.tile_size, 
-                                        text=f"({grid_y}, {grid_x})", 
+                                        text=f"({grid_x}, {grid_y})", 
                                         fill="red", tags="hover_text", font=("Arial", TEXT_SIZE))
 
 

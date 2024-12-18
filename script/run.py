@@ -24,11 +24,12 @@ def main() -> None:
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
     parser.add_argument("--delay", type=float, help="Wait time between timesteps")
-    parser.add_argument("--grid", dest="show_grid", action="store_true",
+    
+    parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
                         help="Show grid on the environment or not")
-    parser.add_argument("--aid", dest="show_ag_idx", action="store_true",
+    parser.add_argument("--aid", dest="show_ag_idx", type=bool, default=True,
                         help="Show agent indices or not")
-    parser.add_argument("--tid", dest="show_task_idx", action="store_true",
+    parser.add_argument("--tid", dest="show_task_idx", type=bool, default=False,
                         help="Show task indices or not")
     parser.add_argument("--static", dest="show_static", action="store_true",
                         help="Show start locations or not")
