@@ -955,6 +955,7 @@ class PlanConfig2024:
     def load_sequential_tasks(self, data:Dict):
         print("Loading tasks", end="...")
         self.grid2task = {}
+        
         if "tasks" not in data:
             print("No tasks.")
             return

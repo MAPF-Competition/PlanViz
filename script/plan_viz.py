@@ -46,7 +46,7 @@ class PlanViz2023:
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
-
+        
         self.is_run.set(False)
         self.is_grid.set(_grid)
         self.show_ag_idx.set(_ag_idx)
@@ -998,6 +998,7 @@ class PlanViz2024:
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
         self.show_agent_path = tk.BooleanVar()
+        self.show_hover_loc = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
@@ -1008,6 +1009,7 @@ class PlanViz2024:
         self.show_task_idx.set(_task_idx)
         self.show_static.set(_static)
         self.show_all_conf_ag.set(_conf_ag)
+        self.show_hover_loc.set(True)
         self.is_heat_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
@@ -1031,6 +1033,11 @@ class PlanViz2024:
                                        text = f"Timestep: {self.pcf.cur_tstep:03d}",
                                        font=("Arial", TEXT_SIZE + 10))
         self.timestep_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.row_idx += 1
+        self.mouse_loc_label = tk.Label(self.frame,
+                                       text="Mouse Position: ",
+                                       font=("Arial", TEXT_SIZE + 10))
+        self.mouse_loc_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
         self.row_idx += 1
 
         self.init_button()
@@ -1060,6 +1067,7 @@ class PlanViz2024:
         
         self.right_click_status = "left"
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
+        self.pcf.canvas.bind("<Motion>", self.on_hover)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
@@ -1147,6 +1155,14 @@ class PlanViz2024:
                                                       onvalue=True, offvalue=False,
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        
+                
+        self.show_hover_loc_button = tk.Checkbutton(self.frame, text="Show location when mouse hover",
+                                                      font=("Arial",TEXT_SIZE),
+                                                      variable=self.show_hover_loc,
+                                                      onvalue=True, offvalue=False)
+        self.show_hover_loc_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
 
@@ -1282,6 +1298,9 @@ class PlanViz2024:
 
     def update_event_list(self):
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        if self.pop_gui_window == None or self.pop_gui_window.winfo_exists() == 0:
+            self.right_click_status = "left"
+        
         if self.right_click_status == "right":
             end_tstep = self.pcf.end_tstep
             event_listbox = self.pop_event_listbox
@@ -1413,6 +1432,22 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
+
+
+    def on_hover(self, event):
+        x_adjusted = self.pcf.canvas.canvasx(event.x)
+        y_adjusted = self.pcf.canvas.canvasy(event.y)
+        grid_x = int(x_adjusted // self.pcf.tile_size)
+        grid_y = int(y_adjusted // self.pcf.tile_size)
+        
+        if 0 <= grid_x < self.pcf.width and 0 <= grid_y < self.pcf.height:
+            self.mouse_loc_label.config(text=f"Mouse Position: ({grid_x}, {grid_y})")
+            self.pcf.canvas.delete("hover_text")
+            if self.show_hover_loc.get():
+                self.pcf.canvas.create_text((grid_x + 0.5) * self.pcf.tile_size, 
+                                        (grid_y + 0.5) * self.pcf.tile_size, 
+                                        text=f"({grid_y}, {grid_x})", 
+                                        fill="red", tags="hover_text", font=("Arial", TEXT_SIZE))
 
 
     def move_to_conflict(self, event):
@@ -1611,7 +1646,7 @@ class PlanViz2024:
 
             
 
-    def create_pop_window(self):
+    def create_pop_window(self, grid_loc):
         if self.pop_gui_window == None or self.pop_gui_window.winfo_exists() == 0:       
             mouse_x = self.pcf.window.winfo_pointerx()
             mouse_y = self.pcf.window.winfo_pointery()
@@ -1621,7 +1656,7 @@ class PlanViz2024:
             window_y = mouse_y + offset_y
             
             self.pop_gui_window = tk.Toplevel()
-            self.pop_gui_window.title("Pop Window")
+            self.pop_gui_window.title(f"Pop Window ({grid_loc[0]}, {grid_loc[1]})")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
             width=300 
@@ -1654,7 +1689,10 @@ class PlanViz2024:
             if len(all_tasks_idx) > 0:
                 self.right_click_status = "right"
                 self.right_click_all_tasks_idx = all_tasks_idx
-                self.create_pop_window()
+                grid_column = int(x_adjusted // self.pcf.tile_size)
+                grid_row = int(y_adjusted // self.pcf.tile_size)
+                grid_loc = [grid_column, grid_row]
+                self.create_pop_window(grid_loc)
                 self.update_event_list()
                 break 
         
