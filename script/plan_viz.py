@@ -1009,7 +1009,7 @@ class PlanViz2024:
         self.show_task_idx.set(_task_idx)
         self.show_static.set(_static)
         self.show_all_conf_ag.set(_conf_ag)
-        self.show_hover_loc.set(True)
+        self.show_hover_loc.set(False)
         self.is_heat_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
@@ -1059,7 +1059,7 @@ class PlanViz2024:
             self.pcf.canvas.event_add("<<CtrlRightClick>>", "<Control-Button-3>")
             self.pcf.canvas.event_add("<<MiddleClick>>", "<Button-2>")
 
-        self.double_click_threshold = 0.2  # 300ms
+        self.double_click_threshold = 0.1  # 300ms
         self.drag_move_threshold = 5       # 5 pixels
         self.last_click_time = 0
         self.last_click_pos = (0, 0)
@@ -1072,7 +1072,7 @@ class PlanViz2024:
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
         self.pcf.canvas.bind("<B1-Motion>", self.on_mouse_drag)
-        # self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+        self.pcf.canvas.bind("<ButtonRelease-1>", self.on_button_release)
         
         # linux scroll
         self.pcf.canvas.bind("<Button-4>", self.__wheel)
@@ -1432,6 +1432,7 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
+        self.show_tasks()
 
 
     def on_hover(self, event):
@@ -1499,20 +1500,11 @@ class PlanViz2024:
             self.show_ag_plan(ag_idx, first_errand_t)
         
     def check_left_click(self, event):
-        current_time = time.time()
-        if (current_time - self.last_click_time) < self.double_click_threshold:
-            # Time interval is within the double-click threshold => treat this as a double click
-            self.dragging = False
-            self.last_click_time = 0
-            self.left_click(event)
-        else:
-            # First click or the interval has exceeded the threshold => initialize potential drag / single click
-            self.last_click_time = current_time
-            self.last_click_pos = (event.x, event.y)
-            self.dragging = False  # Not actually dragging yet
-            # Do not immediately handle single-click logic; wait to see if the user drags or clicks again
-            # However, call canvas.scan_mark(...) to prepare for a potential drag
-            self.pcf.canvas.scan_mark(event.x, event.y)
+        self.last_click_pos = (event.x, event.y)
+        self.dragging = False  # Not actually dragging yet
+        # Do not immediately handle single-click logic; wait to see if the user drags or clicks again
+        # However, call canvas.scan_mark(...) to prepare for a potential drag
+        self.pcf.canvas.scan_mark(event.x, event.y)
 
     def on_mouse_drag(self, event):
         # If the mouse moves more than a certain distance, we consider it a drag
@@ -1529,9 +1521,7 @@ class PlanViz2024:
     def on_button_release(self, event):
         # If you haven't dragged when you release it, and it doesn't trigger a double click, it will be treated as a single click.
         if not self.dragging:
-            self.on_single_click(event)
-        # reset dragging status
-        self.dragging = False
+            self.left_click(event)
 
     def __wheel(self, event):
         """ Zoom with mouse wheel
@@ -1593,7 +1583,7 @@ class PlanViz2024:
         if not (self.pop_gui_window is None) and self.pop_gui_window.winfo_exists() != 0:
             self.pop_gui_window.destroy()
         ag_idx = self.get_ag_idx(event)
-        if ag_idx == -1:
+        if ag_idx == -1 and self.run_button['state'] == tk.NORMAL:
             self.clear_agent_selection()
         if ag_idx != -1:
             first_errand_t = self.show_colorful_errands(ag_idx)
@@ -1656,7 +1646,7 @@ class PlanViz2024:
             window_y = mouse_y + offset_y
             
             self.pop_gui_window = tk.Toplevel()
-            self.pop_gui_window.title(f"Pop Window ({grid_loc[0]}, {grid_loc[1]})")
+            self.pop_gui_window.title(f"Location ({grid_loc[0]}, {grid_loc[1]})")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
             width=300 
@@ -1675,6 +1665,7 @@ class PlanViz2024:
             self.pop_event_listbox.config(yscrollcommand = scrollbar.set)
             scrollbar.config(command=self.pop_event_listbox.yview)
             scrollbar.grid(row=1, column=5, sticky="ns")
+        self.pop_gui_window.title(f"Location ({grid_loc[0]}, {grid_loc[1]})")
 
     def right_click(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
