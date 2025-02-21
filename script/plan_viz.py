@@ -1064,7 +1064,8 @@ class PlanViz2024:
         self.last_click_time = 0
         self.last_click_pos = (0, 0)
         self.dragging = False
-        
+        self.right_click_agent = -1
+        self.right_click_all_tasks_idx = []
         self.right_click_status = "left"
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
         self.pcf.canvas.bind("<Motion>", self.on_hover)
@@ -1296,21 +1297,17 @@ class PlanViz2024:
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
 
-    def update_event_list(self):
-        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
-        if self.pop_gui_window == None or self.pop_gui_window.winfo_exists() == 0:
-            self.right_click_status = "left"
-        
-        if self.right_click_status == "right":
-            end_tstep = self.pcf.end_tstep
-            event_listbox = self.pop_event_listbox
+    def update_event_list(self, event_listbox, pop):
+        if event_listbox == None:
+            return
+        self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
+        end_tstep = self.max_event_t
             
-        if self.right_click_status == "left":
-            self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
-            end_tstep = self.max_event_t
-            event_listbox = self.event_listbox
+        # if event_listbox is None or self.pop_gui_window.winfo_exists() == 0:
+        #     event_listbox = self.event_listbox
 
-        self.eve_id = 0        
+        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        self.eve_id = 0
         event_listbox.delete(0, tk.END)
         monospace_font = font.Font(family='Courier')
         event_listbox.config(font=monospace_font)
@@ -1319,7 +1316,6 @@ class PlanViz2024:
         self.eve_id += 1
         event_listbox.insert(self.eve_id, "-" * 34)  # Separator line
         self.eve_id += 1
-        
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
@@ -1328,9 +1324,10 @@ class PlanViz2024:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
-                    if self.right_click_status == "right" and not (task_id in self.right_click_all_tasks_idx): continue
+                    if pop and self.right_click_agent < 0 and (not (task_id in self.right_click_all_tasks_idx)): continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
+                    if pop and self.right_click_agent > -1 and ag_id != self.right_click_agent: continue
                     if seq_id == 0:
                         e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "assigned")
@@ -1343,9 +1340,10 @@ class PlanViz2024:
                 cur_events = self.pcf.events["finished"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
-                    if self.right_click_status == "right" and not (task_id in self.right_click_all_tasks_idx): continue
+                    if pop and self.right_click_agent < 0 and not (task_id in self.right_click_all_tasks_idx): continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
+                    if pop and (self.right_click_agent > -1 and ag_id != self.right_click_agent): continue
                     if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
                         e_str = f"{tstep:<6}{ag_id:<8}{'T-Finished':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "task_finished")
@@ -1432,7 +1430,7 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
-        self.show_tasks()
+        
 
 
     def on_hover(self, event):
@@ -1670,22 +1668,30 @@ class PlanViz2024:
     def right_click(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
+        grid_column = int(x_adjusted // self.pcf.tile_size)
+        grid_row = int(y_adjusted // self.pcf.tile_size)
+        grid_loc = [grid_column, grid_row]
         items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
                                                  x_adjusted+0.1, y_adjusted+0.1)
+        self.right_click_all_tasks_idx = []
         for item in items:
             all_tasks_idx = []
             if item in self.pcf.grid2task.keys():
                 all_tasks_idx = self.pcf.grid2task[item]
-            all_tasks_idx = set(all_tasks_idx)
             if len(all_tasks_idx) > 0:
-                self.right_click_status = "right"
-                self.right_click_all_tasks_idx = all_tasks_idx
-                grid_column = int(x_adjusted // self.pcf.tile_size)
-                grid_row = int(y_adjusted // self.pcf.tile_size)
-                grid_loc = [grid_column, grid_row]
                 self.create_pop_window(grid_loc)
-                self.update_event_list()
-                break 
+                self.right_click_status = "right"
+                self.right_click_all_tasks_idx += all_tasks_idx
+                self.update_event_list(self.pop_event_listbox, 1)
+                
+        ag_idx = self.get_ag_idx(event)
+        self.right_click_agent = ag_idx
+        if ag_idx != -1:
+            self.right_click_status = "right"
+            self.create_pop_window(grid_loc)
+            self.update_event_list(self.pop_event_listbox, 1)
+            
+        
         
         
 
@@ -2055,8 +2061,9 @@ class PlanViz2024:
         # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
             return
-        self.update_event_list()
-
+        
+        self.update_event_list(self.event_listbox, 0)
+        self.update_event_list(self.pop_event_listbox, 1)
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
             for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
@@ -2172,8 +2179,8 @@ class PlanViz2024:
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t, moving=True)
         
-        self.update_event_list()
-        
+        self.update_event_list(self.event_listbox, 0)
+        self.update_event_list(self.pop_event_listbox, 1)
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
@@ -2212,6 +2219,7 @@ class PlanViz2024:
         self.run_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
         self.prev_button.config(state=tk.NORMAL)
+        self.restart_button.config(state=tk.NORMAL)
         self.pcf.canvas.after(200, lambda: self.pause_button.config(state=tk.NORMAL))
 
 
@@ -2296,7 +2304,9 @@ class PlanViz2024:
 
         self.show_agent_index()
         self.show_task_index()
-        self.update_event_list()
+        
+        self.update_event_list(self.event_listbox, 0)
+        self.update_event_list(self.pop_event_listbox, 1)
         self.pcf.canvas.update()
 
 
