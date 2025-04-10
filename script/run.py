@@ -54,7 +54,7 @@ def main() -> None:
     
     if args.version != None:
         version = args.version
-
+    print(version)
     if version == "2024 LoRR":
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
                               args.ppm, args.moves, args.delay)

@@ -884,12 +884,30 @@ class PlanConfig2024:
         if "errors" not in data:
             print("No errors.")
             return
-
+        task_id, agent1, agent2, tstep, description = -1, -1, -1, -1, -1
         for err in data["errors"]:
-            tstep = err[2]
+            if len(err) == 5:
+                task_id, agent1, agent2, tstep, description = err
+            if len(err) == 4:
+                agent1, agent2, tstep, description = err
+                
             if self.start_tstep <= tstep <= self.end_tstep:
-                self.conflict_agents.add(err[0])
-                self.conflict_agents.add(err[1])
+                self.conflict_agents.add(agent1)
+                self.conflict_agents.add(agent2)
+                if tstep not in self.conflicts:  # Sort errors according to the tstep
+                    self.conflicts[tstep] = []
+                self.conflicts[tstep].append(err)
+                
+        # [task_id, robot1, robot2, timestep, description] 
+        for err in data["scheduleErrors"]:
+            if len(err) == 5:
+                task_id, agent1, agent2, tstep, description = err
+            if len(err) == 4:
+                agent1, agent2, tstep, description = err
+                
+            if self.start_tstep <= tstep <= self.end_tstep:
+                self.conflict_agents.add(agent1)
+                self.conflict_agents.add(agent2)
                 if tstep not in self.conflicts:  # Sort errors according to the tstep
                     self.conflicts[tstep] = []
                 self.conflicts[tstep].append(err)

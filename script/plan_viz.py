@@ -248,6 +248,8 @@ class PlanViz2023:
                     conf_str += ", e: " + _loc1 + "->" + _loc2
                 elif conf[-1] == "incorrect vector size":
                     conf_str += "Planner timeout"
+                # elif conf[-1] == "incorrect vector size":
+                    
                 else:
                     conf_str += conf[-1]
                 conf_str += ", t: " + str(tstep)
@@ -600,6 +602,7 @@ class PlanViz2023:
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
+            
             self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
 
@@ -766,6 +769,9 @@ class PlanViz2023:
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
             self.pcf.event_tracker["fid"] += 1
+        self.show_tasks()
+        for (ag_id, agent) in self.pcf.agents.items():
+            self.pcf.canvas.tag_raise(agent.agent_obj.obj, 'all')
 
 
     def back_agents_per_timestep(self) -> None:
@@ -1204,42 +1210,6 @@ class PlanViz2024:
                                            height=9,
                                            font=("Arial",TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
-        conf_id = 0
-        for tstep in sorted(self.pcf.conflicts.keys(), reverse=True):
-            if tstep < self.pcf.start_tstep:
-                continue
-            if tstep > self.pcf.end_tstep:
-                break
-
-            for conf in self.pcf.conflicts[tstep]:
-                agent1 = conf[0]
-                agent2 = conf[1]
-                if agent1 > (self.pcf.team_size-1) or agent2 > (self.pcf.team_size-1):
-                    continue
-                assert tstep == conf[2]
-                pid = tstep - self.pcf.start_tstep
-                conf_str = str()
-                if agent1 != -1:
-                    conf_str += "a" + str(agent1)
-                if agent2 != -1:
-                    conf_str += ", a" + str(agent2)
-                if conf[-1] == "vertex conflict":
-                    _loc = "("+ str(self.pcf.agents[agent1].plan_path[pid][0]) + "," +\
-                        str(self.pcf.agents[agent1].plan_path[pid][1]) +")"
-                    conf_str += ", v: " + _loc
-                elif conf[-1] == "edge conflict":
-                    _loc1 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
-                        str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
-                    _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
-                        str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
-                    conf_str += ", e: " + _loc1 + "->" + _loc2
-                elif conf[-1] == "incorrect vector size":
-                    conf_str += "Planner timeout"
-                else:
-                    conf_str += conf[-1]
-                conf_str += ", t: " + str(tstep)
-                self.conflict_listbox.insert(conf_id, conf_str)
-                self.shown_conflicts[conf_str] = [conf, False]
 
         self.conflict_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
@@ -1297,14 +1267,62 @@ class PlanViz2024:
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
 
+    def update_error_list(self, error_listbox):
+        if error_listbox == None:
+            return
+        conf_id = 0
+        error_listbox.delete(0, tk.END)
+        monospace_font = font.Font(family='Courier')
+        error_listbox.config(font=monospace_font)
+        header = f"{'Time':<6}{'a1':<5}{'a2':<5}{'Event':<12}"
+        error_listbox.insert(conf_id, header)
+        conf_id += 1
+        error_listbox.insert(conf_id, "-" * 34)  # Separator line
+        conf_id += 1
+        # [task_id, robot1, robot2, timestep, description]
+        for tstep in sorted(self.pcf.conflicts.keys()):
+            if tstep < self.pcf.start_tstep:
+                continue
+            if tstep > self.pcf.end_tstep:
+                break
+
+            for conf in self.pcf.conflicts[tstep]:
+                if len(conf) == 5:
+                    task_id, agent1, agent2, tstep_std, description = conf
+                if len(conf) == 4:
+                    agent1, agent2, tstep_std, description = conf
+                if agent1 > (self.pcf.team_size-1) or agent2 > (self.pcf.team_size-1):
+                    continue
+                assert tstep == tstep_std
+                pid = tstep - self.pcf.start_tstep
+                conf_str = f"{tstep:<6}{agent1:<5}{agent2:<5}"
+                if description == "vertex conflict":
+                    _loc = "("+ str(self.pcf.agents[agent1].plan_path[pid][0]) + "," +\
+                        str(self.pcf.agents[agent1].plan_path[pid][1]) +")"
+                    conf_str += "v: " + _loc
+                elif description == "edge conflict":
+                    _loc1 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
+                        str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
+                    _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," +\
+                        str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
+                    conf_str += "e: " + _loc1 + "->" + _loc2
+                elif description == "incorrect vector size":
+                    conf_str += "Planner timeout"
+                elif "already assigned" in description:
+                    conf_str += f"T({task_id}) !-> a1 "
+                else:
+                    conf_str += description
+                self.conflict_listbox.insert(conf_id, conf_str)
+                self.shown_conflicts[conf_str] = [conf, False]
+                conf_id += 1
+
+        
+    
     def update_event_list(self, event_listbox, pop):
         if event_listbox == None:
             return
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.max_event_t
-            
-        # if event_listbox is None or self.pop_gui_window.winfo_exists() == 0:
-        #     event_listbox = self.event_listbox
 
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.eve_id = 0
@@ -1392,20 +1410,28 @@ class PlanViz2024:
 
         for conf in self.shown_conflicts.values():  # Reset all the conflicts to non-selected
             conf[1] = False
-            if conf[0][0] != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
-                                           fill=self.pcf.agents[conf[0][0]].agent_obj.color)
-            if conf[0][1] != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
-                                           fill=self.pcf.agents[conf[0][1]].agent_obj.color)
+            if len(conf[0]) == 5:
+                task_id, agent1, agent2, tstep_std, description = conf[0]
+            if len(conf[0]) == 4:
+                agent1, agent2, tstep_std, description = conf[0] 
+            if agent1 != -1:
+                self.pcf.canvas.itemconfig(self.pcf.agents[agent1].agent_obj.obj,
+                                           fill=self.pcf.agents[agent1].agent_obj.color)
+            if agent2 != -1:
+                self.pcf.canvas.itemconfig(self.pcf.agents[agent2].agent_obj.obj,
+                                           fill=self.pcf.agents[agent2].agent_obj.color)
 
         for _sid_ in selected_indices:  # Mark the selected conflicting agents to red
             self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
             conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-            if conf[0][0] != -1:
-                self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
-            if conf[0][1] != -1:
-                self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
+            if len(conf[0]) == 5:
+                task_id, agent1, agent2, tstep_std, description = conf[0]
+            if len(conf[0]) == 4:
+                agent1, agent2, tstep_std, description = conf[0] 
+            if agent1 != -1:
+                self.change_ag_color(agent1, AGENT_COLORS["collide"])
+            if agent2 != -1:
+                self.change_ag_color(agent2, AGENT_COLORS["collide"])
 
 
     def restart_timestep(self):
@@ -1453,24 +1479,21 @@ class PlanViz2024:
         if self.is_run.get() is True:
             return
 
-        _sid_ = event.widget.curselection()[0]  # get all selected indices
+        _sid_ = event.widget.curselection()  # get all selected indices
+        if len(_sid_) < 1:
+            return
+        _sid_ = _sid_[0]
         conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-        if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
-            self.change_ag_color(conf[0][0], AGENT_COLORS["collide"])
-        if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
-            self.change_ag_color(conf[0][1], AGENT_COLORS["collide"])
+        if len(conf[0]) == 5:
+            task_id, agent1, agent2, tstep_std, description = conf[0]
+        if len(conf[0]) == 4:
+            agent1, agent2, tstep_std, description = conf[0]    
+        if agent1 != -1 and agent1 < self.pcf.team_size:
+            self.change_ag_color(agent1, AGENT_COLORS["collide"])
+        if agent2 != -1 and agent2 < self.pcf.team_size:
+            self.change_ag_color(agent2, AGENT_COLORS["collide"])
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-        self.new_time.set(int(conf[0][2])-1)
-        self.update_curtime()
-
-        for (_, _agent_) in self.pcf.agents.items():
-            _agent_.path = _agent_.plan_path
-        self.move_agents_per_timestep()
-        time.sleep(1.5)
-
-        for (_, _agent_) in self.pcf.agents.items():
-            _agent_.path = _agent_.exec_path
-        self.new_time.set(int(conf[0][2])-1)
+        self.new_time.set(int(tstep_std)-1)
         self.update_curtime()
 
 
@@ -1648,7 +1671,7 @@ class PlanViz2024:
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
             width=300 
-            height=5 * self.pcf.tile_size
+            height=int(5 * self.pcf.tile_size)
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
             self.pop_frame.grid(row=0, column=self.gui_column,sticky="nsew")
@@ -1875,6 +1898,11 @@ class PlanViz2024:
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
+            self.pcf.canvas.tag_raise(_agent_.agent_obj.obj, 'all')
+            self.pcf.canvas.tag_raise(_agent_.start_obj.obj, 'all')
+            self.pcf.canvas.tag_raise(_agent_.agent_obj.text, 'all')
+            self.pcf.canvas.tag_raise(_agent_.start_obj.text, 'all')
+            
             self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
 
@@ -1909,12 +1937,15 @@ class PlanViz2024:
         for (_, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
                 task_t = task.events["finished"]["timestep"]
+                if task_t <= self.pcf.cur_tstep:
+                    self.pcf.canvas.tag_lower(task.task_obj.obj, 'all')
                 if self.task_shown.get() == "Next Errand" and task_t > self.pcf.cur_tstep:
                     if task.state in ["assigned", "newlyassigned"]:
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                         break
                 elif self.task_shown.get() == "All Tasks":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+                    
                 elif self.task_shown.get() == "none":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
                 elif self.task_shown.get() == "Assigned Tasks":
@@ -1922,6 +1953,17 @@ class PlanViz2024:
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                 # elif task.state == self.task_shown.get():
                 #     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+        
+        errand_list = []
+        for (_, seq_task) in self.pcf.seq_tasks.items():
+            for i, task in enumerate(seq_task.tasks):
+                task_t = task.events["finished"]["timestep"]
+                if task_t > self.pcf.cur_tstep:
+                    if task.state in ["assigned", "newlyassigned"]:
+                        errand_list.append(task.task_obj.obj)
+                        break
+        for obj in errand_list:
+            self.pcf.canvas.tag_raise(obj, 'all')
         if self.show_task_idx.get():
             self.show_task_index()
 
@@ -2287,6 +2329,7 @@ class PlanViz2024:
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
                                                    agent_.agent_obj.color,
                                                    tk.NORMAL, 0.05, str(ag_id))
+            
             if self.pcf.agent_model == "MAPF_T":
                 self.pcf.canvas.delete(agent_.dir_obj)
                 dir_loc = get_dir_loc(agent_.path[tstep])
@@ -2301,12 +2344,14 @@ class PlanViz2024:
             # Check colliding agents
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
-
-        self.show_agent_index()
+        self.show_tasks()
         self.show_task_index()
+        self.show_agent_index()
+        
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
+        self.update_error_list(self.conflict_listbox)
         self.pcf.canvas.update()
 
 
