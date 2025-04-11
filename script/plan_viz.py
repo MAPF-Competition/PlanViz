@@ -1319,7 +1319,7 @@ class PlanViz2024:
         
     
     def update_event_list(self, event_listbox, pop):
-        if event_listbox == None:
+        if event_listbox == None or (not event_listbox.winfo_exists()):
             return
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.max_event_t
@@ -1899,6 +1899,7 @@ class PlanViz2024:
             self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
             self.pcf.canvas.tag_raise(_agent_.agent_obj.obj, 'all')
+            self.pcf.canvas.tag_raise(_agent_.dir_obj, 'all')
             self.pcf.canvas.tag_raise(_agent_.start_obj.obj, 'all')
             self.pcf.canvas.tag_raise(_agent_.agent_obj.text, 'all')
             self.pcf.canvas.tag_raise(_agent_.start_obj.text, 'all')
