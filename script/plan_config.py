@@ -751,6 +751,8 @@ class PlanConfig2024:
         self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
 
         self.grids:List = []
+        self.heatmap = []
+        self.heat_grids = []
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -981,7 +983,26 @@ class PlanConfig2024:
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
 
+    def load_heatmap(self):
+        print("Rendering heatmap", end="...")
+        self.heatmap = [[0 for i in range(self.width)] for j in range(self.height)]
+        for path in self.exec_paths.values():
+            for i in range(len(path) - 1):
+                if path[i] == path[i + 1]:
+                    self.heatmap[path[i][0]][path[i][1]] += 1
+        max_val = -np.inf
+        for row in self.heatmap:
+            row_max = max(row)
+            max_val = max(max_val, row_max)
 
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=0, vmax=max_val)
+        rgba = cmap(norm(self.heatmap))
+
+
+
+
+        print("Done!")
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -1005,6 +1026,7 @@ class PlanConfig2024:
         self.load_sequential_tasks(data)
         self.load_schedule(data)
         self.load_events(data)
+        self.load_heatmap()
 
 
     def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",

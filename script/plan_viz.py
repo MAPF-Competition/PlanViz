@@ -998,6 +998,7 @@ class PlanViz2024:
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
         self.show_agent_path = tk.BooleanVar()
+        self.show_heat_map = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
@@ -1134,6 +1135,13 @@ class PlanViz2024:
                                                       variable=self.show_agent_path,
                                                       onvalue=True, offvalue=False,
                                                       command=self.off_agent_path)
+        self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show Heatmap",
+                                                      font=("Arial", TEXT_SIZE),
+                                                      variable=self.show_heat_map,
+                                                      onvalue=True, offvalue=False,
+                                                      command=None)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
