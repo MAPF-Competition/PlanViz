@@ -1137,12 +1137,12 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show Heatmap",
+        self.show_heatmap_button = tk.Checkbutton(self.frame, text="Show Heatmap",
                                                       font=("Arial", TEXT_SIZE),
-                                                      variable=self.show_heat_map,
+                                                      variable=self.is_heat_map,
                                                       onvalue=True, offvalue=False,
-                                                      command=None)
-        self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+                                                      command=self.show_heat_maps)
+        self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
 
@@ -1737,15 +1737,15 @@ class PlanViz2024:
                 self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
 
 
-    def show_heat_map(self) -> None:
+    def show_heat_maps(self) -> None:
         if self.is_heat_map.get() is True:
             for item in self.pcf.heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
-                self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
         else:
             for item in self.pcf.heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
 
     def show_highway(self) -> None:

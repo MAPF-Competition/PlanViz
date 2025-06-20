@@ -998,11 +998,17 @@ class PlanConfig2024:
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=0, vmax=max_val)
         rgba = cmap(norm(self.heatmap))
-
-
-
-
+        for i in range(len(self.heatmap)):
+            for j in range(len(self.heatmap[i])):
+                color = (int(rgba[i][j][0] * 255),
+                             int(rgba[i][j][1] * 255),
+                             int(rgba[i][j][2] * 255))
+                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                heat_square = self.render_obj(self.heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+                                            0.0, "heatmap", "grey")
+                self.heat_grids.append(heat_square)
         print("Done!")
+        
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
