@@ -985,11 +985,20 @@ class PlanConfig2024:
 
     def load_heatmap(self):
         print("Rendering heatmap", end="...")
+        from scipy.ndimage import gaussian_filter1d
         self.heatmap = [[0 for i in range(self.width)] for j in range(self.height)]
+        heatmap_delta = [[[0 for p in range(len(self.exec_paths[0]))] for i in range(self.width)] for j in range(self.height)]
         for path in self.exec_paths.values():
             for i in range(len(path) - 1):
                 if path[i] == path[i + 1]:
-                    self.heatmap[path[i][0]][path[i][1]] += 1
+                    self.heatmap[path[i][0]][path[i][1]] += 0
+                heatmap_delta[path[i][0]][path[i][1]][i] = 1
+        for i in range(self.height):
+            for j in range(self.width):
+                xs = np.asarray(heatmap_delta[i][j], dtype=float)
+                smoothed_density = gaussian_filter1d(xs, sigma=1, mode='constant')
+                self.heatmap[i][j] += (smoothed_density ** 2).sum() / len(xs)
+
         max_val = -np.inf
         for row in self.heatmap:
             row_max = max(row)
