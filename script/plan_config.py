@@ -992,7 +992,8 @@ class PlanConfig2024:
             for i in range(len(path) - 1):
                 if path[i] == path[i + 1]:
                     self.heatmap[path[i][0]][path[i][1]] += 0
-                heatmap_delta[path[i][0]][path[i][1]][i] = 1
+                if (path[i][0], path[i][1]) != (path[i+1][0], path[i+1][1]):
+                    heatmap_delta[path[i][0]][path[i][1]][i] = 1
         for i in range(self.height):
             for j in range(self.width):
                 xs = np.asarray(heatmap_delta[i][j], dtype=float)
