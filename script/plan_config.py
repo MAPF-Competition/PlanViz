@@ -991,7 +991,7 @@ class PlanConfig2024:
         for path in self.exec_paths.values():
             for i in range(len(path) - 1):
                 if path[i] == path[i + 1]:
-                    self.heatmap[path[i][0]][path[i][1]] += 0
+                    self.heatmap[path[i][0]][path[i][1]] += 1
                 if (path[i][0], path[i][1]) != (path[i+1][0], path[i+1][1]):
                     heatmap_delta[path[i][0]][path[i][1]][i] = 1
         for i in range(self.height):
@@ -1010,6 +1010,8 @@ class PlanConfig2024:
         rgba = cmap(norm(self.heatmap))
         for i in range(len(self.heatmap)):
             for j in range(len(self.heatmap[i])):
+                if self.heatmap[i][j] == 0:
+                    continue
                 color = (int(rgba[i][j][0] * 255),
                              int(rgba[i][j][1] * 255),
                              int(rgba[i][j][2] * 255))
