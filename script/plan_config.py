@@ -749,7 +749,8 @@ class PlanConfig2024:
         self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
         self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
         self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
-
+        self.congestion_grid = []
+        self.congestion_arrows = []
         self.grids:List = []
         self.heatmap = []
         self.heat_grids = []
@@ -1020,7 +1021,36 @@ class PlanConfig2024:
                                             0.0, "heatmap", "grey")
                 self.heat_grids.append(heat_square)
         print("Done!")
-        
+
+    def load_congestion_arrows(self):
+        self.congestion_grid = [[[0, 0, 0, 0] for i in range(self.width)] for j in range(self.height)]
+        for path in self.exec_paths.values():
+            for i in range(len(path) - 1):
+                if path[i][1] > path[i + 1][1]:  # Left
+                    self.congestion_grid[path[i][0]][path[i][1]][3] += 1
+                elif path[i][1] < path[i + 1][1]:  # Right
+                    self.congestion_grid[path[i][0]][path[i][1]][1] += 1
+                elif path[i][0] < path[i + 1][0]:  # Down
+                    self.congestion_grid[path[i][0]][path[i][1]][2] += 1
+                elif path[i][0] > path[i + 1][0]:  # Up
+                    self.congestion_grid[path[i][0]][path[i][1]][0] += 1
+        print(self.congestion_grid)
+        for j in range(self.height):
+            for i in range(self.width):
+                if max(self.congestion_grid[j][i]) > 0:
+                    max_idx = max(enumerate(self.congestion_grid[j][i]), key=lambda x: x[1])[0]
+                    if max_idx == 0: # Up
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+1)*self.tile_size, (i+0.5)*self.tile_size, (j)*self.tile_size, arrow=tk.LAST, width=2, fill="#4eb1a6")
+                    elif max_idx == 1:  # Right
+                        _arrow = self.canvas.create_line(i*self.tile_size, (j+0.5)*self.tile_size, (i+1)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=2, fill="#4eb1a6")
+                    elif max_idx == 2: # Down
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, j*self.tile_size, (i+0.5)*self.tile_size, (j+1)*self.tile_size, arrow=tk.LAST, width=2, fill="#4eb1a6")
+                    elif max_idx == 3: # Left
+                        _arrow = self.canvas.create_line((i+1)*self.tile_size, (j+0.5)*self.tile_size, (i)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=2, fill="#4eb1a6")
+
+
+        pass
+
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -1045,6 +1075,7 @@ class PlanConfig2024:
         self.load_schedule(data)
         self.load_events(data)
         self.load_heatmap()
+        self.load_congestion_arrows()
 
 
     def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",
