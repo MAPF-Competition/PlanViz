@@ -751,6 +751,7 @@ class PlanConfig2024:
         self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
         self.congestion_grid = []
         self.congestion_arrows = []
+        self.congestion_score = 0
         self.grids:List = []
         self.heatmap = []
         self.heat_grids = []
@@ -1052,40 +1053,72 @@ class PlanConfig2024:
                 if square_max > max_val/5:
                     # max_idx = max(enumerate(self.congestion_grid[j][i]), key=lambda x: x[1])[0]
                     # colour = congestion_colour(self.congestion_grid[j][i][0], max_val)
-                    if self.congestion_grid[j][i][0] > max_val/5: # Up
-                        arrow_length = 1
-                        while self.congestion_grid[j-arrow_length][i][0] > max_val/5:
-                            arrow_length += 1
-                        colour = congestion_colour(self.congestion_grid[j][i][0], max_val)
-                        _arrow = self.canvas.create_line((i+0.4)*self.tile_size, (j+0.5)*self.tile_size, (i+0.4)*self.tile_size, (j-arrow_length+1)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
-                    if self.congestion_grid[j][i][1] > max_val/5:  # Right
-                        arrow_length = 1
-                        while self.congestion_grid[j][i+arrow_length][1] > max_val / 5:
-                            arrow_length += 1
-                        colour = congestion_colour(self.congestion_grid[j][i][1], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.6)*self.tile_size, (i+arrow_length)*self.tile_size, (j+0.6)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
+                    try:
+                        if self.congestion_grid[j][i][0] > max_val/5: # Up
+                            arrow_length = 1
+                            while self.congestion_grid[j-arrow_length][i][0] > max_val/5:
+                                arrow_length += 1
+                            colour = congestion_colour(self.congestion_grid[j][i][0], max_val)
+                            _arrow = self.canvas.create_line((i+0.4)*self.tile_size, (j+0.5)*self.tile_size,
+                                                             (i+0.4)*self.tile_size, (j-arrow_length+1)*self.tile_size,
+                                                             arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                            self.congestion_arrows.append(_arrow)
+                    except IndexError:
+                        pass
+                    try:
+                        if self.congestion_grid[j][i][1] > max_val/5:  # Right
+                            arrow_length = 1
+                            while self.congestion_grid[j][i+arrow_length][1] > max_val / 5:
+                                arrow_length += 1
+                            colour = congestion_colour(self.congestion_grid[j][i][1], max_val)
+                            _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.6)*self.tile_size,
+                                                             (i+arrow_length)*self.tile_size, (j+0.6)*self.tile_size,
+                                                             arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                            self.congestion_arrows.append(_arrow)
+                    except IndexError:
+                        pass
 
-        for j in range(self.height):
+        for j in range(self.height):   # missing index exceptions
             for i in range(self.width-1, 0, -1):
                 square_max = max(self.congestion_grid[j][i])
                 if square_max > max_val / 5:
-                    if self.congestion_grid[j][i][2] > max_val/5: # Down
-                        arrow_length = 1
-                        while self.congestion_grid[j + arrow_length][i][2] > max_val / 5:
-                            arrow_length += 1
-                        colour = congestion_colour(self.congestion_grid[j][i][2], max_val)
-                        _arrow = self.canvas.create_line((i+0.6)*self.tile_size, (j+0.5)*self.tile_size, (i+0.6)*self.tile_size, (j+arrow_length)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
-                    if self.congestion_grid[j][i][3] > max_val/5: # Left
-                        arrow_length = 1
-                        while self.congestion_grid[j][i-arrow_length][3] > max_val / 5:
-                            arrow_length += 1
-                        colour = congestion_colour(self.congestion_grid[j][i][3], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.4)*self.tile_size, (i-arrow_length+1)*self.tile_size, (j+0.4)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
+                    try:
+                        if self.congestion_grid[j][i][2] > max_val/5: # Down
+                            arrow_length = 1
+                            while self.congestion_grid[j + arrow_length][i][2] > max_val / 5:
+                                arrow_length += 1
+                            colour = congestion_colour(self.congestion_grid[j][i][2], max_val)
+                            _arrow = self.canvas.create_line((i+0.6)*self.tile_size, (j+0.5)*self.tile_size, (i+0.6)*self.tile_size,
+                                                             (j+arrow_length)*self.tile_size, arrow=tk.LAST,
+                                                             state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                            self.congestion_arrows.append(_arrow)
+                    except IndexError:
+                        pass
+                    try:
+                        if self.congestion_grid[j][i][3] > max_val/5: # Left
+                            arrow_length = 1
+                            while self.congestion_grid[j][i-arrow_length][3] > max_val / 5:
+                                arrow_length += 1
+                            colour = congestion_colour(self.congestion_grid[j][i][3], max_val)
+                            _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.4)*self.tile_size,
+                                                             (i-arrow_length+1)*self.tile_size, (j+0.4)*self.tile_size,
+                                                             arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                            self.congestion_arrows.append(_arrow)
+                    except IndexError:
+                        pass
+        # Compute congestion score
+        for j in range(self.height):
+            for i in range(self.width):
+                square_congestion_score = 1
+                for direction, delta in enumerate([(1,0),(0,-1),(-1,0),(0,1)]):
+                        try:
+                            square_congestion_score *= 1+ self.congestion_grid[j+delta[0]][i+delta[1]][direction]
+                        except IndexError:
+                            pass
+                self.congestion_score += square_congestion_score
+
         print("Done!")
+
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:

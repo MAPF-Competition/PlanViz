@@ -1146,7 +1146,7 @@ class PlanViz2024:
                                                       command=self.show_heat_maps)
         self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_congest_arr_button = tk.Checkbutton(self.frame, text="Show Congestion Arrows",
+        self.show_congest_arr_button = tk.Checkbutton(self.frame, text=f"Show Congestion Arrows {round(self.pcf.congestion_score, 2)}",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_congestion_arrows,
                                                   onvalue=True, offvalue=False,
