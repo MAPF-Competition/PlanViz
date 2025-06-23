@@ -1023,6 +1023,13 @@ class PlanConfig2024:
         print("Done!")
 
     def load_congestion_arrows(self):
+        def congestion_colour(value, max_value):
+            ratio = value / max_value if max_value > 0 else 0
+            r = int(255 * ratio)
+            g = 0
+            b = int(255 * (1 - ratio))
+            return f'#{r:02x}{g:02x}{b:02x}'
+
         self.congestion_grid = [[[0, 0, 0, 0] for i in range(self.width)] for j in range(self.height)]
         for path in self.exec_paths.values():
             for i in range(len(path) - 1):
@@ -1038,17 +1045,17 @@ class PlanConfig2024:
         for j in range(self.height):
             for i in range(self.width):
                 square_max = max(self.congestion_grid[j][i])
-                if square_max > 0:
+                if square_max > max_val/5:
                     max_idx = max(enumerate(self.congestion_grid[j][i]), key=lambda x: x[1])[0]
-
+                    colour = congestion_colour(square_max, max_val)
                     if max_idx == 0: # Up
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+1)*self.tile_size, (i+0.5)*self.tile_size, (j)*self.tile_size, arrow=tk.LAST, width=(8*square_max/max_val), fill="#4eb1a6")
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+1)*self.tile_size, (i+0.5)*self.tile_size, (j)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill=colour)
                     elif max_idx == 1:  # Right
-                        _arrow = self.canvas.create_line(i*self.tile_size, (j+0.5)*self.tile_size, (i+1)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill="#4eb1a6")
+                        _arrow = self.canvas.create_line(i*self.tile_size, (j+0.5)*self.tile_size, (i+1)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill=colour)
                     elif max_idx == 2: # Down
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, j*self.tile_size, (i+0.5)*self.tile_size, (j+1)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill="#4eb1a6")
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, j*self.tile_size, (i+0.5)*self.tile_size, (j+1)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill=colour)
                     elif max_idx == 3: # Left
-                        _arrow = self.canvas.create_line((i+1)*self.tile_size, (j+0.5)*self.tile_size, (i)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill="#4eb1a6")
+                        _arrow = self.canvas.create_line((i+1)*self.tile_size, (j+0.5)*self.tile_size, (i)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, width=(4*square_max/max_val), fill=colour)
 
 
         pass
