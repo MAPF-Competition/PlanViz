@@ -1000,6 +1000,7 @@ class PlanViz2024:
         self.show_agent_path = tk.BooleanVar()
         self.show_heat_map = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
+        self.is_congestion_arrows = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
 
@@ -1009,6 +1010,7 @@ class PlanViz2024:
         self.show_task_idx.set(_task_idx)
         self.show_static.set(_static)
         self.show_all_conf_ag.set(_conf_ag)
+        self.is_congestion_arrows.set(False)
         self.is_heat_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
@@ -1143,6 +1145,13 @@ class PlanViz2024:
                                                       onvalue=True, offvalue=False,
                                                       command=self.show_heat_maps)
         self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_congest_arr_button = tk.Checkbutton(self.frame, text="Show Congestion Arrows",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_congestion_arrows,
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_congestion_arrows)
+        self.show_congest_arr_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
 
@@ -1745,6 +1754,16 @@ class PlanViz2024:
         else:
             for item in self.pcf.heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+
+    def show_congestion_arrows(self) -> None:
+        if self.is_congestion_arrows.get() is True:
+            for item in self.pcf.congestion_arrows:
+                self.pcf.canvas.itemconfig("arrow", state=tk.DISABLED)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+        else:
+            for item in self.pcf.congestion_arrows:
+                self.pcf.canvas.itemconfig("arrow", state=tk.HIDDEN)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
 
