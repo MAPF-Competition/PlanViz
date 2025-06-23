@@ -1139,7 +1139,7 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_heatmap_button = tk.Checkbutton(self.frame, text="Show Heatmap",
+        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Heatmap {round(self.pcf.heat_score, 2)}",
                                                       font=("Arial", TEXT_SIZE),
                                                       variable=self.is_heat_map,
                                                       onvalue=True, offvalue=False,

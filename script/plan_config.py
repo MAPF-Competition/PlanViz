@@ -754,6 +754,7 @@ class PlanConfig2024:
         self.grids:List = []
         self.heatmap = []
         self.heat_grids = []
+        self.heat_score = 0
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -987,12 +988,13 @@ class PlanConfig2024:
     def load_heatmap(self):
         print("Rendering heatmap", end="...")
         from scipy.ndimage import gaussian_filter1d
-        self.heatmap = [[0 for i in range(self.width)] for j in range(self.height)]
-        heatmap_delta = [[[0 for p in range(len(self.exec_paths[0]))] for i in range(self.width)] for j in range(self.height)]
+        self.heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        heatmap_delta = [[[0 for _ in range(len(self.exec_paths[0]))] for _ in range(self.width)] for _ in range(self.height)]
         for path in self.exec_paths.values():
             for i in range(len(path) - 1):
                 if path[i] == path[i + 1]:
                     self.heatmap[path[i][0]][path[i][1]] += 1
+                    self.heat_score +=1
                 if (path[i][0], path[i][1]) != (path[i+1][0], path[i+1][1]):
                     heatmap_delta[path[i][0]][path[i][1]][i] = 1
         for i in range(self.height):
@@ -1000,6 +1002,7 @@ class PlanConfig2024:
                 xs = np.asarray(heatmap_delta[i][j], dtype=float)
                 smoothed_density = gaussian_filter1d(xs, sigma=1, mode='constant')
                 self.heatmap[i][j] += (smoothed_density ** 2).sum() / len(xs)
+                self.heat_score += (smoothed_density ** 2).sum() / len(xs)
 
         max_val = -np.inf
         for row in self.heatmap:
@@ -1023,6 +1026,7 @@ class PlanConfig2024:
         print("Done!")
 
     def load_congestion_arrows(self):
+        print("Rendering Congestion Arrows", end="...")
         def congestion_colour(value, max_value):
             ratio = value / max_value if max_value > 0 else 0
             r = int(255 * ratio)
@@ -1042,29 +1046,46 @@ class PlanConfig2024:
                 elif path[i][0] > path[i + 1][0]:  # Up
                     self.congestion_grid[path[i][0]][path[i][1]][0] += 1
         max_val = max(x for row in self.congestion_grid for cell in row for x in cell)
-        for j in range(self.height):
+        for j in range(self.height-1, 0, -1):
             for i in range(self.width):
                 square_max = max(self.congestion_grid[j][i])
                 if square_max > max_val/5:
                     # max_idx = max(enumerate(self.congestion_grid[j][i]), key=lambda x: x[1])[0]
                     # colour = congestion_colour(self.congestion_grid[j][i][0], max_val)
-                    if self.congestion_grid[j][i][0] > 0: # Up
+                    if self.congestion_grid[j][i][0] > max_val/5: # Up
+                        arrow_length = 1
+                        while self.congestion_grid[j-arrow_length][i][0] > max_val/5:
+                            arrow_length += 1
                         colour = congestion_colour(self.congestion_grid[j][i][0], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.5)*self.tile_size, (i+0.5)*self.tile_size, (j)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=(4*square_max/max_val), fill=colour, tag="arrow")
+                        _arrow = self.canvas.create_line((i+0.4)*self.tile_size, (j+0.5)*self.tile_size, (i+0.4)*self.tile_size, (j-arrow_length+1)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
                         self.congestion_arrows.append(_arrow)
-                    if self.congestion_grid[j][i][1] > 0:  # Right
+                    if self.congestion_grid[j][i][1] > max_val/5:  # Right
+                        arrow_length = 1
+                        while self.congestion_grid[j][i+arrow_length][1] > max_val / 5:
+                            arrow_length += 1
                         colour = congestion_colour(self.congestion_grid[j][i][1], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.5)*self.tile_size, (i+1)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=(4*square_max/max_val), fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
-                    if self.congestion_grid[j][i][2] > 0: # Down
-                        colour = congestion_colour(self.congestion_grid[j][i][2], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.5)*self.tile_size, (i+0.5)*self.tile_size, (j+1)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=(4*square_max/max_val), fill=colour, tag="arrow")
-                        self.congestion_arrows.append(_arrow)
-                    if self.congestion_grid[j][i][3] > 0: # Left
-                        colour = congestion_colour(self.congestion_grid[j][i][3], max_val)
-                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.5)*self.tile_size, (i)*self.tile_size, (j+0.5)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=(4*square_max/max_val), fill=colour, tag="arrow")
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.6)*self.tile_size, (i+arrow_length)*self.tile_size, (j+0.6)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
                         self.congestion_arrows.append(_arrow)
 
+        for j in range(self.height):
+            for i in range(self.width-1, 0, -1):
+                square_max = max(self.congestion_grid[j][i])
+                if square_max > max_val / 5:
+                    if self.congestion_grid[j][i][2] > max_val/5: # Down
+                        arrow_length = 1
+                        while self.congestion_grid[j + arrow_length][i][2] > max_val / 5:
+                            arrow_length += 1
+                        colour = congestion_colour(self.congestion_grid[j][i][2], max_val)
+                        _arrow = self.canvas.create_line((i+0.6)*self.tile_size, (j+0.5)*self.tile_size, (i+0.6)*self.tile_size, (j+arrow_length)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                        self.congestion_arrows.append(_arrow)
+                    if self.congestion_grid[j][i][3] > max_val/5: # Left
+                        arrow_length = 1
+                        while self.congestion_grid[j][i-arrow_length][3] > max_val / 5:
+                            arrow_length += 1
+                        colour = congestion_colour(self.congestion_grid[j][i][3], max_val)
+                        _arrow = self.canvas.create_line((i+0.5)*self.tile_size, (j+0.4)*self.tile_size, (i-arrow_length+1)*self.tile_size, (j+0.4)*self.tile_size, arrow=tk.LAST, state= tk.HIDDEN, width=2, fill=colour, tag="arrow")
+                        self.congestion_arrows.append(_arrow)
+        print("Done!")
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
