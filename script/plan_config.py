@@ -89,7 +89,7 @@ class PlanConfig2023:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.06
+                self.delay = 0.01
         self.tile_size:int = self.ppm * self.moves
 
 
@@ -798,7 +798,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.06
+                self.delay = 0.01
         self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -989,6 +989,8 @@ class PlanConfig2024:
     def load_heatmap(self):
         print("Rendering heatmap", end="...")
         from scipy.ndimage import gaussian_filter1d
+        from PIL import Image, ImageTk
+        from matplotlib import cm, colors
         self.heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
         heatmap_delta = [[[0 for _ in range(len(self.exec_paths[0]))] for _ in range(self.width)] for _ in range(self.height)]
         for path in self.exec_paths.values():
@@ -998,33 +1000,45 @@ class PlanConfig2024:
                     self.heat_score +=1
                 if (path[i][0], path[i][1]) != (path[i+1][0], path[i+1][1]):
                     heatmap_delta[path[i][0]][path[i][1]][i] = 1
-        for i in range(self.height):
-            for j in range(self.width):
-                xs = np.asarray(heatmap_delta[i][j], dtype=float)
-                smoothed_density = gaussian_filter1d(xs, sigma=1, mode='constant')
-                self.heatmap[i][j] += (smoothed_density ** 2).sum() / len(xs)
-                self.heat_score += (smoothed_density ** 2).sum() / len(xs)
+        # for i in range(self.height):
+        #     for j in range(self.width):
+        #         xs = np.asarray(heatmap_delta[i][j], dtype=float)
+        #         smoothed_density = gaussian_filter1d(xs, sigma=1, mode='constant')
+        #         self.heatmap[i][j] += (smoothed_density ** 2).sum() / len(xs)
+        #         self.heat_score += (smoothed_density ** 2).sum() / len(xs)
 
         max_val = -np.inf
         for row in self.heatmap:
             row_max = max(row)
             max_val = max(max_val, row_max)
 
+        heatmap_np = np.array(self.heatmap, dtype=float)
         cmap = cm.get_cmap("Reds")
-        norm = Normalize(vmin=0, vmax=max_val)
-        rgba = cmap(norm(self.heatmap))
-        for i in range(len(self.heatmap)):
-            for j in range(len(self.heatmap[i])):
-                if self.heatmap[i][j] == 0:
-                    continue
-                color = (int(rgba[i][j][0] * 255),
-                             int(rgba[i][j][1] * 255),
-                             int(rgba[i][j][2] * 255))
-                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
-                heat_square = self.render_obj(self.heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
-                                            0.0, "heatmap", "grey")
-                self.heat_grids.append(heat_square)
-        print("Done!")
+        norm = colors.Normalize(vmin=0, vmax=heatmap_np.max() or 1)
+        rgba = cmap(norm(heatmap_np))[:, :, :3]  # drop alpha
+        rgb8 = (rgba * 255).astype(np.uint8)  # float→uint8 0-255
+
+        # 2. Build a Pillow image from the NumPy array
+        pil_img = Image.fromarray(rgb8, mode="RGB")
+
+        tile = self.tile_size  # tile_size must already be defined (e.g., 40)
+        pil_img = pil_img.resize((self.width * tile, self.height * tile), resample=Image.NEAREST)
+
+        # 3. Ship it into Tkinter
+        photo = ImageTk.PhotoImage(pil_img)
+        # keep a reference so it isn't garbage-collected
+        self._heatmap_photo = photo
+        self.canvas.delete("heatmap")
+        # 4. Put ONE item on the canvas
+        #    (0,0) unless you need offsets; anchor 'nw' == top-left
+        img_id = self.canvas.create_image(
+            0, 0,
+            image=photo,
+            anchor="nw",
+            tags=("heatmap",),
+            state=tk.HIDDEN
+        )
+        self.canvas.tag_lower(img_id)
 
     def load_congestion_arrows(self):
         print("Rendering Congestion Arrows", end="...")
@@ -1218,16 +1232,19 @@ class PlanConfig2024:
             self.grids.append(_line_)
 
         # Render features
-        for rid, cur_row in enumerate(self.env_map):
-            for cid, cur_ele in enumerate(cur_row):
-                if cur_ele == 0:  # obstacles
-                    self.canvas.create_rectangle(cid * self.tile_size,
-                                                 rid * self.tile_size,
-                                                 (cid+1) * self.tile_size,
-                                                 (rid+1) * self.tile_size,
-                                                 state=tk.DISABLED,
-                                                 outline="",
-                                                 fill="black")
+        for r, row in enumerate(self.env_map):
+            start = None  # first col in current run
+            for c, val in enumerate(row + [1]):  # add sentinel (1 = free)
+                if val == 0 and start is None:  # run begins
+                    start = c
+                elif val != 0 and start is not None:  # run ends before this col
+                    x0, y0 = start * self.tile_size, r * self.tile_size
+                    x1, y1 = c * self.tile_size, (r + 1) * self.tile_size
+                    rect_id = self.canvas.create_rectangle(
+                        x0, y0, x1, y1,
+                        fill="black", outline="",
+                        tags=("obstacles", "world"))
+                    start = None  # reset for next run
 
         # Render coordinates
         for cid in range(self.width):

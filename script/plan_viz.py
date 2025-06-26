@@ -1745,16 +1745,9 @@ class PlanViz2024:
             for _line_ in self.pcf.grids:
                 self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
 
-
     def show_heat_maps(self) -> None:
-        if self.is_heat_map.get() is True:
-            for item in self.pcf.heat_grids:
-                self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
-                # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
-        else:
-            for item in self.pcf.heat_grids:
-                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-                # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+        state = "normal" if self.is_heat_map.get() else "hidden"
+        self.pcf.canvas.itemconfigure("heatmap", state=state)
 
     def show_congestion_arrows(self) -> None:
         if self.is_congestion_arrows.get() is True:
