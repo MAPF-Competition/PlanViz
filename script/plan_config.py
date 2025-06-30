@@ -18,7 +18,7 @@ from matplotlib import cm
 from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
-    BaseObj, Agent, Task, SequentialTask)
+    BaseObj, Agent, Task, SequentialTask, get_rotation)
 from PIL import Image, ImageTk
 from matplotlib import cm, colors
 
@@ -1075,8 +1075,21 @@ class PlanConfig2024:
             self.canvas.itemconfig(self.subop_image_id, image=self._subop_photo)
 
     def load_subop_map(self):
+        print(self.exec_paths[0])
+
         def manhattan_distance(loc, goal):
             return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+
+        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
+            env_map = self.env_map
+            """True if (row,col) is inside the grid and not an obstacle."""
+            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
+                return current_distance  # off the board
+            elif env_map[row][col] == 0: # 0 == obstacle in your map
+                return current_distance
+            else:
+                return manhattan_distance((row, col), current_goal)
+
         print("Rendering suboptimality map", end="...")
         self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
         for agent, path in enumerate(self.exec_paths.values()):
@@ -1088,10 +1101,27 @@ class PlanConfig2024:
                 next_location = (path[t+1][0],path[t+1][1])
                 cur_distance = manhattan_distance(cur_location, cur_goal)
                 next_distance = manhattan_distance(next_location, cur_goal)
-                if path[t] == path[t + 1]:
-                    self.subop_map[path[t][0]][path[t][1]] += 1
-                elif cur_distance < next_distance:
-                    self.subop_map[path[t][0]][path[t][1]] += 2
+                turn = get_rotation(path[t][2], path[t+1][2])
+                if turn == 0: # Agent has not turned
+                    if path[t] == path[t + 1]: # Agent has not moved
+                        self.subop_map[path[t][0]][path[t][1]] += 1
+                    elif cur_distance < next_distance:  # Agent moved forward
+                        self.subop_map[path[t][0]][path[t][1]] += 2
+                else: # Agent has turned
+                    unturned_future_square = state_transition(path[t], "F")
+                    unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
+                    turned_future_square = state_transition(path[t+1], "F")
+                    turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
+                    if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
+                        self.subop_map[path[t][0]][path[t][1]] += 1
+                    else:
+                        opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
+                        opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
+                        if turned_future_distance > opposite_turned_future_distance:
+                            self.subop_map[path[t][0]][path[t][1]] += 1
+
+
+
 
         arr = np.array(self.subop_map, dtype=float)
         cmap = cm.get_cmap("Reds")
