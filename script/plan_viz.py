@@ -1000,6 +1000,7 @@ class PlanViz2024:
         self.show_agent_path = tk.BooleanVar()
         self.show_heat_map = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
+        self.is_subop_map = tk.BooleanVar()
         self.is_congestion_arrows = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
@@ -1012,6 +1013,7 @@ class PlanViz2024:
         self.show_all_conf_ag.set(_conf_ag)
         self.is_congestion_arrows.set(False)
         self.is_heat_map.set(False)
+        self.is_subop_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
 
@@ -1152,6 +1154,14 @@ class PlanViz2024:
                                                   onvalue=True, offvalue=False,
                                                   command=self.show_congestion_arrows)
         self.show_congest_arr_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_subop_map_button = tk.Checkbutton(self.frame,
+                                                      text=f"Show Sub-optimality Areas",
+                                                      font=("Arial", TEXT_SIZE),
+                                                      variable=self.is_subop_map,
+                                                      onvalue=True, offvalue=False,
+                                                      command=self.show_subop_maps)
+        self.show_subop_map_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
 
@@ -1748,6 +1758,10 @@ class PlanViz2024:
     def show_heat_maps(self) -> None:
         state = "normal" if self.is_heat_map.get() else "hidden"
         self.pcf.canvas.itemconfigure("heatmap", state=state)
+
+    def show_subop_maps(self) -> None:
+        state = "normal" if self.is_subop_map.get() else "hidden"
+        self.pcf.canvas.itemconfigure("subop", state=state)
 
     def show_congestion_arrows(self) -> None:
         if self.is_congestion_arrows.get() is True:

@@ -19,6 +19,8 @@ from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
     BaseObj, Agent, Task, SequentialTask)
+from PIL import Image, ImageTk
+from matplotlib import cm, colors
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -754,6 +756,7 @@ class PlanConfig2024:
         self.congestion_score = 0
         self.grids:List = []
         self.heatmap = []
+        self.subop_map = []
         self.heat_grids = []
         self.heat_score = 0
         self.start_loc  = {}
@@ -1014,11 +1017,64 @@ class PlanConfig2024:
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
 
+    def load_subop_map(self):
+        def manhattan_distance(loc, goal):
+            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+        print("Rendering suboptimality map", end="...")
+        self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        for agent, path in enumerate(self.exec_paths.values()):
+            for t in range(len(path)-1):
+                cur_goal = self.get_current_goal(agent, t)
+                if cur_goal == None:
+                    continue
+                cur_location = (path[t][0],path[t][1])
+                next_location = (path[t+1][0],path[t+1][1])
+                cur_distance = manhattan_distance(cur_location, cur_goal)
+                next_distance = manhattan_distance(next_location, cur_goal)
+                if cur_distance == next_distance:
+                    self.subop_map[path[t][0]][path[t][1]] += 1
+                elif cur_distance < next_distance:
+                    self.subop_map[path[t][0]][path[t][1]] += 2
+
+        max_val = -np.inf
+        for row in self.subop_map:
+            row_max = max(row)
+            max_val = max(max_val, row_max)
+
+        subop_map_np = np.array(self.subop_map, dtype=float)
+        cmap = cm.get_cmap("Reds")
+        norm = colors.Normalize(vmin=0, vmax=subop_map_np.max() or 1)
+        rgba = cmap(norm(subop_map_np))[:, :, :3]  # drop alpha
+        rgb8 = (rgba * 255).astype(np.uint8)  # float→uint8 0-255
+
+        # 2. Build a Pillow image from the NumPy array
+        pil_img = Image.fromarray(rgb8, mode="RGB")
+
+        tile = self.tile_size  # tile_size must already be defined (e.g., 40)
+        pil_img = pil_img.resize((self.width * tile, self.height * tile), resample=Image.NEAREST)
+
+        # 3. Ship it into Tkinter
+        photo = ImageTk.PhotoImage(pil_img)
+        # keep a reference so it isn't garbage-collected
+        self._subop_photo = photo
+        self.canvas.delete("subop")
+        # 4. Put ONE item on the canvas
+        #    (0,0) unless you need offsets; anchor 'nw' == top-left
+        img_id = self.canvas.create_image(
+            0, 0,
+            image=photo,
+            anchor="nw",
+            tags=("subop",),
+            state=tk.HIDDEN
+        )
+        self.canvas.tag_lower(img_id)
+
+
+        print("Done!")
+
     def load_heatmap(self):
         print("Rendering heatmap", end="...")
         from scipy.ndimage import gaussian_filter1d
-        from PIL import Image, ImageTk
-        from matplotlib import cm, colors
         self.heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
         heatmap_delta = [[[0 for _ in range(len(self.exec_paths[0]))] for _ in range(self.width)] for _ in range(self.height)]
         for path in self.exec_paths.values():
@@ -1067,6 +1123,7 @@ class PlanConfig2024:
             state=tk.HIDDEN
         )
         self.canvas.tag_lower(img_id)
+        print("Done!")
 
     def load_congestion_arrows(self):
         print("Rendering Congestion Arrows", end="...")
@@ -1186,7 +1243,7 @@ class PlanConfig2024:
         self.load_events(data)
         self.load_heatmap()
         self.load_congestion_arrows()
-
+        self.load_subop_map()
 
     def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",
                    color:str="blue", state=tk.NORMAL,
