@@ -798,7 +798,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.01
+                self.delay = 0.2
         self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -956,6 +956,34 @@ class PlanConfig2024:
         self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
         self.event_tracker["fTime"].append(-1)
 
+    def get_current_goal(self, agent_id: int, timestep: int):
+        # 1. Check if agent has any assigned tasks
+        if agent_id not in self.agent_assigned_task:
+            return None
+
+        # 2. Find most recent task assignment at or before this timestep
+        assigned_tasks = self.agent_assigned_task[agent_id]
+        current_task_id = None
+        for assign_time, task_id in reversed(assigned_tasks):
+            if assign_time <= timestep:
+                current_task_id = task_id
+                break
+
+        if current_task_id is None:
+            return None  # No task yet
+
+        # 3. Look up the sequential task
+        seq_task = self.seq_tasks.get(current_task_id)
+        if not seq_task:
+            return None
+
+        # 4. Loop through subgoals and find the first one not finished yet
+        for subtask in seq_task.tasks:
+            finish_t = subtask.events.get("finished", {}).get("timestep", math.inf)
+            if finish_t > timestep:
+                return subtask.loc  # (x, y)
+
+        return None  # All goals are already finished
 
     def load_sequential_tasks(self, data:Dict):
         print("Loading tasks", end="...")
