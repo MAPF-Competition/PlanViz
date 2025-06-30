@@ -78,7 +78,7 @@ class PlanConfig2023:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
                 self.moves = 3
-        
+
         self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
@@ -787,7 +787,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
+                self.moves = 12
         
         self.ppm:int = ppm
         if self.ppm is None:
@@ -801,9 +801,9 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.2
+                self.delay = 0.01
         self.tile_size:int = self.ppm * self.moves
-
+        self.zoom: int = self.tile_size
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
@@ -1017,6 +1017,63 @@ class PlanConfig2024:
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
 
+    def update_heatmap_zoom(self):
+        """Resize the stored 1× image to match self.zoom and (re)display it."""
+        from PIL import ImageTk
+
+        if not hasattr(self, "heatmap_base_img"):
+            return  # heat-map not generated yet
+
+        z = int(self.zoom)
+        if z <= 0:
+            return
+
+        scaled = self.heatmap_base_img.resize(
+            (self.width * z, self.height * z),
+            resample=Image.NEAREST  # crisp block colours
+        )
+
+        self._heatmap_photo = ImageTk.PhotoImage(scaled)
+
+        if getattr(self, "heatmap_image_id", None) is None:
+            self.heatmap_image_id = self.canvas.create_image(
+                0, 0,
+                image=self._heatmap_photo,
+                anchor="nw",
+                tags=("heatmap", "world"),  # world → should scale with map
+                state=tk.HIDDEN
+            )
+        else:
+            self.canvas.itemconfig(self.heatmap_image_id,
+                                   image=self._heatmap_photo)
+        self.canvas.tag_lower(self.heatmap_image_id)
+
+    def update_subop_zoom(self):
+        """Resize & redraw the sub-op map image to match current self.zoom."""
+        from PIL import ImageTk
+        if not hasattr(self, "subop_base_img"):
+            return
+
+        z = int(self.zoom)
+        scaled = self.subop_base_img.resize(
+            (self.width * z, self.height * z),
+            resample=Image.NEAREST)
+
+        self._subop_photo = ImageTk.PhotoImage(scaled)
+
+        if getattr(self, "subop_image_id", None) is None:
+            # first draw
+            self.subop_image_id = self.canvas.create_image(
+                0, 0,
+                image=self._subop_photo,
+                anchor="nw",
+                tags=("subop", "world"),  # world ⇒ auto-scales if you use "all"
+                state=tk.HIDDEN)  # hidden until checkbox shows it
+            self.canvas.tag_lower(self.subop_image_id)  # under agents/tasks
+        else:
+            # just swap the bitmap after a zoom
+            self.canvas.itemconfig(self.subop_image_id, image=self._subop_photo)
+
     def load_subop_map(self):
         def manhattan_distance(loc, goal):
             return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
@@ -1032,42 +1089,18 @@ class PlanConfig2024:
                 cur_distance = manhattan_distance(cur_location, cur_goal)
                 next_distance = manhattan_distance(next_location, cur_goal)
                 if cur_distance == next_distance:
-                    self.subop_map[path[t][0]][path[t][1]] += 1
+                    self.subop_map[path[t][0]][path[t][1]] += 0
                 elif cur_distance < next_distance:
-                    self.subop_map[path[t][0]][path[t][1]] += 2
+                    self.subop_map[path[t][0]][path[t][1]] += 1
 
-        max_val = -np.inf
-        for row in self.subop_map:
-            row_max = max(row)
-            max_val = max(max_val, row_max)
-
-        subop_map_np = np.array(self.subop_map, dtype=float)
+        arr = np.array(self.subop_map, dtype=float)
         cmap = cm.get_cmap("Reds")
-        norm = colors.Normalize(vmin=0, vmax=subop_map_np.max() or 1)
-        rgba = cmap(norm(subop_map_np))[:, :, :3]  # drop alpha
-        rgb8 = (rgba * 255).astype(np.uint8)  # float→uint8 0-255
+        norm = colors.Normalize(vmin=0, vmax=arr.max() or 1)
+        rgb8 = (cmap(norm(arr))[:, :, :3] * 255).astype(np.uint8)
 
-        # 2. Build a Pillow image from the NumPy array
-        pil_img = Image.fromarray(rgb8, mode="RGB")
-
-        tile = self.tile_size  # tile_size must already be defined (e.g., 40)
-        pil_img = pil_img.resize((self.width * tile, self.height * tile), resample=Image.NEAREST)
-
-        # 3. Ship it into Tkinter
-        photo = ImageTk.PhotoImage(pil_img)
-        # keep a reference so it isn't garbage-collected
-        self._subop_photo = photo
-        self.canvas.delete("subop")
-        # 4. Put ONE item on the canvas
-        #    (0,0) unless you need offsets; anchor 'nw' == top-left
-        img_id = self.canvas.create_image(
-            0, 0,
-            image=photo,
-            anchor="nw",
-            tags=("subop",),
-            state=tk.HIDDEN
-        )
-        self.canvas.tag_lower(img_id)
+        self.subop_base_img = Image.fromarray(rgb8, mode="RGB")
+        self.subop_image_id = None  # will be set below
+        self.update_subop_zoom()  # draws at current self.zoom
 
 
         print("Done!")
@@ -1091,38 +1124,16 @@ class PlanConfig2024:
         #         self.heatmap[i][j] += (smoothed_density ** 2).sum() / len(xs)
         #         self.heat_score += (smoothed_density ** 2).sum() / len(xs)
 
-        max_val = -np.inf
-        for row in self.heatmap:
-            row_max = max(row)
-            max_val = max(max_val, row_max)
-
-        heatmap_np = np.array(self.heatmap, dtype=float)
+        arr = np.array(self.heatmap, dtype=float)
         cmap = cm.get_cmap("Reds")
-        norm = colors.Normalize(vmin=0, vmax=heatmap_np.max() or 1)
-        rgba = cmap(norm(heatmap_np))[:, :, :3]  # drop alpha
-        rgb8 = (rgba * 255).astype(np.uint8)  # float→uint8 0-255
+        norm = colors.Normalize(vmin=0, vmax=arr.max() or 1)
+        rgb8 = (cmap(norm(arr))[:, :, :3] * 255).astype(np.uint8)
 
-        # 2. Build a Pillow image from the NumPy array
-        pil_img = Image.fromarray(rgb8, mode="RGB")
+        # ---------- 3. save base img & draw once -----------------------------
+        self.heatmap_base_img = Image.fromarray(rgb8, mode="RGB")
+        self.heatmap_image_id = None  # will be set by helper
+        self.update_heatmap_zoom()  # draw at current self.zoom
 
-        tile = self.tile_size  # tile_size must already be defined (e.g., 40)
-        pil_img = pil_img.resize((self.width * tile, self.height * tile), resample=Image.NEAREST)
-
-        # 3. Ship it into Tkinter
-        photo = ImageTk.PhotoImage(pil_img)
-        # keep a reference so it isn't garbage-collected
-        self._heatmap_photo = photo
-        self.canvas.delete("heatmap")
-        # 4. Put ONE item on the canvas
-        #    (0,0) unless you need offsets; anchor 'nw' == top-left
-        img_id = self.canvas.create_image(
-            0, 0,
-            image=photo,
-            anchor="nw",
-            tags=("heatmap",),
-            state=tk.HIDDEN
-        )
-        self.canvas.tag_lower(img_id)
         print("Done!")
 
     def load_congestion_arrows(self):

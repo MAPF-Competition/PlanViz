@@ -1485,40 +1485,56 @@ class PlanViz2024:
 
 
     def __wheel(self, event):
-        """ Zoom with mouse wheel
-        """
-        scale = 1.0
-        # Respond to Linux (event.num) or Windows (event.delta) wheel event
-        if event.num == 5 or event.delta < 0:  # scroll down, smaller
-            threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
-            if threshold < 30:
-                return  # image is less than 30 pixels
-            scale /= 1.05
-            self.pcf.tile_size /= 1.05
-        if event.num == 4 or event.delta > 0:  # scroll up, bigger
-            scale *= 1.05
-            self.pcf.tile_size *= 1.05
-        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
-        for child_widget in self.pcf.canvas.find_withtag("text"):
-            self.pcf.canvas.itemconfigure(child_widget,
-                                          font=("Arial", int(self.pcf.tile_size // 2)))
-        for child_widget in self.pcf.canvas.find_withtag("hwy"):
-            self.pcf.canvas.itemconfigure(child_widget,
-                                          font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        """Zoom the canvas with the mouse wheel (keeps layers aligned)."""
+        old = self.pcf.tile_size
+
+        if event.num == 5 or event.delta < 0:
+            new = max(4, round(old / 1.05))
+        elif event.num == 4 or event.delta > 0:
+            new = min(120, round(old * 1.05))
+        else:
+            return
+        if new == old:
+            return
+        factor = new / old
+        self.pcf.canvas.scale("all", 0, 0, factor, factor)
+        # bookkeeping
+        self.pcf.tile_size = new
+        self.pcf.zoom      = new
+        self.pcf.update_heatmap_zoom()
+        self.pcf.update_subop_zoom()
+        # refresh fonts that depend on tile_size
+        for wid in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(
+                wid, font=("Arial", int(new // 2)))
+        for wid in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(
+                wid, font=("Arial", int(new * 1.2)))
+
+        self.pcf.canvas.configure(scrollregion=self.pcf.canvas.bbox("all"))
 
 
     def resume_zoom(self):
-        __scale = self.pcf.ppm * self.pcf.moves / self.pcf.tile_size
-        self.pcf.canvas.scale("all", 0, 0, __scale, __scale)
-        self.pcf.tile_size = self.pcf.ppm * self.pcf.moves
-        for child_widget in self.pcf.canvas.find_withtag("text"):
-            self.pcf.canvas.itemconfigure(child_widget,
-                                          font=("Arial", int(self.pcf.tile_size // 2)))
-        for child_widget in self.pcf.canvas.find_withtag("hwy"):
-            self.pcf.canvas.itemconfigure(child_widget,
-                                          font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        """Reset to the original ppm × moves grid size."""
+        new = self.pcf.ppm * self.pcf.moves
+        if new == self.pcf.tile_size:
+            return
+
+        factor = new / self.pcf.tile_size
+        self.pcf.canvas.scale("all", 0, 0, factor, factor)
+
+        self.pcf.tile_size = new
+        self.pcf.zoom      = new
+        self.pcf.update_heatmap_zoom()
+        self.pcf.update_subop_zoom()
+        for wid in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(
+                wid, font=("Arial", int(new // 2)))
+        for wid in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(
+                wid, font=("Arial", int(new * 1.2)))
+
+        self.pcf.canvas.configure(scrollregion=self.pcf.canvas.bbox("all"))
         self.pcf.canvas.update()
 
     def clear_agent_selection(self, moving=False):
