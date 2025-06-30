@@ -1088,10 +1088,10 @@ class PlanConfig2024:
                 next_location = (path[t+1][0],path[t+1][1])
                 cur_distance = manhattan_distance(cur_location, cur_goal)
                 next_distance = manhattan_distance(next_location, cur_goal)
-                if cur_distance == next_distance:
-                    self.subop_map[path[t][0]][path[t][1]] += 0
-                elif cur_distance < next_distance:
+                if path[t] == path[t + 1]:
                     self.subop_map[path[t][0]][path[t][1]] += 1
+                elif cur_distance < next_distance:
+                    self.subop_map[path[t][0]][path[t][1]] += 2
 
         arr = np.array(self.subop_map, dtype=float)
         cmap = cm.get_cmap("Reds")

@@ -1941,7 +1941,6 @@ class PlanViz2024:
     def move_agents_per_timestep(self) -> None:
         """ Move agents forward from cur_tstep, adding cur_tstep by 1.
         """
-        print(self.pcf.get_current_goal(1, self.pcf.cur_tstep))
         if self.pcf.cur_tstep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
