@@ -6,8 +6,8 @@ import argparse
 import tkinter as tk
 import numpy as np
 import json
-from plan_config import PlanConfig2023, PlanConfig2024
-from plan_viz import PlanViz2023, PlanViz2024
+from plan_config import PlanConfig2024
+from plan_viz import PlanViz2024
 
 
 def main() -> None:
@@ -59,14 +59,7 @@ def main() -> None:
                               args.ppm, args.moves, args.delay)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
-    else:
-        if version != "2023 LoRR":
-            print("Year not specified, defaulting to 2023 LoRR")
-        plan_config = PlanConfig2023(args.map, args.plan, args.team_size, args.start, args.end,
-                                args.ppm, args.moves, args.delay, args.heat_maps, args.hwy_file,
-                                args.search_tree_files, args.heu_file)
-        PlanViz2023(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
-                args.show_static, args.show_conf_ag)
+
         
     tk.mainloop()
 
