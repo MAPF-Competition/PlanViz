@@ -66,7 +66,8 @@ class PlanConfig2024:
         self.conflict_agents: Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
-
+        self.shortest_paths = self.precompute_distance_matrix(map_file)
+        print(self.shortest_paths)
         # Initialize the window
         self.window = tk.Tk()
 
@@ -302,12 +303,91 @@ class PlanConfig2024:
                 return subtask.loc  # (x, y)
 
         return None  # All goals are already finished
+
+    def precompute_distance_matrix(self, path_or_text):
+        """
+        Compute an all-pairs distance matrix for a Moving-AI .map file
+        using 4-connected (N,S,E,W) movement with unit cost.
+
+        Parameters
+        ----------
+        path_or_text : str | pathlib.Path
+            • A path to a *.map file, **or**
+            • The literal text of a map (including the header).
+
+        Returns
+        -------
+        numpy.ndarray (shape = (N, N), dtype=float64)
+            dist[i, j] = shortest path length in steps
+            (np.inf when no path exists).
+            Cell index = row * width + col.
+        """
+        import numpy as np
+        from pathlib import Path
+        from scipy.sparse import dok_matrix
+        from scipy.sparse.csgraph import shortest_path
+
+        # ------------------------------------------------------------------ #
+        # 1.  Read the map
+        # ------------------------------------------------------------------ #
+
+        raw_text = (
+            Path(path_or_text).read_text()
+            if Path(str(path_or_text)).exists()
+            else str(path_or_text)
+        ).strip()
+        lines = [ln.rstrip() for ln in raw_text.splitlines()]
+
+        height = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("height")))
+        width = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("width")))
+        grid = np.array([list(ln) for ln in lines[4: 4 + height]], dtype="U1")
+
+        # ------------------------------------------------------------------ #
+        # 2.  Build a 4-connected sparse graph
+        # ------------------------------------------------------------------ #
+        total_cells = height * width
+        to_node = lambda r, c: r * width + c
+        cardinal = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E
+
+        graph = dok_matrix((total_cells, total_cells), dtype=np.uint8)
+
+        for row in range(height):
+            for col in range(width):
+                if grid[row, col] == "@":
+                    continue
+                node = to_node(row, col)
+                for dr, dc in cardinal:
+                    nr, nc = row + dr, col + dc
+                    if (
+                            0 <= nr < height
+                            and 0 <= nc < width
+                            and grid[nr, nc] != "@"
+                    ):
+                        graph[node, to_node(nr, nc)] = 1  # undirected edge
+
+        # ------------------------------------------------------------------ #
+        # 3.  All-pairs shortest paths (BFS under the hood)
+        # ------------------------------------------------------------------ #
+        dist_matrix = shortest_path(
+            graph.tocsr(),
+            directed=False,
+            unweighted=True
+        )
+        return dist_matrix
+
+
+
     def load_subop_map(self):
         print(self.exec_paths[0])
 
         def manhattan_distance(loc, goal):
             return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
 
+        def shortest_path_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            return self.shortest_paths[to_id(loc), to_id(goal)]
+
+        path_alg = shortest_path_distance
         def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
             env_map = self.env_map
             """True if (row,col) is inside the grid and not an obstacle."""
@@ -316,7 +396,7 @@ class PlanConfig2024:
             elif env_map[row][col] == 0: # 0 == obstacle in your map
                 return current_distance
             else:
-                return manhattan_distance((row, col), current_goal)
+                return path_alg((row, col), current_goal)
 
         print("Rendering suboptimality map", end="...")
         self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
@@ -327,8 +407,8 @@ class PlanConfig2024:
                     continue
                 cur_location = (path[t][0],path[t][1])
                 next_location = (path[t+1][0],path[t+1][1])
-                cur_distance = manhattan_distance(cur_location, cur_goal)
-                next_distance = manhattan_distance(next_location, cur_goal)
+                cur_distance = path_alg(cur_location, cur_goal)
+                next_distance = path_alg(next_location, cur_goal)
                 turn = get_rotation(path[t][2], path[t+1][2])
                 if turn == 0: # Agent has not turned
                     if path[t] == path[t + 1]: # Agent has not moved
