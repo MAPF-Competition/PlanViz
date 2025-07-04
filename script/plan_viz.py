@@ -38,6 +38,7 @@ class PlanViz2024:
         self.show_heat_map = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
         self.is_dynamic_map = tk.BooleanVar()
+        self.is_agent_colors = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
 
@@ -127,6 +128,11 @@ class PlanViz2024:
                                         command=self.restart_timestep)
         self.restart_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
+        self.reset_dynamic_button = tk.Button(self.frame, text="Reset Heatmap",
+                                        font=("Arial", TEXT_SIZE),
+                                        command=self.pcf.reset_subop_map)
+        self.reset_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="nsew")
+        self.row_idx += 1
 
         # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
@@ -183,8 +189,16 @@ class PlanViz2024:
         self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_dynamic_map,
-                                                  onvalue=True, offvalue=False)
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_dynamic_maps)
         self.show_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_agent_color_button = tk.Checkbutton(self.frame, text="Show Agent Colors",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_agent_colors,
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_agent_colours)
+        self.show_agent_color_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
     def init_label(self):
@@ -769,6 +783,27 @@ class PlanViz2024:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
+    def show_dynamic_maps(self) -> None:
+        if self.is_dynamic_map.get() is True:
+            for item in self.pcf.dynamic_heat_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
+        else:
+            for item in self.pcf.dynamic_heat_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
+    def show_agent_colours(self) -> None:
+        if self.is_agent_colors.get() is True:
+            for (ag_id, agent) in self.pcf.agents.items():
+                color = (int(self.pcf.agents_rgba[ag_id][0] * 255),
+                         int(self.pcf.agents_rgba[ag_id][1] * 255),
+                         int(self.pcf.agents_rgba[ag_id][2] * 255))
+                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                self.change_ag_color(ag_id, hex_color)
+        else:
+            for (ag_id, agent) in self.pcf.agents.items():
+                color = AGENT_COLORS["assigned"]
+                self.change_ag_color(ag_id, color)
+        self.pcf.canvas.update()
     def show_highway(self) -> None:
         if self.is_highway.get() is True:
             for item in self.pcf.highway:
@@ -916,9 +951,10 @@ class PlanViz2024:
 
         self.next_button.config(state=tk.DISABLED)
         _rad_ = ((1 - 2 * DIR_OFFSET) - 0.1 * 2) * self.pcf.tile_size / 2
+        self.pcf.update_dynamic_subop_map()
+        if self.is_dynamic_map.get() == True:
+            self.show_dynamic_maps()
 
-        if self.is_dynamic_map.get():
-            self.pcf.update_dynamic_subop_map()
 
 
         # Update the next timestep for each agent
@@ -978,8 +1014,10 @@ class PlanViz2024:
                 task_id = global_task_id // self.pcf.max_seq_num
                 seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
+
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
+                if self.is_agent_colors.get() == False:
+                    self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] += 1

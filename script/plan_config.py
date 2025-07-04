@@ -53,6 +53,7 @@ class PlanConfig2024:
         self.heatmap = []
         self.heat_grids = []
         self.dynamic_heat_grids = []
+        self.agents_rgba = []
         self.max_heatmap_val = -np.inf
         self.start_loc = {}
         self.plan_paths = {}
@@ -69,11 +70,11 @@ class PlanConfig2024:
 
         self.load_map(map_file)  # Load from the map file
         self.shortest_paths = self.precompute_distance_matrix(map_file)
-        print(self.shortest_paths)
         # Initialize the window
         self.window = tk.Tk()
 
         self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.agent_performance = []
 
         self.screen_width = self.window.winfo_screenwidth()
 
@@ -446,7 +447,7 @@ class PlanConfig2024:
                          int(rgba[i][j][1] * 255),
                          int(rgba[i][j][2] * 255))
                 hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
-                heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.DISABLED,
+                heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
                                               0.0, "dynamic", show_text=False)
                 self.dynamic_heat_grids.append(heat_square)
         self.canvas.lower("dynamic")
@@ -456,7 +457,6 @@ class PlanConfig2024:
 
 
     def load_subop_map(self):
-        print(self.exec_paths[0])
 
         def manhattan_distance(loc, goal):
             return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
@@ -491,8 +491,10 @@ class PlanConfig2024:
                 if turn == 0: # Agent has not turned
                     if path[t] == path[t + 1]: # Agent has not moved
                         self.subop_map[path[t][0]][path[t][1]] += 1
+                        self.agent_performance[agent] += 1
                     elif cur_distance < next_distance:  # Agent moved further away
                         self.subop_map[path[t][0]][path[t][1]] += 2
+                        self.agent_performance[agent] += 2
                 else: # Agent has turned
                     unturned_future_square = state_transition(path[t], "F")
                     unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
@@ -500,11 +502,13 @@ class PlanConfig2024:
                     turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
                     if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
                         self.subop_map[path[t][0]][path[t][1]] += 1
+                        self.agent_performance[agent] += 1
                     else:
                         opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
                         opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
                         if turned_future_distance > opposite_turned_future_distance:
                             self.subop_map[path[t][0]][path[t][1]] += 1
+                            self.agent_performance[agent] += 1
 
         max_val = -np.inf
         for row in self.subop_map:
@@ -525,6 +529,11 @@ class PlanConfig2024:
                 heat_square = self.render_obj(self.subop_map[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
                                               0.0, "subop")
                 self.heat_grids.append(heat_square)
+        cmap = cm.get_cmap("turbo")
+        max_val = max(self.agent_performance)
+        norm = Normalize(vmin=0, vmax=max_val)
+        self.agents_rgba = cmap(norm(self.agent_performance))
+
         print("Done!")
 
     def load_plan(self, plan_file):
@@ -534,7 +543,7 @@ class PlanConfig2024:
 
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
-
+        self.agent_performance = [0 for _ in range(self.team_size)]
         if self.end_tstep == math.inf:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
@@ -699,6 +708,7 @@ class PlanConfig2024:
 
         if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
+
 
         for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
