@@ -52,6 +52,8 @@ class PlanConfig2024:
         self.grids: List = []
         self.heatmap = []
         self.heat_grids = []
+        self.dynamic_heat_grids = []
+        self.max_heatmap_val = -np.inf
         self.start_loc = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -70,6 +72,8 @@ class PlanConfig2024:
         print(self.shortest_paths)
         # Initialize the window
         self.window = tk.Tk()
+
+        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
 
         self.screen_width = self.window.winfo_screenwidth()
 
@@ -375,6 +379,80 @@ class PlanConfig2024:
         )
         return dist_matrix
 
+    def reset_subop_map(self):
+        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+    def update_dynamic_subop_map(self):
+        def shortest_path_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            return self.shortest_paths[to_id(loc), to_id(goal)]
+
+        path_alg = shortest_path_distance
+        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
+            env_map = self.env_map
+            """True if (row,col) is inside the grid and not an obstacle."""
+            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
+                return current_distance  # off the board
+            elif env_map[row][col] == 0: # 0 == obstacle in your map
+                return current_distance
+            else:
+                return path_alg((row, col), current_goal)
+
+        print("Rendering suboptimality map", end="...")
+        for agent, path in enumerate(self.exec_paths.values()):
+            t = self.cur_tstep
+            cur_goal = self.get_current_goal(agent, t)
+            if cur_goal == None:
+                continue
+            cur_location = (path[t][0],path[t][1])
+            next_location = (path[t+1][0],path[t+1][1])
+            cur_distance = path_alg(cur_location, cur_goal)
+            next_distance = path_alg(next_location, cur_goal)
+            turn = get_rotation(path[t][2], path[t+1][2])
+            if turn == 0: # Agent has not turned
+                if path[t] == path[t + 1]: # Agent has not moved
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+                elif cur_distance < next_distance:  # Agent moved further away
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 2
+            else: # Agent has turned
+                unturned_future_square = state_transition(path[t], "F")
+                unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
+                turned_future_square = state_transition(path[t+1], "F")
+                turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
+                if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+                else:
+                    opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
+                    opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
+                    if turned_future_distance > opposite_turned_future_distance:
+                        self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+
+        self.canvas.delete("dynamic")
+        max_val = -np.inf
+        for row in self.dynamic_heatmap:
+            row_max = max(row)
+            max_val = max(max_val, row_max)
+        if max_val == -np.inf:
+            return None
+
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
+        rgba = cmap(norm(self.dynamic_heatmap))
+        self.dynamic_heat_grids = []
+        for i in range(len(self.dynamic_heatmap)):
+            for j in range(len(self.dynamic_heatmap[i])):
+                if self.dynamic_heatmap[i][j] == 0:
+                    continue
+                color = (int(rgba[i][j][0] * 255),
+                         int(rgba[i][j][1] * 255),
+                         int(rgba[i][j][2] * 255))
+                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.DISABLED,
+                                              0.0, "dynamic", show_text=False)
+                self.dynamic_heat_grids.append(heat_square)
+        self.canvas.lower("dynamic")
+        print("Done!")
+        return True
+
 
 
     def load_subop_map(self):
@@ -432,7 +510,7 @@ class PlanConfig2024:
         for row in self.subop_map:
             row_max = max(row)
             max_val = max(max_val, row_max)
-
+        self.max_heatmap_val = max_val
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=0, vmax=max_val)
         rgba = cmap(norm(self.subop_map))
@@ -476,7 +554,7 @@ class PlanConfig2024:
 
     def render_obj(self, idx: int, loc: Tuple[int], shape: str = "rectangle",
                    color: str = "blue", state=tk.NORMAL,
-                   offset: float = 0.05, tag: str = "obj", outline: str = ""):
+                   offset: float = 0.05, tag: str = "obj", outline: str = "", show_text=True):
         """Mark certain positions on the visualizer
 
         Args:
@@ -512,13 +590,16 @@ class PlanConfig2024:
         shown_text = ""
         if idx > -1:
             shown_text = str(idx)
-        tmp_text = self.canvas.create_text((loc[1] + 0.5) * self.tile_size,
-                                           (loc[0] + 0.5) * self.tile_size,
-                                           text=shown_text,
-                                           fill="black",
-                                           tag=("text", tag),
-                                           state=state,
-                                           font=("Arial", int(self.tile_size // 2)))
+        if show_text:
+            tmp_text = self.canvas.create_text((loc[1] + 0.5) * self.tile_size,
+                                               (loc[0] + 0.5) * self.tile_size,
+                                               text=shown_text,
+                                               fill="black",
+                                               tag=("text", tag),
+                                               state=state,
+                                               font=("Arial", int(self.tile_size // 2)))
+        else:
+            tmp_text = None
 
         return BaseObj(tmp_canvas, tmp_text, loc, color)
 

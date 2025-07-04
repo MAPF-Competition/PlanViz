@@ -37,6 +37,7 @@ class PlanViz2024:
         self.show_agent_path = tk.BooleanVar()
         self.show_heat_map = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
+        self.is_dynamic_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
 
@@ -178,6 +179,12 @@ class PlanViz2024:
                                                   onvalue=True, offvalue=False,
                                                   command=self.show_heat_maps)
         self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_dynamic_map,
+                                                  onvalue=True, offvalue=False)
+        self.show_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
     def init_label(self):
@@ -438,7 +445,7 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
-
+        self.pcf.reset_subop_map()
     def move_to_conflict(self, event):
         if self.is_run.get() is True:
             return
@@ -909,6 +916,10 @@ class PlanViz2024:
 
         self.next_button.config(state=tk.DISABLED)
         _rad_ = ((1 - 2 * DIR_OFFSET) - 0.1 * 2) * self.pcf.tile_size / 2
+
+        if self.is_dynamic_map.get():
+            self.pcf.update_dynamic_subop_map()
+
 
         # Update the next timestep for each agent
         next_tstep = {}
