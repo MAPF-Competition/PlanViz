@@ -352,7 +352,7 @@ class PlanConfig2024:
         )
         return dist_matrix
 
-    def precompute_landmark_distance(self, map_file, num_landmarks=8):
+    def precompute_landmark_distance(self, map_file, num_landmarks=20):
         from scipy.sparse.csgraph import dijkstra
         graph = self.graph_to_csr(map_file)
         num_nodes = graph.shape[0]
