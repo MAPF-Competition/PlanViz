@@ -42,6 +42,7 @@ def main() -> None:
                         help="Show the search trees")
     parser.add_argument("--heu", dest="heu_file", type=str, default="",
                         help="Show the low-level heuristics")
+    parser.add_argument("--pathalg", type=str, default="Landmark", help="Algorithm for suboptimality map (Manhattan, Landmark, True)")
     args = parser.parse_args()
 
     version = None
@@ -56,7 +57,7 @@ def main() -> None:
 
     if version == "2024 LoRR":
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
-                              args.ppm, args.moves, args.delay)
+                              args.ppm, args.moves, args.delay, args.pathalg)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
 

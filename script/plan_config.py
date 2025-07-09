@@ -29,14 +29,14 @@ class PlanConfig2024:
     """
 
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay):
+                 ppm, moves, delay, pathalg):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
         self.team_size: int = team_size
         self.start_tstep: int = start_tstep
         self.end_tstep: int = end_tstep
-
+        self.pathalg = pathalg
         self.agent_model: str = ""
 
         self.width: int = -1
@@ -69,7 +69,10 @@ class PlanConfig2024:
         self.conflict_agents: Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
-        self.shortest_paths = self.precompute_distance_matrix(map_file)
+        if self.pathalg == "Landmark":
+            self.shortest_paths = self.precompute_landmark_distance(map_file)
+        elif self.pathalg == "True":
+            self.shortest_paths = self.precompute_distance_matrix(map_file)
         # Initialize the window
         self.window = tk.Tk()
 
@@ -85,7 +88,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 6
+                self.moves = 3
 
         self.ppm: int = ppm
         if self.ppm is None:
@@ -309,47 +312,16 @@ class PlanConfig2024:
 
         return None  # All goals are already finished
 
-    def precompute_distance_matrix(self, path_or_text):
-        """
-        Compute an all-pairs distance matrix for a Moving-AI .map file
-        using 4-connected (N,S,E,W) movement with unit cost.
-
-        Parameters
-        ----------
-        path_or_text : str | pathlib.Path
-            • A path to a *.map file, **or**
-            • The literal text of a map (including the header).
-
-        Returns
-        -------
-        numpy.ndarray (shape = (N, N), dtype=float64)
-            dist[i, j] = shortest path length in steps
-            (np.inf when no path exists).
-            Cell index = row * width + col.
-        """
-        import numpy as np
-        from pathlib import Path
+    def graph_to_csr(self, path):
         from scipy.sparse import dok_matrix
-        from scipy.sparse.csgraph import shortest_path
 
-        # ------------------------------------------------------------------ #
-        # 1.  Read the map
-        # ------------------------------------------------------------------ #
-
-        raw_text = (
-            Path(path_or_text).read_text()
-            if Path(str(path_or_text)).exists()
-            else str(path_or_text)
-        ).strip()
-        lines = [ln.rstrip() for ln in raw_text.splitlines()]
+        with open(path, "r") as f:
+            lines = [line.rstrip() for line in f]
 
         height = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("height")))
         width = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("width")))
         grid = np.array([list(ln) for ln in lines[4: 4 + height]], dtype="U1")
 
-        # ------------------------------------------------------------------ #
-        # 2.  Build a 4-connected sparse graph
-        # ------------------------------------------------------------------ #
         total_cells = height * width
         to_node = lambda r, c: r * width + c
         cardinal = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E
@@ -369,15 +341,48 @@ class PlanConfig2024:
                             and grid[nr, nc] != "@"
                     ):
                         graph[node, to_node(nr, nc)] = 1  # undirected edge
-
-        # ------------------------------------------------------------------ #
-        # 3.  All-pairs shortest paths (BFS under the hood)
-        # ------------------------------------------------------------------ #
+        return graph.tocsr()
+    def precompute_distance_matrix(self, map_file):
+        graph_csr = self.graph_to_csr(map_file)
+        from scipy.sparse.csgraph import shortest_path
         dist_matrix = shortest_path(
-            graph.tocsr(),
+            graph_csr,
             directed=False,
             unweighted=True
         )
+        return dist_matrix
+
+    def precompute_landmark_distance(self, map_file, num_landmarks=8):
+        from scipy.sparse.csgraph import dijkstra
+        graph = self.graph_to_csr(map_file)
+        num_nodes = graph.shape[0]
+        landmarks = []
+        dist_matrix = np.empty((num_landmarks, num_nodes), dtype=np.float32)
+
+        # Start from the first walkable node
+        for i in range(num_nodes):
+            if graph.getrow(i).nnz > 0:
+                current = i
+                break
+        else:
+            raise ValueError("No walkable node found.")
+
+        for i in range(num_landmarks):
+            dist = dijkstra(graph, directed=False, indices=current)
+            dist[np.isinf(dist)] = 0
+            dist_matrix[i] = dist
+            landmarks.append(current)
+
+            # Sort nodes by distance descending and skip already used landmarks
+            sorted_nodes = np.argsort(-dist)
+            for next_candidate in sorted_nodes:
+                if next_candidate not in landmarks and dist[next_candidate] > 0:
+                    current = next_candidate
+                    break
+            else:
+                print(f"⚠️ Could not find a new distant node at landmark {i + 1}")
+                return landmarks, dist_matrix[:i + 1]
+
         return dist_matrix
 
     def reset_subop_map(self):
@@ -386,8 +391,21 @@ class PlanConfig2024:
         def shortest_path_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             return self.shortest_paths[to_id(loc), to_id(goal)]
+        def manhattan_distance(loc, goal):
+            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+        def landmark_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            u, v = to_id(loc), to_id(goal)
+            return max(
+                abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
+                for i in range(self.shortest_paths.shape[0]))
+        if self.pathalg == "True":
+            path_alg = shortest_path_distance
+        elif self.pathalg == "Landmark":
+            path_alg = landmark_distance
+        else:
+            path_alg = manhattan_distance
 
-        path_alg = shortest_path_distance
         def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
             env_map = self.env_map
             """True if (row,col) is inside the grid and not an obstacle."""
@@ -464,8 +482,20 @@ class PlanConfig2024:
         def shortest_path_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             return self.shortest_paths[to_id(loc), to_id(goal)]
+        def landmark_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            u, v = to_id(loc), to_id(goal)
+            return max(
+                abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
+                for i in range(self.shortest_paths.shape[0])
+            )
+        if self.pathalg == "True":
+            path_alg = shortest_path_distance
+        elif self.pathalg == "Landmark":
+            path_alg = landmark_distance
+        else:
+            path_alg = manhattan_distance
 
-        path_alg = shortest_path_distance
         def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
             env_map = self.env_map
             """True if (row,col) is inside the grid and not an obstacle."""
