@@ -42,7 +42,7 @@ def main() -> None:
                         help="Show the search trees")
     parser.add_argument("--heu", dest="heu_file", type=str, default="",
                         help="Show the low-level heuristics")
-    parser.add_argument("--pathalg", type=str, default="Landmark", help="Algorithm for suboptimality map (Manhattan, Landmark, True)")
+    parser.add_argument("--pathalg", type=str, default="Auto", help="Algorithm for suboptimality map (Manhattan, Landmark, True)")
     args = parser.parse_args()
 
     version = None

@@ -13,6 +13,7 @@ import json
 import math
 import numpy as np
 import pandas as pd
+import scipy.sparse
 from matplotlib.colors import Normalize
 from matplotlib import cm
 from util import (
@@ -69,6 +70,16 @@ class PlanConfig2024:
         self.conflict_agents: Set[int] = set()
 
         self.load_map(map_file)  # Load from the map file
+        assert self.pathalg in ["Auto", "Landmark", "Manhattan", "True"], "Invalid path algorithm name"
+        if self.pathalg == "Auto":
+            grid_size = self.width*self.height
+            if grid_size < 5000:
+                self.pathalg = "True"
+            elif grid_size < 65000:
+                self.pathalg = "Landmark"
+            else:
+                self.pathalg = "Manhattan"
+
         if self.pathalg == "Landmark":
             self.shortest_paths = self.precompute_landmark_distance(map_file)
         elif self.pathalg == "True":
@@ -88,7 +99,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
+                self.moves = 6
 
         self.ppm: int = ppm
         if self.ppm is None:
@@ -313,7 +324,6 @@ class PlanConfig2024:
         return None  # All goals are already finished
 
     def graph_to_csr(self, path):
-        from scipy.sparse import dok_matrix
 
         with open(path, "r") as f:
             lines = [line.rstrip() for line in f]
@@ -326,7 +336,7 @@ class PlanConfig2024:
         to_node = lambda r, c: r * width + c
         cardinal = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E
 
-        graph = dok_matrix((total_cells, total_cells), dtype=np.uint8)
+        graph = scipy.sparse.dok_matrix((total_cells, total_cells), dtype=np.uint8)
 
         for row in range(height):
             for col in range(width):
@@ -344,16 +354,14 @@ class PlanConfig2024:
         return graph.tocsr()
     def precompute_distance_matrix(self, map_file):
         graph_csr = self.graph_to_csr(map_file)
-        from scipy.sparse.csgraph import shortest_path
-        dist_matrix = shortest_path(
+        dist_matrix = scipy.sparse.csgraph.shortest_path(
             graph_csr,
             directed=False,
             unweighted=True
         )
         return dist_matrix
 
-    def precompute_landmark_distance(self, map_file, num_landmarks=20):
-        from scipy.sparse.csgraph import dijkstra
+    def precompute_landmark_distance(self, map_file, num_landmarks=16):
         graph = self.graph_to_csr(map_file)
         num_nodes = graph.shape[0]
         landmarks = []
@@ -368,7 +376,7 @@ class PlanConfig2024:
             raise ValueError("No walkable node found.")
 
         for i in range(num_landmarks):
-            dist = dijkstra(graph, directed=False, indices=current)
+            dist = scipy.sparse.csgraph.dijkstra(graph, directed=False, indices=current)
             dist[np.isinf(dist)] = 0
             dist_matrix[i] = dist
             landmarks.append(current)
@@ -424,7 +432,6 @@ class PlanConfig2024:
             else:
                 return path_alg((row, col), current_goal)
 
-        print("Rendering suboptimality map", end="...")
         for agent, path in enumerate(self.exec_paths.values()):
             t = self.cur_tstep
             cur_goal = self.get_current_goal(agent, t)
@@ -477,7 +484,6 @@ class PlanConfig2024:
                                               0.0, "dynamic", show_text=False)
                 self.dynamic_heat_grids.append(heat_square)
         self.canvas.lower("dynamic")
-        print("Done!")
         return True
 
 
@@ -493,10 +499,10 @@ class PlanConfig2024:
         def landmark_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             u, v = to_id(loc), to_id(goal)
-            return max(
+            return max(manhattan_distance(loc, goal), max(
                 abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
                 for i in range(self.shortest_paths.shape[0])
-            )
+            ))
         if self.pathalg == "True":
             path_alg = shortest_path_distance
         elif self.pathalg == "Landmark":

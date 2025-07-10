@@ -130,7 +130,7 @@ class PlanViz2024:
         self.row_idx += 1
         self.reset_dynamic_button = tk.Button(self.frame, text="Reset Heatmap",
                                         font=("Arial", TEXT_SIZE),
-                                        command=self.pcf.reset_subop_map)
+                                        command=self.reset_heat_map)
         self.reset_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
@@ -460,6 +460,8 @@ class PlanViz2024:
         self.max_event_t = 0
         self.update_curtime()
         self.pcf.reset_subop_map()
+        self.pcf.update_dynamic_subop_map()
+
     def move_to_conflict(self, event):
         if self.is_run.get() is True:
             return
@@ -782,6 +784,11 @@ class PlanViz2024:
             for item in self.pcf.heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+
+    def reset_heat_map(self) -> None:
+        self.pcf.reset_subop_map()
+        self.pcf.update_dynamic_subop_map()
+        self.pcf.canvas.update()
 
     def show_dynamic_maps(self) -> None:
         if self.is_dynamic_map.get() is True:
