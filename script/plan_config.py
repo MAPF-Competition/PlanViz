@@ -295,6 +295,9 @@ class PlanConfig2024:
         print("Done!")
 
     def get_current_goal(self, agent_id: int, timestep: int):
+        """
+        Returns the location (x,y) of the agent's current goal at timestep.
+        """
         # 1. Check if agent has any assigned tasks
         if agent_id not in self.agent_assigned_task:
             return None
@@ -324,6 +327,9 @@ class PlanConfig2024:
         return None  # All goals are already finished
 
     def graph_to_csr(self, path):
+        """
+        Returns Scipy Compressed Row matrix representation of the map
+        """
 
         with open(path, "r") as f:
             lines = [line.rstrip() for line in f]
@@ -353,6 +359,9 @@ class PlanConfig2024:
                         graph[node, to_node(nr, nc)] = 1  # undirected edge
         return graph.tocsr()
     def precompute_distance_matrix(self, map_file):
+        """
+        Compute true shortest paths using scipy shortest_path
+        """
         graph_csr = self.graph_to_csr(map_file)
         dist_matrix = scipy.sparse.csgraph.shortest_path(
             graph_csr,
@@ -362,6 +371,14 @@ class PlanConfig2024:
         return dist_matrix
 
     def precompute_landmark_distance(self, map_file, num_landmarks=16):
+        """
+        Args:
+            map_file: Path to map file
+            num_landmarks: Number of landmarks to be used
+
+        Returns: 2d numpy array (num_landmarks, num_nodes) where each row represents a landmark and each column j
+        is the distance from vertex j to that landmark.
+        """
         graph = self.graph_to_csr(map_file)
         num_nodes = graph.shape[0]
         landmarks = []
@@ -404,6 +421,9 @@ class PlanConfig2024:
     def reset_subop_map(self):
         self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
     def update_dynamic_subop_map(self):
+        """
+        Updates and renders the individual suboptimality heatmap squares for the dynamic heatmap at current timestep
+        """
         def shortest_path_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             return self.shortest_paths[to_id(loc), to_id(goal)]
@@ -489,7 +509,10 @@ class PlanConfig2024:
 
 
     def load_subop_map(self):
-
+        """
+        Computes and renders the individual suboptimality heatmap squares for the static final heatmap.
+        Also computes individual agent based suboptimalities and stores in self.agent_performance
+        """
         def manhattan_distance(loc, goal):
             return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
 
@@ -678,10 +701,10 @@ class PlanConfig2024:
                                              fill="grey")
             self.grids.append(_line_)
 
-        # Render features
+        # Horizontal obstacle merge optimisation
         for r, row in enumerate(self.env_map):
             start = None  # first col in current run
-            for c, val in enumerate(row + [1]):  # add sentinel (1 = free)
+            for c, val in enumerate(row + [1]):
                 if val == 0 and start is None:  # run begins
                     start = c
                 elif val != 0 and start is not None:  # run ends before this col
