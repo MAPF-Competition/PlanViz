@@ -373,15 +373,23 @@ class PlanConfig2024:
             dist_matrix[i] = dist
             landmarks.append(current)
 
-            # Sort nodes by distance descending and skip already used landmarks
-            sorted_nodes = np.argsort(-dist)
-            for next_candidate in sorted_nodes:
-                if next_candidate not in landmarks and dist[next_candidate] > 0:
-                    current = next_candidate
-                    break
-            else:
-                print(f"⚠️ Could not find a new distant node at landmark {i + 1}")
+            if i == num_landmarks - 1:
+                break
+
+            # Compute distances from each node to all previous landmarks
+            min_dists = np.min(dist_matrix[:i + 1], axis=0)
+
+            # Exclude already chosen landmarks
+            for l in landmarks:
+                min_dists[l] = -1
+
+            # Pick the node with max of min distances
+            next_candidate = np.argmax(min_dists)
+            if min_dists[next_candidate] <= 0:
+                print(f"Could not find a new distant node at landmark {i + 1}")
                 return landmarks, dist_matrix[:i + 1]
+
+            current = next_candidate
 
         return dist_matrix
 
