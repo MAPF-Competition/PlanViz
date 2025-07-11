@@ -215,6 +215,20 @@ class PlanViz2024:
         self.task_shown.grid(row=self.row_idx, column=1, sticky="w")
         self.row_idx += 1
 
+        # ---------- Change Heatmap View ---------- #
+        task_label = tk.Label(self.frame, text="Change heatmap view", font=("Arial", TEXT_SIZE))
+        task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
+        self.heatmap_type = ttk.Combobox(self.frame, width=15, state="readonly",
+                                       values=["All suboptimality",
+                                               "Wrong direction",
+                                               "Wait actions",
+                                               "Suboptimal turns"
+                                               ])
+        self.heatmap_type.current(0)
+        self.heatmap_type.bind("<<ComboboxSelected>>", self.show_heat_maps)
+        self.heatmap_type.grid(row=self.row_idx, column=1, sticky="w")
+        self.row_idx += 1
+
         # ---------- Set the starting timestep --------------------- #
         st_label = tk.Label(self.frame, text="Start timestep", font=("Arial", TEXT_SIZE))
         st_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
@@ -775,13 +789,21 @@ class PlanViz2024:
             for _line_ in self.pcf.grids:
                 self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
 
-    def show_heat_maps(self) -> None:
+    def show_heat_maps(self, _=None) -> None:
+        heatmap_type_to_heatgrids = {"All suboptimality": self.pcf.heat_grids,  "Wrong direction": self.pcf.wrong_direction_grids,
+                                     "Wait actions": self.pcf.wait_action_grids, "Suboptimal turns": self.pcf.bad_turn_grids}
+        current_type = heatmap_type_to_heatgrids[self.heatmap_type.get()]
         if self.is_heat_map.get() is True:
-            for item in self.pcf.heat_grids:
+            for item in current_type:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+            for key, value in heatmap_type_to_heatgrids.items():
+                if key != self.heatmap_type.get():
+                    for item in value:
+                        self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
         else:
-            for item in self.pcf.heat_grids:
+            for item in self.pcf.heat_grids + self.pcf.wrong_direction_grids + self.pcf.wait_action_grids + self.pcf.bad_turn_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 

@@ -52,7 +52,13 @@ class PlanConfig2024:
 
         self.grids: List = []
         self.heatmap = []
+        self.wrong_direction_heatmap = []
+        self.wait_action_heatmap = []
+        self.bad_turn_heatmap = []
         self.heat_grids = []
+        self.wrong_direction_grids = []
+        self.wait_action_grids = []
+        self.bad_turn_grids = []
         self.dynamic_heat_grids = []
         self.agents_rgba = []
         self.max_heatmap_val = heatmap_max
@@ -546,6 +552,9 @@ class PlanConfig2024:
 
         print("Rendering suboptimality map", end="...")
         self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.wrong_direction_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.wait_action_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.bad_turn_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
         for agent, path in enumerate(self.exec_paths.values()):
             for t in range(len(path)-1):
                 cur_goal = self.get_current_goal(agent, t)
@@ -560,10 +569,12 @@ class PlanConfig2024:
                     if path[t] == path[t + 1]: # Agent has not moved
                         self.subop_map[path[t][0]][path[t][1]] += 1
                         self.agent_performance[agent] += 1
+                        self.wait_action_heatmap[path[t][0]][path[t][1]] += 1
                         self.supop_types["waited"] += 1
                     elif cur_distance < next_distance:  # Agent moved further away
                         self.subop_map[path[t][0]][path[t][1]] += 2
                         self.agent_performance[agent] += 2
+                        self.wrong_direction_heatmap[path[t][0]][path[t][1]] += 1
                         self.supop_types["wrong_direction"] += 1
                 else: # Agent has turned
                     unturned_future_square = state_transition(path[t], "F")
@@ -573,6 +584,7 @@ class PlanConfig2024:
                     if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
                         self.subop_map[path[t][0]][path[t][1]] += 1
                         self.agent_performance[agent] += 1
+                        self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
                         self.supop_types["bad_turn"] +=1
                     else:
                         opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
@@ -580,6 +592,7 @@ class PlanConfig2024:
                         if turned_future_distance > opposite_turned_future_distance:
                             self.subop_map[path[t][0]][path[t][1]] += 1
                             self.agent_performance[agent] += 1
+                            self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
                             self.supop_types["bad_turn"] += 1
 
         assert self.max_heatmap_val >= -1 and self.max_heatmap_val != 0, "heapmap_max must be -1 (relative) or positive"
@@ -591,18 +604,26 @@ class PlanConfig2024:
             self.max_heatmap_val = max_val
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
-        rgba = cmap(norm(self.subop_map))
-        for i in range(len(self.subop_map)):
-            for j in range(len(self.subop_map[i])):
-                if self.subop_map[i][j] == 0:
-                    continue
-                color = (int(rgba[i][j][0] * 255),
-                         int(rgba[i][j][1] * 255),
-                         int(rgba[i][j][2] * 255))
-                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
-                heat_square = self.render_obj(self.subop_map[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
-                                              0.0, "subop")
-                self.heat_grids.append(heat_square)
+        for map_type in [self.subop_map, self.wrong_direction_heatmap, self.wait_action_heatmap, self.bad_turn_heatmap]:
+            rgba = cmap(norm(map_type))
+            for i in range(len(map_type)):
+                for j in range(len(map_type[i])):
+                    if map_type[i][j] == 0:
+                        continue
+                    color = (int(rgba[i][j][0] * 255),
+                             int(rgba[i][j][1] * 255),
+                             int(rgba[i][j][2] * 255))
+                    hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                    heat_square = self.render_obj(map_type[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+                                                  0.0, "subop")
+                    if map_type == self.subop_map:
+                        self.heat_grids.append(heat_square)
+                    elif map_type == self.wrong_direction_heatmap:
+                        self.wrong_direction_grids.append(heat_square)
+                    elif map_type == self.wait_action_heatmap:
+                        self.wait_action_grids.append(heat_square)
+                    else:
+                        self.bad_turn_grids.append(heat_square)
         cmap = cm.get_cmap("turbo")
         max_val = max(self.agent_performance)
         norm = Normalize(vmin=0, vmax=max_val)
