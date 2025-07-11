@@ -179,7 +179,7 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_heatmap_button = tk.Checkbutton(self.frame, text="Show Heatmap",
+        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Heatmap ({self.pcf.heatmap_max_type}) {self.pcf.supop_types["wrong_direction"]}/{self.pcf.supop_types["waited"]}/{self.pcf.supop_types["bad_turn"]}",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_heat_map,
                                                   onvalue=True, offvalue=False,

@@ -30,7 +30,7 @@ class PlanConfig2024:
     """
 
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, pathalg):
+                 ppm, moves, delay, pathalg, heatmap_max):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
@@ -55,7 +55,8 @@ class PlanConfig2024:
         self.heat_grids = []
         self.dynamic_heat_grids = []
         self.agents_rgba = []
-        self.max_heatmap_val = -np.inf
+        self.max_heatmap_val = heatmap_max
+        self.heatmap_max_type = "relative" if heatmap_max == -1 else "absolute"
         self.start_loc = {}
         self.plan_paths = {}
         self.exec_paths = {}
@@ -68,7 +69,7 @@ class PlanConfig2024:
         self.shown_path_agents: Set[int] = set()
         self.shown_tasks_seq: Set[int] = set()
         self.conflict_agents: Set[int] = set()
-
+        self.supop_types = {"wrong_direction": 0,"waited":0, "bad_turn":0, }
         self.load_map(map_file)  # Load from the map file
         assert self.pathalg in ["Auto", "Landmark", "Manhattan", "True"], "Invalid path algorithm name"
         if self.pathalg == "Auto":
@@ -99,7 +100,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 6
+                self.moves = 3
 
         self.ppm: int = ppm
         if self.ppm is None:
@@ -559,9 +560,11 @@ class PlanConfig2024:
                     if path[t] == path[t + 1]: # Agent has not moved
                         self.subop_map[path[t][0]][path[t][1]] += 1
                         self.agent_performance[agent] += 1
+                        self.supop_types["waited"] += 1
                     elif cur_distance < next_distance:  # Agent moved further away
                         self.subop_map[path[t][0]][path[t][1]] += 2
                         self.agent_performance[agent] += 2
+                        self.supop_types["wrong_direction"] += 1
                 else: # Agent has turned
                     unturned_future_square = state_transition(path[t], "F")
                     unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
@@ -570,20 +573,24 @@ class PlanConfig2024:
                     if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
                         self.subop_map[path[t][0]][path[t][1]] += 1
                         self.agent_performance[agent] += 1
+                        self.supop_types["bad_turn"] +=1
                     else:
                         opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
                         opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
                         if turned_future_distance > opposite_turned_future_distance:
                             self.subop_map[path[t][0]][path[t][1]] += 1
                             self.agent_performance[agent] += 1
+                            self.supop_types["bad_turn"] += 1
 
-        max_val = -np.inf
-        for row in self.subop_map:
-            row_max = max(row)
-            max_val = max(max_val, row_max)
-        self.max_heatmap_val = max_val
+        assert self.max_heatmap_val >= -1 and self.max_heatmap_val != 0, "heapmap_max must be -1 (relative) or positive"
+        if self.max_heatmap_val == -1:
+            max_val = -np.inf
+            for row in self.subop_map:
+                row_max = max(row)
+                max_val = max(max_val, row_max)
+            self.max_heatmap_val = max_val
         cmap = cm.get_cmap("Reds")
-        norm = Normalize(vmin=0, vmax=max_val)
+        norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
         rgba = cmap(norm(self.subop_map))
         for i in range(len(self.subop_map)):
             for j in range(len(self.subop_map[i])):
