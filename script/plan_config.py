@@ -631,6 +631,30 @@ class PlanConfig2024:
 
         print("Done!")
 
+    def compute_heatmap_stats(self, which: str = "static"):
+        data = np.array(self.subop_map)
+        nz = data[data > 0]
+        stats = {
+            "Non-zero cells": int(nz.size),
+            "Total penalty": int(nz.sum()),
+            "Mean": float(nz.mean()) if nz.size else 0.0,
+            "Std dev": float(nz.std()) if nz.size else 0.0,
+            "Min": int(nz.min()) if nz.size else 0,
+            "Max": int(nz.max()) if nz.size else 0,
+        }
+        stats.update({
+            "Wrong direction": self.supop_types["wrong_direction"],
+            "Wait actions": self.supop_types["waited"],
+            "Sub-optimal turns": self.supop_types["bad_turn"],
+        })
+
+        #per-agent score
+        if hasattr(self, "agent_performance") and self.agent_performance:
+            stats["Mean/agent"] = float(np.mean(self.agent_performance))
+            stats["Std/agent"] = float(np.std(self.agent_performance))
+
+        return stats
+
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
