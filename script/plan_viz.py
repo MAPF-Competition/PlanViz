@@ -131,9 +131,14 @@ class PlanViz2024:
         self.reset_dynamic_button = tk.Button(self.frame, text="Reset Heatmap",
                                         font=("Arial", TEXT_SIZE),
                                         command=self.reset_heat_map)
-        self.reset_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="nsew")
+        self.reset_dynamic_button.grid(row=self.row_idx, column=0, sticky="nsew")
+        self.stats_button = tk.Button(
+            self.frame, text="Heatmap Stats",
+            font=("Arial", TEXT_SIZE),
+            command=self.open_heatmap_stats
+        )
+        self.stats_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.row_idx += 1
-
         # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
                                           font=("Arial", TEXT_SIZE),
@@ -179,21 +184,21 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Heatmap ({self.pcf.heatmap_max_type}) {self.pcf.supop_types["wrong_direction"]}/{self.pcf.supop_types["waited"]}/{self.pcf.supop_types["bad_turn"]}",
+        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Environmental Heatmap ({self.pcf.heatmap_max_type})",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_heat_map,
                                                   onvalue=True, offvalue=False,
                                                   command=self.show_heat_maps)
         self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic",
+        self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic Heatmap",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_dynamic_map,
                                                   onvalue=True, offvalue=False,
                                                   command=self.show_dynamic_maps)
         self.show_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_agent_color_button = tk.Checkbutton(self.frame, text="Show Agent Colors",
+        self.show_agent_color_button = tk.Checkbutton(self.frame, text="Show Agent Heatmap",
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_agent_colors,
                                                   onvalue=True, offvalue=False,
@@ -819,6 +824,19 @@ class PlanViz2024:
         else:
             for item in self.pcf.dynamic_heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
+    def open_heatmap_stats(self):
+        stats = self.pcf.compute_heatmap_stats()
+        win = tk.Toplevel(self.frame)
+        win.title("Heat-map statistics")
+        win.resizable(False, False)
+
+        mono = font.Font(family="Courier New", size=max(TEXT_SIZE - 2, 8))
+
+        for i, (k, v) in enumerate(stats.items()):
+            tk.Label(win, text=f"{k:<18}", font=mono, anchor="w").grid(row=i, column=0, sticky="w", padx=6)
+            tk.Label(win, text=f"{v:>10.2f}" if isinstance(v, float) else f"{v:>10}",
+                     font=mono, anchor="e").grid(row=i, column=1, sticky="e", padx=6)
 
     def show_agent_colours(self) -> None:
         if self.is_agent_colors.get() is True:
