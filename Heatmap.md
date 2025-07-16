@@ -56,7 +56,7 @@ A rotation is penalised (+1) if moving straight would already reduced the distan
   1. **Wrong Direction** – a step increases the heuristic distance to the goal.
   2. **Wait Actions** – a `Wait` occurs when a forward move would reduce distance.
   3. **Sub-optimal Turns** – an unnecessary turn or a turn that does not re-orient the agent toward progress.
-
+* Note that this type tracking only applies to the static heatmap.
 ###  Dynamic Map 
 
 * Updated every timestep by `PlanConfig2024.update_dynamic_subop_map()`.
