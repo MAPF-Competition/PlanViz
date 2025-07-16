@@ -631,7 +631,7 @@ class PlanConfig2024:
 
         print("Done!")
 
-    def compute_heatmap_stats(self, which: str = "static"):
+    def compute_heatmap_stats(self):
         data = np.array(self.subop_map)
         nz = data[data > 0]
         stats = {
