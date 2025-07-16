@@ -19,7 +19,6 @@ from plan_config import PlanConfig2024
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
-
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz2    =====")
 
@@ -1172,6 +1171,7 @@ class PlanViz2024:
                 self.show_ag_plan(ag_idx, first_errand_t, moving=True)
 
         self.update_event_list()
+        self.show_agent_colours()
 
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
@@ -1287,9 +1287,10 @@ class PlanViz2024:
                                                              state=tk.DISABLED,
                                                              outline="")
             # Check colliding agents
+
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
-
+        self.show_agent_colours()
         self.show_agent_index()
         self.update_event_list()
         self.pcf.canvas.update()

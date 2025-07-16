@@ -1,6 +1,7 @@
 # Sub-optimality Heat-map 
 
 ---
+![heatmap_1](images/heatmap_example_1.PNG)
 
 ## 1  Enabling the Heat-map
 

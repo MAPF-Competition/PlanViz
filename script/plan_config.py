@@ -106,7 +106,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
+                self.moves = 6
 
         self.ppm: int = ppm
         if self.ppm is None:
@@ -120,7 +120,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.03
+                self.delay = 0.05
         self.tile_size: int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -305,11 +305,11 @@ class PlanConfig2024:
         """
         Returns the location (x,y) of the agent's current goal at timestep.
         """
-        # 1. Check if agent has any assigned tasks
+        # Check if agent has any assigned tasks
         if agent_id not in self.agent_assigned_task:
             return None
 
-        # 2. Find most recent task assignment at or before this timestep
+        # Find most recent task assignment at or before this timestep
         assigned_tasks = self.agent_assigned_task[agent_id]
         current_task_id = None
         for assign_time, task_id in reversed(assigned_tasks):
@@ -320,12 +320,12 @@ class PlanConfig2024:
         if current_task_id is None:
             return None  # No task yet
 
-        # 3. Look up the sequential task
+        # Look up the sequential task
         seq_task = self.seq_tasks.get(current_task_id)
         if not seq_task:
             return None
 
-        # 4. Loop through subgoals and find the first one not finished yet
+        #Loop through subgoals and find the first one not finished yet
         for subtask in seq_task.tasks:
             finish_t = subtask.events.get("finished", {}).get("timestep", math.inf)
             if finish_t > timestep:
@@ -488,12 +488,6 @@ class PlanConfig2024:
                         self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
 
         self.canvas.delete("dynamic")
-        max_val = -np.inf
-        for row in self.dynamic_heatmap:
-            row_max = max(row)
-            max_val = max(max_val, row_max)
-        if max_val == -np.inf:
-            return None
 
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
@@ -594,7 +588,7 @@ class PlanConfig2024:
                             self.agent_performance[agent] += 1
                             self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
                             self.supop_types["bad_turn"] += 1
-
+        # Rendering heatmap
         assert self.max_heatmap_val >= -1 and self.max_heatmap_val != 0, "heapmap_max must be -1 (relative) or positive"
         if self.max_heatmap_val == -1:
             max_val = -np.inf
@@ -827,7 +821,6 @@ class PlanConfig2024:
 
         if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
-
 
         for ag_id in range(self.team_size):  # Render the actual agents
             agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
