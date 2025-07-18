@@ -21,15 +21,12 @@ from util import (
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
     BaseObj, Agent, Task, SequentialTask, get_rotation)
 
-
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
     """
-
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
         print("===== Initialize PlanConfig =====")
-
         map_name = get_map_name(map_file)
         self.team_size: int = team_size
         self.start_tstep: int = start_tstep
