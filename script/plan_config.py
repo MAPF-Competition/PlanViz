@@ -27,39 +27,40 @@ class PlanConfig2023:
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
                  ppm, moves, delay, heat_maps, hwy_file, search_tree_files, heu_file):
         print("===== Initialize PlanConfig =====")
+
         map_name = get_map_name(map_file)
-        self.team_size: int = team_size
-        self.start_tstep: int = start_tstep
-        self.end_tstep: int = end_tstep
+        self.team_size:int = team_size
+        self.start_tstep:int = start_tstep
+        self.end_tstep:int = end_tstep
 
-        self.agent_model: str = ""
+        self.agent_model:str = ""
 
-        self.width: int = -1
-        self.height: int = -1
-        self.env_map: List[List[int]] = []
-        self.heat_map: List[List[int]] = []
-        self.heuristic_map: List[List] = []
-        self.search_trees: Dict[str, List[List[int]]] = {}
-        self.highway: List[Dict[str, Tuple[int]]] = []
+        self.width:int = -1
+        self.height:int = -1
+        self.env_map:List[List[int]] = []
+        self.heat_map:List[List[int]] = []
+        self.heuristic_map:List[List] = []
+        self.search_trees:Dict[str, List[List[int]]] = {}
+        self.highway:List[Dict[str, Tuple[int]]] = []
         self.tasks = {}
         self.events = {"assigned": {}, "finished": {}}
         self.event_tracker = {}
 
-        self.grids: List = []
-        self.heat_grids: List = []
-        self.heuristic_grids: List = []
-        self.search_tree_grids: Dict[str, List] = {}
-        self.start_loc = {}
+        self.grids:List = []
+        self.heat_grids:List = []
+        self.heuristic_grids:List = []
+        self.search_tree_grids:Dict[str, List] = {}
+        self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
-        self.conflicts = {}
-        self.agents: Dict[int, Agent] = {}
-        self.ag_to_task: Dict[int, List[int]] = {}
-        self.makespan: int = -1
-        self.cur_tstep: int = self.start_tstep
-        self.shown_path_agents: Set[int] = set()
-        self.conflict_agents: Set[int] = set()
-        self.cur_tree: str = "None"
+        self.conflicts  = {}
+        self.agents:Dict[int, Agent] = {}
+        self.ag_to_task:Dict[int, List[int]] = {}
+        self.makespan:int = -1
+        self.cur_tstep:int = self.start_tstep
+        self.shown_path_agents:Set[int] = set()
+        self.conflict_agents:Set[int] = set()
+        self.cur_tree:str = "None"
 
         self.load_map(map_file)  # Load from the map file
 
@@ -77,29 +78,30 @@ class PlanConfig2023:
             else:
                 self.moves = 3
 
-        self.ppm: int = ppm
+        self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
                 self.ppm = pixel_per_grid // self.moves
 
-        self.delay: int = delay
+        self.delay:int = delay
         if self.delay is None:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
                 self.delay = 0.06
-        self.tile_size: int = self.ppm * self.moves
+        self.tile_size:int = self.ppm * self.moves
+
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
-                                width=(self.width + 1) * self.tile_size,
-                                height=(self.height + 1) * self.tile_size,
+                                width=(self.width+1) * self.tile_size,
+                                height=(self.height+1) * self.tile_size,
                                 bg="white")
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self.canvas.grid(row=0, column=0,sticky="nsew")
+        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
@@ -114,13 +116,14 @@ class PlanConfig2023:
         self.render_search_trees()
         self.render_agents()
 
-    def load_map(self, map_file: str) -> None:
-        print("Loading map from " + map_file, end='... ')
+
+    def load_map(self, map_file:str) -> None:
+        print("Loading map from " + map_file, end = '... ')
 
         with open(file=map_file, mode="r", encoding="UTF-8") as fin:
             fin.readline()  # ignore type
             self.height = int(fin.readline().strip().split(' ')[1])
-            self.width = int(fin.readline().strip().split(' ')[1])
+            self.width  = int(fin.readline().strip().split(' ')[1])
             fin.readline()  # ignore 'map' line
             for line in fin.readlines():
                 out_line: List[bool] = []
@@ -137,7 +140,8 @@ class PlanConfig2023:
         assert len(self.env_map) == self.height
         print("Done!")
 
-    def load_paths(self, data: Dict):
+
+    def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
 
         state_trans = state_transition
@@ -155,8 +159,8 @@ class PlanConfig2023:
                 for motion in tmp_str:
                     next_ = state_trans(self.exec_paths[ag_id][-1], motion)
                     self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id]) - 1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id]) - 1, 0)
+                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
+                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
             else:
                 print("No actual paths.", end=" ")
 
@@ -171,12 +175,13 @@ class PlanConfig2023:
                 print("No planner paths.", end=" ")
 
         for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep + 1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep + 1]
+            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
+            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
 
         print("Done!")
 
-    def load_errors(self, data: Dict):
+
+    def load_errors(self, data:Dict):
         print("Loading errors", end="... ")
         if "errors" not in data:
             print("No errors.")
@@ -192,7 +197,8 @@ class PlanConfig2023:
                 self.conflicts[tstep].append(err)
         print("Done!")
 
-    def load_events(self, data: Dict):
+
+    def load_events(self, data:Dict):
         print("Loading events", end="... ")
 
         if "events" not in data:
@@ -205,8 +211,8 @@ class PlanConfig2023:
             for eve in data["events"][ag_]:
                 if eve[2] != "assigned":
                     continue
-                tid: int = eve[0]
-                tstep: int = eve[1]
+                tid:int   = eve[0]
+                tstep:int = eve[1]
                 if ag_ not in ag_to_timedtasks:
                     ag_to_timedtasks[ag_] = []
                 ag_to_timedtasks[ag_].append((tid, tstep))
@@ -215,12 +221,12 @@ class PlanConfig2023:
             timedtasks.sort(key=lambda x: x[1])
             st_id = 0
             ed_id = len(timedtasks)
-            for ii in range(len(timedtasks) - 1):
-                if self.start_tstep < timedtasks[ii + 1][-1]:
+            for ii in range(len(timedtasks)-1):
+                if self.start_tstep < timedtasks[ii+1][-1]:
                     st_id = ii
                     break
-            for ii in range(len(timedtasks) - 1):
-                if self.end_tstep < timedtasks[ii + 1][-1]:
+            for ii in range(len(timedtasks)-1):
+                if self.end_tstep < timedtasks[ii+1][-1]:
                     ed_id = ii
                     break
             timedtasks = timedtasks[st_id:ed_id]
@@ -235,8 +241,8 @@ class PlanConfig2023:
             for eve in data["events"][ag_]:
                 if eve[2] != "assigned":
                     continue
-                tid: int = eve[0]
-                tstep: int = eve[1]
+                tid:int   = eve[0]
+                tstep:int = eve[1]
                 if tid in shown_tasks:
                     if tstep not in self.events["assigned"]:
                         self.events["assigned"][tstep] = {}  # task_idx -> agent
@@ -253,8 +259,8 @@ class PlanConfig2023:
             for eve in data["events"][ag_]:
                 if eve[2] != "finished":
                     continue
-                tid: int = eve[0]
-                tstep: int = eve[1]
+                tid:int   = eve[0]
+                tstep:int = eve[1]
                 if tid in shown_tasks:
                     if tstep not in self.events["finished"]:
                         self.events["finished"][tstep] = {}  # task_idx -> agent
@@ -264,7 +270,8 @@ class PlanConfig2023:
         self.event_tracker["fid"] = 0
         print("Done!")
 
-    def load_tasks(self, data: Dict):
+
+    def load_tasks(self, data:Dict):
         print("Loading tasks", end="... ")
 
         if "tasks" not in data:
@@ -295,6 +302,7 @@ class PlanConfig2023:
 
         print("Done!")
 
+
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
@@ -317,7 +325,8 @@ class PlanConfig2023:
         self.load_events(data)
         self.load_tasks(data)
 
-    def load_heat_maps(self, plan_files: List[str]):
+
+    def load_heat_maps(self, plan_files:List[str]):
         if not plan_files:  # plan_files is empty
             return
 
@@ -357,7 +366,7 @@ class PlanConfig2023:
                         exec_path.append(next_)
 
                     path_cost = len(exec_path) - 1
-                    while tmp_str[path_cost - 1] == "W":
+                    while tmp_str[path_cost-1] == "W":
                         path_cost -= 1
                         if path_cost == 0:
                             break
@@ -368,7 +377,8 @@ class PlanConfig2023:
                     p = exec_path[tt]
                     self.heat_map[p[0]][p[1]] += 1
 
-    def load_heuristic_map(self, heu_file: str, ag: int):
+
+    def load_heuristic_map(self, heu_file:str, ag:int):
         if heu_file == "":
             return
 
@@ -385,11 +395,12 @@ class PlanConfig2023:
                 col = loc % self.width
                 self.heuristic_map[row][col] = float(line[i])
 
-    def load_highway(self, hwy_file: str):
+
+    def load_highway(self, hwy_file:str):
         if hwy_file == "":
             return
 
-        edge_num: int = 0  # Number of edges in the highway
+        edge_num:int = 0  # Number of edges in the highway
         with open(file=hwy_file, mode="r", encoding="utf-8") as fin:
             edge_num = int(fin.readline().strip())
             for line in fin.readlines():
@@ -401,10 +412,11 @@ class PlanConfig2023:
                 to_row = _to_ // self.width
                 to_col = _to_ % self.width
                 assert (from_row == to_row) or (from_col == to_col)
-                self.highway.append({"from": (from_row, from_col), "to": (to_row, to_col)})
+                self.highway.append({"from":(from_row, from_col), "to":(to_row, to_col)})
             assert len(self.highway) == edge_num
 
-    def load_search_trees(self, search_tree_files: List[str]):
+
+    def load_search_trees(self, search_tree_files:List[str]):
         if not search_tree_files:
             return
 
@@ -422,9 +434,10 @@ class PlanConfig2023:
                 self.search_trees[file_name] = search_map
         print("Done!")
 
-    def render_obj(self, _idx_: int, _loc_: Tuple[int], _shape_: str = "rectangle",
-                   _color_: str = "blue", _state_=tk.NORMAL,
-                   offset: float = 0.05, _tag_: str = "obj", _outline_: str = ""):
+
+    def render_obj(self, _idx_:int, _loc_:Tuple[int], _shape_:str="rectangle",
+                   _color_:str="blue", _state_=tk.NORMAL,
+                   offset:float=0.05, _tag_:str="obj", _outline_:str=""):
         """Mark certain positions on the visualizer
 
         Args:
@@ -436,19 +449,19 @@ class PlanConfig2023:
         """
         _tmp_canvas_ = None
         if _shape_ == "rectangle":
-            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[1] + offset) * self.tile_size,
-                                                        (_loc_[0] + offset) * self.tile_size,
-                                                        (_loc_[1] + 1 - offset) * self.tile_size,
-                                                        (_loc_[0] + 1 - offset) * self.tile_size,
+            _tmp_canvas_ = self.canvas.create_rectangle((_loc_[1]+offset) * self.tile_size,
+                                                        (_loc_[0]+offset) * self.tile_size,
+                                                        (_loc_[1]+1-offset) * self.tile_size,
+                                                        (_loc_[0]+1-offset) * self.tile_size,
                                                         fill=_color_,
                                                         tag=_tag_,
                                                         state=_state_,
                                                         outline=_outline_)
         elif _shape_ == "oval":
-            _tmp_canvas_ = self.canvas.create_oval((_loc_[1] + offset) * self.tile_size,
-                                                   (_loc_[0] + offset) * self.tile_size,
-                                                   (_loc_[1] + 1 - offset) * self.tile_size,
-                                                   (_loc_[0] + 1 - offset) * self.tile_size,
+            _tmp_canvas_ = self.canvas.create_oval((_loc_[1]+offset) * self.tile_size,
+                                                   (_loc_[0]+offset) * self.tile_size,
+                                                   (_loc_[1]+1-offset) * self.tile_size,
+                                                   (_loc_[0]+1-offset) * self.tile_size,
                                                    fill=_color_,
                                                    tag=_tag_,
                                                    state=_state_,
@@ -461,15 +474,16 @@ class PlanConfig2023:
         # if _idx_ > -1:
         #     shown_text = str(_idx_)
         shown_text = str(_idx_)
-        _tmp_text_ = self.canvas.create_text((_loc_[1] + 0.5) * self.tile_size,
-                                             (_loc_[0] + 0.5) * self.tile_size,
-                                             text=shown_text,
-                                             fill="black",
-                                             tag=("text", _tag_),
-                                             state=_state_,
-                                             font=("Arial", int(self.tile_size // 2)))
+        _tmp_text_ = self.canvas.create_text((_loc_[1]+0.5)*self.tile_size,
+                                            (_loc_[0]+0.5)*self.tile_size,
+                                            text=shown_text,
+                                            fill="black",
+                                            tag=("text", _tag_),
+                                            state=_state_,
+                                            font=("Arial", int(self.tile_size // 2)))
 
         return BaseObj(_tmp_canvas_, _tmp_text_, _loc_, _color_)
+
 
     def render_env(self) -> None:
         print("Rendering the environment ... ", end="")
@@ -478,14 +492,14 @@ class PlanConfig2023:
             _line_ = self.canvas.create_line(0, rid * self.tile_size,
                                              self.width * self.tile_size, rid * self.tile_size,
                                              tags="grid",
-                                             state=tk.NORMAL,
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
             _line_ = self.canvas.create_line(cid * self.tile_size, 0,
                                              cid * self.tile_size, self.height * self.tile_size,
                                              tags="grid",
-                                             state=tk.NORMAL,
+                                             state= tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
 
@@ -495,29 +509,29 @@ class PlanConfig2023:
                 if cur_ele == 0:  # obstacles
                     self.canvas.create_rectangle(cid * self.tile_size,
                                                  rid * self.tile_size,
-                                                 (cid + 1) * self.tile_size,
-                                                 (rid + 1) * self.tile_size,
+                                                 (cid+1) * self.tile_size,
+                                                 (rid+1) * self.tile_size,
                                                  state=tk.DISABLED,
                                                  outline="",
                                                  fill="black")
 
         # Render coordinates
         for cid in range(self.width):
-            self.canvas.create_text((cid + 0.5) * self.tile_size,
-                                    (self.height + 0.5) * self.tile_size,
+            self.canvas.create_text((cid+0.5)*self.tile_size,
+                                    (self.height+0.5)*self.tile_size,
                                     text=str(cid),
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", int(self.tile_size // 2)))
+                                    font=("Arial", int(self.tile_size//2)))
         for rid in range(self.height):
-            self.canvas.create_text((self.width + 0.5) * self.tile_size,
-                                    (rid + 0.5) * self.tile_size,
+            self.canvas.create_text((self.width+0.5)*self.tile_size,
+                                    (rid+0.5)*self.tile_size,
                                     text=str(rid),
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", int(self.tile_size // 2)))
+                                    font=("Arial", int(self.tile_size//2)))
         self.canvas.create_line(self.width * self.tile_size, 0,
                                 self.width * self.tile_size, self.height * self.tile_size,
                                 state=tk.DISABLED,
@@ -527,6 +541,7 @@ class PlanConfig2023:
                                 state=tk.DISABLED,
                                 fill="black")
         print("Done!")
+
 
     def render_heat_map(self):
         if not self.heat_map:
@@ -556,34 +571,36 @@ class PlanConfig2023:
                              int(rgba[rid][cid][1] * 255),
                              int(rgba[rid][cid][2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
-                _heat_obj = self.render_obj(cur_ele, (rid, cid), "rectangle", _code, tk.HIDDEN,
+                _heat_obj = self.render_obj(cur_ele, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                             0.0, "heatmap", "grey")
                 self.heat_grids.append(_heat_obj)
         print("Done!")
+
 
     def render_highway(self):
         if not self.highway:
             return
 
         print("Rendering the highway... ", end="")
-        HWY_DIRECTION = {(1, 0): "↓",  # Down
-                         (0, 1): "→",  # Right
-                         (-1, 0): "↑",  # Up
-                         (0, -1): "←"}  # Left
+        HWY_DIRECTION = {(1,0): "↓",  # Down
+                         (0,1): "→",  # Right
+                         (-1,0): "↑", # Up
+                         (0,-1): "←"} # Left
         for edge in self.highway:
-            hdir = (edge["to"][0] - edge["from"][0],
-                    edge["to"][1] - edge["from"][1])
+            hdir = (edge["to"][0]-edge["from"][0],
+                    edge["to"][1]-edge["from"][1])
             hdir = HWY_DIRECTION[hdir]
-            loc = ((edge["to"][0] + edge["from"][0]) / 2.,
-                   (edge["to"][1] + edge["from"][1]) / 2.)
-            edge["obj"] = self.canvas.create_text((loc[1] + 0.5) * self.tile_size,
-                                                  (loc[0] + 0.5) * self.tile_size,
+            loc = ((edge["to"][0]+edge["from"][0])/2.,
+                   (edge["to"][1]+edge["from"][1])/2.)
+            edge["obj"] = self.canvas.create_text((loc[1]+0.5) * self.tile_size,
+                                                  (loc[0]+0.5) * self.tile_size,
                                                   text=hdir,
                                                   fill="red",
                                                   tag="hwy",
                                                   state=tk.HIDDEN,
                                                   font=("Arial", int(self.tile_size)))
         print("Done!")
+
 
     def render_heuristic_map(self):
         if not self.heuristic_map:
@@ -617,10 +634,11 @@ class PlanConfig2023:
                              int(cur_rgba[1] * 255),
                              int(cur_rgba[2] * 255))
                 _code = '#%02x%02x%02x' % cur_color
-                _obj = self.render_obj(int(np.around(cur_ele)), (rid, cid), "rectangle", _code,
+                _obj = self.render_obj(int(np.around(cur_ele)), (rid,cid), "rectangle", _code,
                                        tk.HIDDEN, 0.0, "heuristic", "grey")
                 self.heuristic_grids.append(_obj)
         print("Done!")
+
 
     def render_search_trees(self):
         if not self.search_trees:
@@ -650,10 +668,11 @@ class PlanConfig2023:
                                      int(rgba[rid][cid][1] * 255),
                                      int(rgba[rid][cid][2] * 255))
                         _code = '#%02x%02x%02x' % cur_color
-                        _obj = self.render_obj(-1, (rid, cid), "rectangle", _code, tk.HIDDEN,
+                        _obj = self.render_obj(-1, (rid,cid), "rectangle", _code, tk.HIDDEN,
                                                0.0, "search_tree")  # 0.05
                         self.search_tree_grids[ag_id].append(_obj)
         print("Done!")
+
 
     def render_agents(self):
         print("Rendering the agents... ", end="")
@@ -669,8 +688,8 @@ class PlanConfig2023:
             for _pid_ in range(len(self.exec_paths[ag_id])):
                 p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
                 p_obj = None
-                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_ - 1][0],
-                                           self.exec_paths[ag_id][_pid_ - 1][1]):
+                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
+                                             self.exec_paths[ag_id][_pid_-1][1]):
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
@@ -691,13 +710,13 @@ class PlanConfig2023:
             if self.agent_model == "MAPF_T":
                 dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
                 dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
-                                                  dir_loc[1] * self.tile_size,
-                                                  dir_loc[2] * self.tile_size,
-                                                  dir_loc[3] * self.tile_size,
-                                                  fill="navy",
-                                                  tag="dir",
-                                                  state=tk.DISABLED,
-                                                  outline="")
+                                                dir_loc[1] * self.tile_size,
+                                                dir_loc[2] * self.tile_size,
+                                                dir_loc[3] * self.tile_size,
+                                                fill="navy",
+                                                tag="dir",
+                                                state=tk.DISABLED,
+                                                outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
                           path_objs[ag_id], self.exec_paths[ag_id], dir_obj)
