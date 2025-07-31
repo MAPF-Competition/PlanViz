@@ -1134,13 +1134,6 @@ class PlanViz2024:
         self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
-        self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
-                                         font=("Arial",TEXT_SIZE),
-                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
-                                         command=self.show_task_index)
-        self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",TEXT_SIZE),
                                             variable=self.show_static, onvalue=True, offvalue=False,
@@ -1772,7 +1765,8 @@ class PlanViz2024:
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
         
-
+        if len(self.pcf.shown_path_agents) == 0:
+            self.clear_agent_selection()
 
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
@@ -1908,28 +1902,6 @@ class PlanViz2024:
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
 
 
-    def show_task_index(self) -> None:
-        _state_ = tk.DISABLED if self.show_task_idx.get() is True else tk.HIDDEN
-        
-        for (_, seq_task) in self.pcf.seq_tasks.items():
-            for i, task in enumerate(seq_task.tasks):
-                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
-                task_t = task.events["finished"]["timestep"]
-                if self.task_shown.get() == "Next Errand" and task_t >= self.pcf.cur_tstep:
-                    if task.state in ["assigned", "newlyassigned"]:
-                        self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
-                        break
-                elif self.task_shown.get() == "All Tasks":
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
-                elif self.task_shown.get() == "none":
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
-                elif self.task_shown.get() == "Assigned Tasks" and task_t >= self.pcf.cur_tstep:
-                    if task.state in ["assigned", "newlyassigned"]:
-                        self.pcf.canvas.itemconfig(task.task_obj.text, state=_state_)
-                # elif task.state == self.task_shown.get():
-                #     self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
-
-
     def show_tasks(self) -> None:
         for (_, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
@@ -1965,8 +1937,6 @@ class PlanViz2024:
                         break
         for obj in errand_list:
             self.pcf.canvas.tag_raise(obj, 'all')
-        if self.show_task_idx.get():
-            self.show_task_index()
 
 
     def show_tasks_by_click(self, _) -> None:
@@ -2346,7 +2316,6 @@ class PlanViz2024:
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
         self.show_tasks()
-        self.show_task_index()
         self.show_agent_index()
         
         
