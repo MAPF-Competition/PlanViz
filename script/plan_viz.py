@@ -1335,7 +1335,8 @@ class PlanViz2024:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
-                    if pop and self.right_click_agent < 0 and (not (task_id in self.right_click_all_tasks_idx)): continue
+                    if pop and self.right_click_agent < 0 and (not (task_id in self.right_click_all_tasks_idx)): 
+                        continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     if pop and self.right_click_agent > -1 and ag_id != self.right_click_agent: continue
@@ -1604,50 +1605,6 @@ class PlanViz2024:
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t)
 
-    def right_click_show_task_seq(self, task_idx):
-        def get_center_coords(canvas, item_id):
-            # Get the coordinates of the bounding box of the item
-            coords = canvas.coords(item_id)
-            # Calculate the center
-            x_center = (coords[0] + coords[2]) / 2
-            y_center = (coords[1] + coords[3]) / 2
-            return x_center, y_center
-        
-        arrows = []
-        self.pcf.shown_tasks_seq.add(task_idx)
-        last_obj = None
-        for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
-            task_t = tsk.events["finished"]["timestep"]
-            if self.pcf.cur_tstep >= task_t:
-                continue
-            
-            self.change_task_color(task_idx,idx, "pink")
-            if last_obj == None:
-                last_obj = tsk.task_obj.obj
-                self.change_task_color(task_idx,idx, "orange")
-                self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
-                continue
-
-            x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
-            last_obj = tsk.task_obj.obj
-            x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
-            # _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=2, fill="#4eb1a6")
-            # arrows.append(_arrow)
-            self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
-
-        # Hide tasks that are not in ag_id
-        for task_id, seq_task in self.pcf.seq_tasks.items():
-            if task_id in self.pcf.shown_tasks_seq:
-                for seq_id, tsk in enumerate(seq_task.tasks):
-                    task_t = tsk.events["finished"]["timestep"]
-                    if self.pcf.cur_tstep >= task_t:
-                        continue
-                    self.show_single_task(task_id, seq_id, ignore=1)
-            else:
-                for seq_id in range(len(seq_task.tasks)):
-                    self.hide_single_task(task_id, seq_id)
-        return arrows
-
             
 
     def create_pop_window(self, grid_loc):
@@ -1689,6 +1646,15 @@ class PlanViz2024:
         grid_loc = [grid_column, grid_row]
         items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
                                                  x_adjusted+0.1, y_adjusted+0.1)
+        
+        ag_idx = self.get_ag_idx(event)
+        self.right_click_agent = ag_idx
+        if ag_idx != -1:
+            self.right_click_status = "right"
+            self.create_pop_window(grid_loc)
+            self.update_event_list(self.pop_event_listbox, 1)
+            return
+        
         self.right_click_all_tasks_idx = []
         for item in items:
             all_tasks_idx = []
@@ -1700,12 +1666,6 @@ class PlanViz2024:
                 self.right_click_all_tasks_idx += all_tasks_idx
                 self.update_event_list(self.pop_event_listbox, 1)
                 
-        ag_idx = self.get_ag_idx(event)
-        self.right_click_agent = ag_idx
-        if ag_idx != -1:
-            self.right_click_status = "right"
-            self.create_pop_window(grid_loc)
-            self.update_event_list(self.pop_event_listbox, 1)
             
         
         
@@ -1714,6 +1674,9 @@ class PlanViz2024:
     def get_ag_idx(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
+        grid_column = int(x_adjusted // self.pcf.tile_size)
+        grid_row = int(y_adjusted // self.pcf.tile_size)
+        grid_loc = [grid_column, grid_row]
         items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
                                                  x_adjusted+0.1, y_adjusted+0.1)
         ag_idx = -1
@@ -1722,6 +1685,19 @@ class PlanViz2024:
             if len(tags) > 1 and tags[1] == "current" and tags[0].isnumeric():
                 ag_idx = int(tags[0])  # get the id of the agent
                 return ag_idx
+        
+        self.right_click_all_tasks_idx = []
+        self.right_click_agent = -1
+        for item in items:
+            all_tasks_idx = []
+            if item in self.pcf.grid2task.keys():
+                all_tasks_idx = self.pcf.grid2task[item]
+            if len(all_tasks_idx) > 0:
+                self.create_pop_window(grid_loc)
+                self.right_click_status = "right"
+                self.right_click_all_tasks_idx += all_tasks_idx
+                self.update_event_list(self.pop_event_listbox, 1)
+                
         return ag_idx
 
 
