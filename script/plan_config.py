@@ -13,12 +13,13 @@ import json
 import math
 import numpy as np
 import pandas as pd
+import scipy.sparse
 from matplotlib.colors import Normalize
 from matplotlib import cm
 from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
-    BaseObj, Agent, Task, SequentialTask)
+    BaseObj, Agent, Task, SequentialTask, get_rotation)
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -75,8 +76,8 @@ class PlanConfig2023:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
-        
+                self.moves = 5
+
         self.ppm:int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
@@ -89,7 +90,7 @@ class PlanConfig2023:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.06
+                self.delay = 0.000001
         self.tile_size:int = self.ppm * self.moves
 
 
@@ -723,87 +724,114 @@ class PlanConfig2023:
         print("Done!")
 
 
-
 class PlanConfig2024:
     """ Plan configuration for loading and rendering functions
 
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
+
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay):
+                 ppm, moves, delay, pathalg, heatmap_max):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
-        self.team_size:int = team_size
-        self.start_tstep:int = start_tstep
-        self.end_tstep:int = end_tstep
+        self.team_size: int = team_size
+        self.start_tstep: int = start_tstep
+        self.end_tstep: int = end_tstep
+        self.pathalg = pathalg
+        self.agent_model: str = ""
 
-        self.agent_model:str = ""
-
-        self.width:int = -1
-        self.height:int = -1
-        self.env_map:List[List[int]] = []
+        self.width: int = -1
+        self.height: int = -1
+        self.env_map: List[List[int]] = []
 
         self.max_seq_num = -1
-        self.seq_tasks:Dict[int, SequentialTask] = {}
-        self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
+        self.seq_tasks: Dict[int, SequentialTask] = {}
+        self.events: Dict[str, Dict[int, Dict[int, int]]] = {"assigned": {}, "finished": {}}
         self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
-        self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
+        self.actual_schedule: Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
 
-        self.grids:List = []
-        self.start_loc  = {}
+        self.grids: List = []
+        self.heatmap = []
+        self.wrong_direction_heatmap = []
+        self.wait_action_heatmap = []
+        self.bad_turn_heatmap = []
+        self.heat_grids = []
+        self.wrong_direction_grids = []
+        self.wait_action_grids = []
+        self.bad_turn_grids = []
+        self.dynamic_heat_grids = []
+        self.agents_rgba = []
+        self.max_heatmap_val = heatmap_max
+        self.heatmap_max_type = "relative" if heatmap_max == -1 else "absolute"
+        self.start_loc = {}
         self.plan_paths = {}
         self.exec_paths = {}
-        self.conflicts  = {}
+        self.conflicts = {}
         self.agent_assigned_task = {}
         self.agent_shown_task_arrow = {}
-        self.agents:Dict[int, Agent] = {}
-        self.makespan:int = -1
-        self.cur_tstep:int = self.start_tstep
-        self.shown_path_agents:Set[int] = set()
-        self.shown_tasks_seq:Set[int] = set()
-        self.conflict_agents:Set[int] = set()
-
+        self.agents: Dict[int, Agent] = {}
+        self.makespan: int = -1
+        self.cur_tstep: int = self.start_tstep
+        self.shown_path_agents: Set[int] = set()
+        self.shown_tasks_seq: Set[int] = set()
+        self.conflict_agents: Set[int] = set()
+        self.supop_types = {"wrong_direction": 0,"waited":0, "bad_turn":0, }
         self.load_map(map_file)  # Load from the map file
-        
+        assert self.pathalg in ["Auto", "Landmark", "Manhattan", "True"], "Invalid path algorithm name"
+        if self.pathalg == "Auto":
+            grid_size = self.width*self.height
+            if grid_size < 5000:
+                self.pathalg = "True"
+            elif grid_size < 65000:
+                self.pathalg = "Landmark"
+            else:
+                self.pathalg = "Manhattan"
+
+        if self.pathalg == "Landmark":
+            self.shortest_paths = self.precompute_landmark_distance(map_file)
+        elif self.pathalg == "True":
+            self.shortest_paths = self.precompute_distance_matrix(map_file)
         # Initialize the window
         self.window = tk.Tk()
+
+        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.agent_performance = []
 
         self.screen_width = self.window.winfo_screenwidth()
 
         pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
-
 
         self.moves = moves
         if self.moves is None:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
-        
-        self.ppm:int = ppm
+                self.moves = 1
+
+        self.ppm: int = ppm
         if self.ppm is None:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
                 self.ppm = pixel_per_grid // self.moves
 
-        self.delay:int = delay
+        self.delay: int = delay
         if self.delay is None:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.06
-        self.tile_size:int = self.ppm * self.moves
+                self.delay = 0
+        self.tile_size: int = self.ppm * self.moves
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
-                                width=(self.width+1) * self.tile_size,
-                                height=(self.height+1) * self.tile_size,
+                                width=(self.width + 1) * self.tile_size,
+                                height=(self.height + 1) * self.tile_size,
                                 bg="white")
-        self.canvas.grid(row=0, column=0,sticky="nsew")
-        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
@@ -813,14 +841,13 @@ class PlanConfig2024:
         self.render_env()
         self.render_agents()
 
-
-    def load_map(self, map_file:str) -> None:
-        print("Loading map from " + map_file, end = '... ')
+    def load_map(self, map_file: str) -> None:
+        print("Loading map from " + map_file, end='... ')
 
         with open(file=map_file, mode="r", encoding="UTF-8") as fin:
             fin.readline()  # ignore type
             self.height = int(fin.readline().strip().split(' ')[1])
-            self.width  = int(fin.readline().strip().split(' ')[1])
+            self.width = int(fin.readline().strip().split(' ')[1])
             fin.readline()  # ignore 'map' line
             for line in fin.readlines():
                 out_line: List[bool] = []
@@ -837,8 +864,7 @@ class PlanConfig2024:
         assert len(self.env_map) == self.height
         print("Done!")
 
-
-    def load_paths(self, data:Dict):
+    def load_paths(self, data: Dict):
         print("Loading paths", end="... ")
 
         state_trans = state_transition
@@ -856,8 +882,8 @@ class PlanConfig2024:
                 for motion in tmp_str:
                     next_ = state_trans(self.exec_paths[ag_id][-1], motion)
                     self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+                if self.makespan < max(len(self.exec_paths[ag_id]) - 1, 0):
+                    self.makespan = max(len(self.exec_paths[ag_id]) - 1, 0)
             else:
                 print("No actual paths.", end=" ")
 
@@ -873,13 +899,12 @@ class PlanConfig2024:
 
         # Slice the paths according to the start and end timestep
         for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
+            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep + 1]
+            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep + 1]
 
         print("Done!")
 
-
-    def load_errors(self, data:Dict):
+    def load_errors(self, data: Dict):
         print("Loading errors", end="... ")
         if "errors" not in data:
             print("No errors.")
@@ -895,8 +920,7 @@ class PlanConfig2024:
                 self.conflicts[tstep].append(err)
         print("Done!")
 
-
-    def load_schedule(self, data:Dict):
+    def load_schedule(self, data: Dict):
         print("Loading schedule", end="...")
 
         if "actualSchedule" not in data:
@@ -920,7 +944,7 @@ class PlanConfig2024:
                 # Only consider the maximum assign timestep
                 assert task_id in self.seq_tasks
                 if self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"] != math.inf and \
-                    assign_tstep <= self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"]:
+                        assign_tstep <= self.seq_tasks[task_id].tasks[0].events["assigned"]["timestep"]:
                     continue
 
                 for seq_id, _ in enumerate(self.seq_tasks[task_id].tasks):
@@ -933,8 +957,7 @@ class PlanConfig2024:
         self.event_tracker["aTime"] = list(sorted(self.events["assigned"].keys()))
         self.event_tracker["aTime"].append(-1)
 
-
-    def load_events(self, data:Dict):
+    def load_events(self, data: Dict):
         print("Loading event", end="...")
 
         assert self.max_seq_num > -1
@@ -944,22 +967,20 @@ class PlanConfig2024:
             seq_id = nxt_errand_id - 1
             global_task_id = self.max_seq_num * task_id + seq_id
             if finish_tstep not in self.events["finished"]:
-                self.events["finished"][finish_tstep] = {}      
+                self.events["finished"][finish_tstep] = {}
             self.events["finished"][finish_tstep][global_task_id] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["agent"] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["timestep"] = finish_tstep
         self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
         self.event_tracker["fTime"].append(-1)
 
-
-    def load_sequential_tasks(self, data:Dict):
+    def load_sequential_tasks(self, data: Dict):
         print("Loading tasks", end="...")
         self.grid2task = {}
         if "tasks" not in data:
             print("No tasks.")
             return
-        
-        
+
         assert self.max_seq_num == -1
         for task in data["tasks"]:  # Now we need to use the released time of each task
             tid = task[0]
@@ -967,7 +988,7 @@ class PlanConfig2024:
             if release_tstep > self.end_tstep:
                 continue
             tasks = []
-            loc_num = len(task[2])//2  # Number of locations (x-y pairs)
+            loc_num = len(task[2]) // 2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
                 tobj = self.render_obj(
@@ -981,6 +1002,386 @@ class PlanConfig2024:
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
 
+    def get_current_goal(self, agent_id: int, timestep: int):
+        """
+        Returns the location (x,y) of the agent's current goal at timestep.
+        """
+        # Check if agent has any assigned tasks
+        if agent_id not in self.agent_assigned_task:
+            return None
+
+        # Find most recent task assignment at or before this timestep
+        assigned_tasks = self.agent_assigned_task[agent_id]
+        current_task_id = None
+        for assign_time, task_id in reversed(assigned_tasks):
+            if assign_time <= timestep:
+                current_task_id = task_id
+                break
+
+        if current_task_id is None:
+            return None  # No task yet
+
+        # Look up the sequential task
+        seq_task = self.seq_tasks.get(current_task_id)
+        if not seq_task:
+            return None
+
+        #Loop through subgoals and find the first one not finished yet
+        for subtask in seq_task.tasks:
+            finish_t = subtask.events.get("finished", {}).get("timestep", math.inf)
+            if finish_t > timestep:
+                return subtask.loc  # (x, y)
+
+        return None  # All goals are already finished
+
+    def graph_to_csr(self, path):
+        """
+        Returns Scipy Compressed Row matrix representation of the map
+        """
+
+        with open(path, "r") as f:
+            lines = [line.rstrip() for line in f]
+
+        height = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("height")))
+        width = int(next(ln.split()[1] for ln in lines[:4] if ln.startswith("width")))
+        grid = np.array([list(ln) for ln in lines[4: 4 + height]], dtype="U1")
+
+        total_cells = height * width
+        to_node = lambda r, c: r * width + c
+        cardinal = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E
+
+        graph = scipy.sparse.dok_matrix((total_cells, total_cells), dtype=np.uint8)
+
+        for row in range(height):
+            for col in range(width):
+                if grid[row, col] == "@":
+                    continue
+                node = to_node(row, col)
+                for dr, dc in cardinal:
+                    nr, nc = row + dr, col + dc
+                    if (
+                            0 <= nr < height
+                            and 0 <= nc < width
+                            and grid[nr, nc] != "@"
+                    ):
+                        graph[node, to_node(nr, nc)] = 1  # undirected edge
+        return graph.tocsr()
+    def precompute_distance_matrix(self, map_file):
+        """
+        Compute true shortest paths using scipy shortest_path
+        """
+        graph_csr = self.graph_to_csr(map_file)
+        dist_matrix = scipy.sparse.csgraph.shortest_path(
+            graph_csr,
+            directed=False,
+            unweighted=True
+        )
+        return dist_matrix
+
+    def precompute_landmark_distance(self, map_file, num_landmarks=16):
+        """
+        Args:
+            map_file: Path to map file
+            num_landmarks: Number of landmarks to be used
+
+        Returns: 2d numpy array (num_landmarks, num_nodes) where each row represents a landmark and each column j
+        is the distance from vertex j to that landmark.
+        """
+        graph = self.graph_to_csr(map_file)
+        num_nodes = graph.shape[0]
+        landmarks = []
+        dist_matrix = np.empty((num_landmarks, num_nodes), dtype=np.float32)
+
+        # Start from the first walkable node
+        for i in range(num_nodes):
+            if graph.getrow(i).nnz > 0:
+                current = i
+                break
+        else:
+            raise ValueError("No walkable node found.")
+
+        for i in range(num_landmarks):
+            dist = scipy.sparse.csgraph.dijkstra(graph, directed=False, indices=current)
+            dist[np.isinf(dist)] = 0
+            dist_matrix[i] = dist
+            landmarks.append(current)
+
+            if i == num_landmarks - 1:
+                break
+
+            # Compute distances from each node to all previous landmarks
+            min_dists = np.min(dist_matrix[:i + 1], axis=0)
+
+            # Exclude already chosen landmarks
+            for l in landmarks:
+                min_dists[l] = -1
+
+            # Pick the node with max of min distances
+            next_candidate = np.argmax(min_dists)
+            if min_dists[next_candidate] <= 0:
+                print(f"Could not find a new distant node at landmark {i + 1}")
+                return landmarks, dist_matrix[:i + 1]
+
+            current = next_candidate
+
+        return dist_matrix
+
+    def reset_subop_map(self):
+        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+    def update_dynamic_subop_map(self):
+        """
+        Updates and renders the individual suboptimality heatmap squares for the dynamic heatmap at current timestep
+        """
+        def shortest_path_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            return self.shortest_paths[to_id(loc), to_id(goal)]
+        def manhattan_distance(loc, goal):
+            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+        def landmark_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            u, v = to_id(loc), to_id(goal)
+            return max(
+                abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
+                for i in range(self.shortest_paths.shape[0]))
+        if self.pathalg == "True":
+            path_alg = shortest_path_distance
+        elif self.pathalg == "Landmark":
+            path_alg = landmark_distance
+        else:
+            path_alg = manhattan_distance
+
+        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
+            env_map = self.env_map
+            """True if (row,col) is inside the grid and not an obstacle."""
+            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
+                return current_distance  # off the board
+            elif env_map[row][col] == 0: # 0 == obstacle in your map
+                return current_distance
+            else:
+                return path_alg((row, col), current_goal)
+
+        for agent, path in enumerate(self.exec_paths.values()):
+            t = self.cur_tstep
+            cur_goal = self.get_current_goal(agent, t)
+            if cur_goal == None:
+                continue
+            cur_location = (path[t][0],path[t][1])
+            next_location = (path[t+1][0],path[t+1][1])
+            cur_distance = path_alg(cur_location, cur_goal)
+            next_distance = path_alg(next_location, cur_goal)
+            turn = get_rotation(path[t][2], path[t+1][2])
+            if turn == 0: # Agent has not turned
+                if path[t] == path[t + 1]: # Agent has not moved
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+                elif cur_distance < next_distance:  # Agent moved further away
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 2
+            else: # Agent has turned
+                unturned_future_square = state_transition(path[t], "F")
+                unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
+                turned_future_square = state_transition(path[t+1], "F")
+                turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
+                if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
+                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+                else:
+                    opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
+                    opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
+                    if turned_future_distance > opposite_turned_future_distance:
+                        self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+        self.render_dynamic_map()
+        # self.canvas.delete("dynamic")
+        #
+        # cmap = cm.get_cmap("Reds")
+        # norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
+        # rgba = cmap(norm(self.dynamic_heatmap))
+        # self.dynamic_heat_grids = []
+        # for i in range(len(self.dynamic_heatmap)):
+        #     for j in range(len(self.dynamic_heatmap[i])):
+        #         if self.dynamic_heatmap[i][j] == 0:
+        #             continue
+        #         color = (int(rgba[i][j][0] * 255),
+        #                  int(rgba[i][j][1] * 255),
+        #                  int(rgba[i][j][2] * 255))
+        #         hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+        #         heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+        #                                       0.0, "dynamic", show_text=False)
+        #         self.dynamic_heat_grids.append(heat_square)
+        # self.canvas.lower("dynamic")
+        # return True
+
+    def render_dynamic_map(self):
+        self.canvas.delete("dynamic")
+
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
+        rgba = cmap(norm(self.dynamic_heatmap))
+        self.dynamic_heat_grids = []
+        for i in range(len(self.dynamic_heatmap)):
+            for j in range(len(self.dynamic_heatmap[i])):
+                if self.dynamic_heatmap[i][j] == 0:
+                    continue
+                color = (int(rgba[i][j][0] * 255),
+                         int(rgba[i][j][1] * 255),
+                         int(rgba[i][j][2] * 255))
+                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+                                              0.0, "dynamic", show_text=False)
+                self.dynamic_heat_grids.append(heat_square)
+        self.canvas.lower("dynamic")
+        return True
+
+
+    def load_subop_map(self):
+        """
+        Computes and renders the individual suboptimality heatmap squares for the static final heatmap.
+        Also computes individual agent based suboptimalities and stores in self.agent_performance
+        """
+        def manhattan_distance(loc, goal):
+            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+
+        def shortest_path_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            return self.shortest_paths[to_id(loc), to_id(goal)]
+        def landmark_distance(loc, goal):
+            to_id = lambda rc: rc[0] * self.width + rc[1]
+            u, v = to_id(loc), to_id(goal)
+            return max(manhattan_distance(loc, goal), max(
+                abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
+                for i in range(self.shortest_paths.shape[0])
+            ))
+        if self.pathalg == "True":
+            path_alg = shortest_path_distance
+        elif self.pathalg == "Landmark":
+            path_alg = landmark_distance
+        else:
+            path_alg = manhattan_distance
+
+        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
+            env_map = self.env_map
+            """True if (row,col) is inside the grid and not an obstacle."""
+            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
+                return current_distance  # off the board
+            elif env_map[row][col] == 0: # 0 == obstacle in your map
+                return current_distance
+            else:
+                return path_alg((row, col), current_goal)
+
+        print("Rendering suboptimality map", end="...")
+        self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.wrong_direction_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.wait_action_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.bad_turn_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        for agent, path in enumerate(self.exec_paths.values()):
+            for t in range(len(path)-1):
+                cur_goal = self.get_current_goal(agent, t)
+                if cur_goal == None:
+                    continue
+                cur_location = (path[t][0],path[t][1])
+                next_location = (path[t+1][0],path[t+1][1])
+                cur_distance = path_alg(cur_location, cur_goal)
+                next_distance = path_alg(next_location, cur_goal)
+                turn = get_rotation(path[t][2], path[t+1][2])
+                if turn == 0: # Agent has not turned
+                    if path[t] == path[t + 1]: # Agent has not moved
+                        self.subop_map[path[t][0]][path[t][1]] += 1
+                        self.agent_performance[agent] += 1
+                        self.wait_action_heatmap[path[t][0]][path[t][1]] += 1
+                        self.supop_types["waited"] += 1
+                    elif cur_distance < next_distance:  # Agent moved further away
+                        self.subop_map[path[t][0]][path[t][1]] += 2
+                        self.agent_performance[agent] += 2
+                        self.wrong_direction_heatmap[path[t][0]][path[t][1]] += 1
+                        self.supop_types["wrong_direction"] += 1
+                else: # Agent has turned
+                    unturned_future_square = state_transition(path[t], "F")
+                    unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
+                    turned_future_square = state_transition(path[t+1], "F")
+                    turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
+                    if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
+                        self.subop_map[path[t][0]][path[t][1]] += 1
+                        self.agent_performance[agent] += 1
+                        self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
+                        self.supop_types["bad_turn"] +=1
+                    else:
+                        opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
+                        opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
+                        if turned_future_distance > opposite_turned_future_distance:
+                            self.subop_map[path[t][0]][path[t][1]] += 1
+                            self.agent_performance[agent] += 1
+                            self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
+                            self.supop_types["bad_turn"] += 1
+        # Rendering heatmap
+        self.render_static_map()
+
+
+        print("Done!")
+    def render_static_map(self):
+        assert self.max_heatmap_val >= -1 and self.max_heatmap_val != 0, "heapmap_max must be -1 (relative) or positive"
+        if self.max_heatmap_val == -1:
+            max_val = -np.inf
+            for row in self.subop_map:
+                row_max = max(row)
+                max_val = max(max_val, row_max)
+            self.max_heatmap_val = max_val
+        cmap = cm.get_cmap("Reds")
+        norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
+        for map_type in [self.subop_map, self.wrong_direction_heatmap, self.wait_action_heatmap, self.bad_turn_heatmap]:
+            rgba = cmap(norm(map_type))
+            for i in range(len(map_type)):
+                for j in range(len(map_type[i])):
+                    if map_type[i][j] == 0:
+                        continue
+                    color = (int(rgba[i][j][0] * 255),
+                             int(rgba[i][j][1] * 255),
+                             int(rgba[i][j][2] * 255))
+                    hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                    heat_square = self.render_obj(map_type[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+                                                  0.0, "subop")
+                    if map_type == self.subop_map:
+                        self.heat_grids.append(heat_square)
+                    elif map_type == self.wrong_direction_heatmap:
+                        self.wrong_direction_grids.append(heat_square)
+                    elif map_type == self.wait_action_heatmap:
+                        self.wait_action_grids.append(heat_square)
+                    else:
+                        self.bad_turn_grids.append(heat_square)
+        cmap = cm.get_cmap("turbo")
+        max_val = max(self.agent_performance)
+        norm = Normalize(vmin=0, vmax=max_val)
+        self.agents_rgba = cmap(norm(self.agent_performance))
+        self.order_static_layers()
+
+    def order_static_layers(self):
+        """grid < gold squares < heatmap < task text < agents (2024)."""
+        c = self.canvas
+        heat_tag = "heatmap" if c.find_withtag("heatmap") else "subop"
+        if c.find_withtag("grid"):
+            c.tag_raise(heat_tag, "grid")
+        if c.find_withtag("text"):
+            c.tag_raise("text", heat_tag)
+
+    def compute_heatmap_stats(self):
+        data = np.array(self.subop_map)
+        nz = data[data > 0]
+        stats = {
+            "Non-zero cells": int(nz.size),
+            "Total penalty": int(nz.sum()),
+            "Mean": float(nz.mean()) if nz.size else 0.0,
+            "Std dev": float(nz.std()) if nz.size else 0.0,
+            "Min": int(nz.min()) if nz.size else 0,
+            "Max": int(nz.max()) if nz.size else 0,
+        }
+        stats.update({
+            "Wrong direction": self.supop_types["wrong_direction"],
+            "Wait actions": self.supop_types["waited"],
+            "Sub-optimal turns": self.supop_types["bad_turn"],
+        })
+
+        #per-agent score
+        if hasattr(self, "agent_performance") and self.agent_performance:
+            stats["Mean/agent"] = float(np.mean(self.agent_performance))
+            stats["Std/agent"] = float(np.std(self.agent_performance))
+
+        return stats
 
     def load_plan(self, plan_file):
         data = {}
@@ -989,7 +1390,7 @@ class PlanConfig2024:
 
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
-
+        self.agent_performance = [0 for _ in range(self.team_size)]
         if self.end_tstep == math.inf:
             if "makespan" not in data.keys():
                 raise KeyError("Missing makespan!")
@@ -1005,11 +1406,11 @@ class PlanConfig2024:
         self.load_sequential_tasks(data)
         self.load_schedule(data)
         self.load_events(data)
+        self.load_subop_map()
 
-
-    def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",
-                   color:str="blue", state=tk.NORMAL,
-                   offset:float=0.05, tag:str="obj", outline:str=""):
+    def render_obj(self, idx: int, loc: Tuple[int], shape: str = "rectangle",
+                   color: str = "blue", state=tk.NORMAL,
+                   offset: float = 0.05, tag: str = "obj", outline: str = "", show_text=True):
         """Mark certain positions on the visualizer
 
         Args:
@@ -1021,19 +1422,19 @@ class PlanConfig2024:
         """
         tmp_canvas = None
         if shape == "rectangle":
-            tmp_canvas = self.canvas.create_rectangle((loc[1]+offset)*self.tile_size,
-                                                      (loc[0]+offset)*self.tile_size,
-                                                      (loc[1]+1-offset)*self.tile_size,
-                                                      (loc[0]+1-offset)*self.tile_size,
+            tmp_canvas = self.canvas.create_rectangle((loc[1] + offset) * self.tile_size,
+                                                      (loc[0] + offset) * self.tile_size,
+                                                      (loc[1] + 1 - offset) * self.tile_size,
+                                                      (loc[0] + 1 - offset) * self.tile_size,
                                                       fill=color,
                                                       tag=tag,
                                                       state=state,
                                                       outline=outline)
         elif shape == "oval":
-            tmp_canvas = self.canvas.create_oval((loc[1]+offset)*self.tile_size,
-                                                 (loc[0]+offset)*self.tile_size,
-                                                 (loc[1]+1-offset)*self.tile_size,
-                                                 (loc[0]+1-offset)*self.tile_size,
+            tmp_canvas = self.canvas.create_oval((loc[1] + offset) * self.tile_size,
+                                                 (loc[0] + offset) * self.tile_size,
+                                                 (loc[1] + 1 - offset) * self.tile_size,
+                                                 (loc[0] + 1 - offset) * self.tile_size,
                                                  fill=color,
                                                  tag=tag,
                                                  state=state,
@@ -1045,16 +1446,18 @@ class PlanConfig2024:
         shown_text = ""
         if idx > -1:
             shown_text = str(idx)
-        tmp_text = self.canvas.create_text((loc[1]+0.5)*self.tile_size,
-                                           (loc[0]+0.5)*self.tile_size,
-                                           text=shown_text,
-                                           fill="black",
-                                           tag=("text", tag),
-                                           state=state,
-                                           font=("Arial", int(self.tile_size // 2)))
+        if show_text:
+            tmp_text = self.canvas.create_text((loc[1] + 0.5) * self.tile_size,
+                                               (loc[0] + 0.5) * self.tile_size,
+                                               text=shown_text,
+                                               fill="black",
+                                               tag=("text", tag),
+                                               state=state,
+                                               font=("Arial", int(self.tile_size // 2)))
+        else:
+            tmp_text = None
 
         return BaseObj(tmp_canvas, tmp_text, loc, color)
-
 
     def render_env(self) -> None:
         print("Rendering the environment ... ", end="")
@@ -1065,7 +1468,7 @@ class PlanConfig2024:
                                              self.width * self.tile_size,
                                              rid * self.tile_size,
                                              tags="grid",
-                                             state= tk.NORMAL,
+                                             state=tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
         for cid in range(self.width):  # Render vertical lines
@@ -1074,39 +1477,43 @@ class PlanConfig2024:
                                              cid * self.tile_size,
                                              self.height * self.tile_size,
                                              tags="grid",
-                                             state= tk.NORMAL,
+                                             state=tk.NORMAL,
                                              fill="grey")
             self.grids.append(_line_)
 
-        # Render features
-        for rid, cur_row in enumerate(self.env_map):
-            for cid, cur_ele in enumerate(cur_row):
-                if cur_ele == 0:  # obstacles
-                    self.canvas.create_rectangle(cid * self.tile_size,
-                                                 rid * self.tile_size,
-                                                 (cid+1) * self.tile_size,
-                                                 (rid+1) * self.tile_size,
-                                                 state=tk.DISABLED,
-                                                 outline="",
-                                                 fill="black")
+        # Horizontal obstacle merge optimisation
+        for r, row in enumerate(self.env_map):
+            start = None  # first col in current run
+            for c, val in enumerate(row + [1]):
+                if val == 0 and start is None:  # run begins
+                    start = c
+                elif val != 0 and start is not None:  # run ends before this col
+                    x0, y0 = start * self.tile_size, r * self.tile_size
+                    x1, y1 = c * self.tile_size, (r + 1) * self.tile_size
+                    self.canvas.create_rectangle(
+                        x0, y0, x1, y1,
+                        fill="black", outline="",
+                        state=tk.DISABLED)
+                    start = None  # reset for next run
+
 
         # Render coordinates
         for cid in range(self.width):
-            self.canvas.create_text((cid+0.5)*self.tile_size,
-                                    (self.height+0.5)*self.tile_size,
+            self.canvas.create_text((cid + 0.5) * self.tile_size,
+                                    (self.height + 0.5) * self.tile_size,
                                     text=str(cid),
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
+                                    font=("Arial", self.tile_size // 2))
         for rid in range(self.height):
-            self.canvas.create_text((self.width+0.5)*self.tile_size,
-                                    (rid+0.5)*self.tile_size,
+            self.canvas.create_text((self.width + 0.5) * self.tile_size,
+                                    (rid + 0.5) * self.tile_size,
                                     text=str(rid),
                                     fill="black",
                                     tag="text",
                                     state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
+                                    font=("Arial", self.tile_size // 2))
         self.canvas.create_line(self.width * self.tile_size,
                                 0,
                                 self.width * self.tile_size,
@@ -1120,7 +1527,6 @@ class PlanConfig2024:
                                 state=tk.DISABLED,
                                 fill="black")
         print("Done!")
-
 
     def render_agents(self):
         print("Rendering the agents... ", end="")
@@ -1136,8 +1542,8 @@ class PlanConfig2024:
             for _pid_ in range(len(self.exec_paths[ag_id])):
                 p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
                 p_obj = None
-                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
-                                           self.exec_paths[ag_id][_pid_-1][1]):
+                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_ - 1][0],
+                                           self.exec_paths[ag_id][_pid_ - 1][1]):
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
                 else:  # non-wait action, smaller rectangle
                     p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
@@ -1158,13 +1564,13 @@ class PlanConfig2024:
             if self.agent_model == "MAPF_T":
                 dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
                 dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
-                                                dir_loc[1] * self.tile_size,
-                                                dir_loc[2] * self.tile_size,
-                                                dir_loc[3] * self.tile_size,
-                                                fill="navy",
-                                                tag="dir",
-                                                state=tk.DISABLED,
-                                                outline="")
+                                                  dir_loc[1] * self.tile_size,
+                                                  dir_loc[2] * self.tile_size,
+                                                  dir_loc[3] * self.tile_size,
+                                                  fill="navy",
+                                                  tag="dir",
+                                                  state=tk.DISABLED,
+                                                  outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
                           path_objs[ag_id], self.exec_paths[ag_id], dir_obj)

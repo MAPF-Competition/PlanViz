@@ -56,6 +56,8 @@ The user interface supports a variety of operations to control and focus the dis
 - `--start` (type: *int*): Start timestep for visualization (*default*: 0).
 - `--end` (type: *int*): End timestep for visualization (*default*: 100).
 - `--hm` (type: *List[str]*): A list of path files (ends with `.json`) for generating heatmap.
+- `--pathalg` (type: *str*) Distance heuristic used for suboptimality heatmap (see Heatmap.md)
+- `--heatmap_max` (type: *int*) Heatmap colour ramp ceiling (*default*: -1 = relative scaling)
 
 If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problems),
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.

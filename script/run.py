@@ -42,6 +42,9 @@ def main() -> None:
                         help="Show the search trees")
     parser.add_argument("--heu", dest="heu_file", type=str, default="",
                         help="Show the low-level heuristics")
+    parser.add_argument("--pathalg", type=str, default="Auto", help="Algorithm for suboptimality map (Manhattan, Landmark, True)")
+    parser.add_argument("--heatmap_max", type=int, default=-1, help="-1 for relative or a positive integer value for absolute")
+
     args = parser.parse_args()
 
     version = None
@@ -56,9 +59,10 @@ def main() -> None:
 
     if version == "2024 LoRR":
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
-                              args.ppm, args.moves, args.delay)
+                              args.ppm, args.moves, args.delay, args.pathalg, args.heatmap_max)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
+
     else:
         if version != "2023 LoRR":
             print("Year not specified, defaulting to 2023 LoRR")
@@ -67,7 +71,7 @@ def main() -> None:
                                 args.search_tree_files, args.heu_file)
         PlanViz2023(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
-        
+
     tk.mainloop()
 
 
