@@ -1775,7 +1775,7 @@ class PlanViz2024:
 
     def reset_heat_map(self) -> None:
         self.pcf.reset_subop_map()
-        self.pcf.update_dynamic_subop_map()
+        self.pcf.render_dynamic_map()
         self.pcf.canvas.update()
 
     def show_dynamic_maps(self) -> None:

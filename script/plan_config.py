@@ -76,7 +76,7 @@ class PlanConfig2023:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 3
+                self.moves = 5
 
         self.ppm:int = ppm
         if self.ppm is None:
@@ -90,7 +90,7 @@ class PlanConfig2023:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.06
+                self.delay = 0.000001
         self.tile_size:int = self.ppm * self.moves
 
 
@@ -807,7 +807,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.moves = MAP_CONFIG[map_name]["moves"]
             else:
-                self.moves = 6
+                self.moves = 1
 
         self.ppm: int = ppm
         if self.ppm is None:
@@ -821,7 +821,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0.05
+                self.delay = 0
         self.tile_size: int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -1187,7 +1187,28 @@ class PlanConfig2024:
                     opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
                     if turned_future_distance > opposite_turned_future_distance:
                         self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+        self.render_dynamic_map()
+        # self.canvas.delete("dynamic")
+        #
+        # cmap = cm.get_cmap("Reds")
+        # norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
+        # rgba = cmap(norm(self.dynamic_heatmap))
+        # self.dynamic_heat_grids = []
+        # for i in range(len(self.dynamic_heatmap)):
+        #     for j in range(len(self.dynamic_heatmap[i])):
+        #         if self.dynamic_heatmap[i][j] == 0:
+        #             continue
+        #         color = (int(rgba[i][j][0] * 255),
+        #                  int(rgba[i][j][1] * 255),
+        #                  int(rgba[i][j][2] * 255))
+        #         hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+        #         heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+        #                                       0.0, "dynamic", show_text=False)
+        #         self.dynamic_heat_grids.append(heat_square)
+        # self.canvas.lower("dynamic")
+        # return True
 
+    def render_dynamic_map(self):
         self.canvas.delete("dynamic")
 
         cmap = cm.get_cmap("Reds")
@@ -1207,7 +1228,6 @@ class PlanConfig2024:
                 self.dynamic_heat_grids.append(heat_square)
         self.canvas.lower("dynamic")
         return True
-
 
 
     def load_subop_map(self):
@@ -1290,6 +1310,11 @@ class PlanConfig2024:
                             self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
                             self.supop_types["bad_turn"] += 1
         # Rendering heatmap
+        self.render_static_map()
+
+
+        print("Done!")
+    def render_static_map(self):
         assert self.max_heatmap_val >= -1 and self.max_heatmap_val != 0, "heapmap_max must be -1 (relative) or positive"
         if self.max_heatmap_val == -1:
             max_val = -np.inf
@@ -1323,8 +1348,16 @@ class PlanConfig2024:
         max_val = max(self.agent_performance)
         norm = Normalize(vmin=0, vmax=max_val)
         self.agents_rgba = cmap(norm(self.agent_performance))
+        self.order_static_layers()
 
-        print("Done!")
+    def order_static_layers(self):
+        """grid < gold squares < heatmap < task text < agents (2024)."""
+        c = self.canvas
+        heat_tag = "heatmap" if c.find_withtag("heatmap") else "subop"
+        if c.find_withtag("grid"):
+            c.tag_raise(heat_tag, "grid")
+        if c.find_withtag("text"):
+            c.tag_raise("text", heat_tag)
 
     def compute_heatmap_stats(self):
         data = np.array(self.subop_map)
@@ -1457,11 +1490,12 @@ class PlanConfig2024:
                 elif val != 0 and start is not None:  # run ends before this col
                     x0, y0 = start * self.tile_size, r * self.tile_size
                     x1, y1 = c * self.tile_size, (r + 1) * self.tile_size
-                    rect_id = self.canvas.create_rectangle(
+                    self.canvas.create_rectangle(
                         x0, y0, x1, y1,
                         fill="black", outline="",
                         state=tk.DISABLED)
                     start = None  # reset for next run
+
 
         # Render coordinates
         for cid in range(self.width):
