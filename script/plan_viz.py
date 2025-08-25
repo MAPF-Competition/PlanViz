@@ -1335,11 +1335,12 @@ class PlanViz2024:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
-                    if pop and self.right_click_agent < 0 and (not (task_id in self.right_click_all_tasks_idx)): 
-                        continue
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
-                    if pop and self.right_click_agent > -1 and ag_id != self.right_click_agent: continue
+                    if pop and \
+                       (not (task_id in self.right_click_all_tasks_idx)) and\
+                       (ag_id != self.right_click_agent): 
+                        continue
                     if seq_id == 0:
                         e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "assigned")
@@ -1651,9 +1652,6 @@ class PlanViz2024:
         self.right_click_agent = ag_idx
         if ag_idx != -1:
             self.right_click_status = "right"
-            self.create_pop_window(grid_loc)
-            self.update_event_list(self.pop_event_listbox, 1)
-            return
         
         self.right_click_all_tasks_idx = []
         for item in items:
@@ -1661,15 +1659,12 @@ class PlanViz2024:
             if item in self.pcf.grid2task.keys():
                 all_tasks_idx = self.pcf.grid2task[item]
             if len(all_tasks_idx) > 0:
-                self.create_pop_window(grid_loc)
                 self.right_click_status = "right"
                 self.right_click_all_tasks_idx += all_tasks_idx
-                self.update_event_list(self.pop_event_listbox, 1)
-                
-            
-        
-        
-        
+        if self.right_click_status == "right":
+            self.create_pop_window(grid_loc)
+            self.update_event_list(self.pop_event_listbox, 1)
+                 
 
     def get_ag_idx(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
@@ -1685,18 +1680,6 @@ class PlanViz2024:
             if len(tags) > 1 and tags[1] == "current" and tags[0].isnumeric():
                 ag_idx = int(tags[0])  # get the id of the agent
                 return ag_idx
-        
-        self.right_click_all_tasks_idx = []
-        self.right_click_agent = -1
-        for item in items:
-            all_tasks_idx = []
-            if item in self.pcf.grid2task.keys():
-                all_tasks_idx = self.pcf.grid2task[item]
-            if len(all_tasks_idx) > 0:
-                self.create_pop_window(grid_loc)
-                self.right_click_status = "right"
-                self.right_click_all_tasks_idx += all_tasks_idx
-                self.update_event_list(self.pop_event_listbox, 1)
                 
         return ag_idx
 
