@@ -5,6 +5,7 @@ All rights reserved.
 """
 
 import math
+import re
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 from tkinter import ttk,font
@@ -1034,6 +1035,7 @@ class PlanViz2024:
         self.row_idx = 0
         self.pop_gui_window = None
         self.pop_event_listbox = None
+        self.pop_location_listbox = None
         
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.pcf.cur_tstep:03d}",
@@ -1338,7 +1340,6 @@ class PlanViz2024:
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     if pop and \
-                       (not (task_id in self.right_click_all_tasks_idx)) and\
                        (ag_id != self.right_click_agent): 
                         continue
                     if seq_id == 0:
@@ -1369,6 +1370,49 @@ class PlanViz2024:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
                     self.eve_id += 1
             
+
+    def update_location_event_list(self, event_listbox):
+        """更新位置事件列表，显示在该位置发生的任务相关事件"""
+        if event_listbox == None or (not event_listbox.winfo_exists()):
+            return
+        
+        self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
+        end_tstep = self.max_event_t
+        
+        # 清空并重新填充位置事件列表
+        event_listbox.delete(0, tk.END)
+        monospace_font = font.Font(family='Courier')
+        event_listbox.config(font=monospace_font)
+        
+        # 添加标题和表头，类似update_event_list的格式
+        header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
+        event_listbox.insert(0, header)
+        event_listbox.insert(1, "-" * 34)  # Separator line
+        eve_id = 2
+        
+        # 类似update_event_list，遍历时间步和事件
+        time_list = list(self.pcf.events["assigned"])
+        time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
+        time_list = sorted(time_list, reverse=False)
+        
+        for tstep in range(end_tstep, -1, -1):
+            # 检查分配事件
+            if tstep in self.pcf.events["assigned"]:
+                cur_events = self.pcf.events["assigned"][tstep]
+                for global_task_id in sorted(cur_events.keys(), reverse=False):
+                    task_id = global_task_id // self.pcf.max_seq_num
+                    seq_id = global_task_id % self.pcf.max_seq_num
+                    ag_id = cur_events[global_task_id]
+                    
+                    # 检查任务是否在指定位置
+                    if (not (task_id in self.right_click_all_tasks_idx)): 
+                        continue
+                    if seq_id == 0:
+                        e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
+                        event_listbox.insert(eve_id, e_str)
+                        if tstep == self.pcf.cur_tstep:
+                            event_listbox.itemconfigure(eve_id, background='yellow')
+                        eve_id += 1
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         """ Change the color of the agent if collisions are not shown
@@ -1499,12 +1543,45 @@ class PlanViz2024:
         if len(selected_idx) < 1:
             return 
         selected_idx = selected_idx[0]
-        if self.right_click_status == "right":
-            eve_str:str = self.pop_event_listbox.get(selected_idx)
+        
+        # 确定是从哪个事件列表框触发的事件
+        widget = event.widget
+        eve_str = None
+        
+        if widget == self.pop_location_listbox:
+            # 从位置事件列表框获取事件
+            eve_str = self.pop_location_listbox.get(selected_idx)
+            # 检查是否是标题行或分隔线
+            if "------" in eve_str or "Time" in eve_str or "No events found" in eve_str:
+                return
+            # 解析位置事件字符串，格式如："123   1      Assigned   5"
+            parts = eve_str.split()
+            if len(parts) >= 4:
+                try:
+                    tstep = int(parts[0])
+                    ag_idx = int(parts[1])
+                    self.clear_agent_selection()
+                    self.new_time.set(tstep)
+                    self.update_curtime()
+                    first_errand_t = self.show_colorful_errands(ag_idx)
+                    if first_errand_t != -1:
+                        self.show_ag_plan(ag_idx, first_errand_t)
+                    return
+                except (ValueError, IndexError):
+                    return
+            else:
+                return
+                
+        elif self.right_click_status == "right":
+            eve_str = self.pop_event_listbox.get(selected_idx)
         else:
-            eve_str:str = self.event_listbox.get(selected_idx)
+            eve_str = self.event_listbox.get(selected_idx)
+            
         if "------" in eve_str: 
             return
+        if eve_str not in self.shown_events:
+            return
+            
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
         self.clear_agent_selection()
@@ -1618,26 +1695,61 @@ class PlanViz2024:
             window_y = mouse_y + offset_y
             
             self.pop_gui_window = tk.Toplevel()
-            self.pop_gui_window.title(f"Location ({grid_loc[0]}, {grid_loc[1]})")
+            self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
-            width=300 
-            height=int(5 * self.pcf.tile_size)
+            width = 300  # 增加宽度以容纳两个列表
+            height = int(8 * self.pcf.tile_size)  # 增加高度
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
-            self.pop_frame.grid(row=0, column=self.gui_column,sticky="nsew")
+            self.pop_frame.grid(row=0, column=0, sticky="nsew")
+            
+            # 配置网格权重以使组件能够正确缩放
+            self.pop_gui_window.grid_rowconfigure(0, weight=1)
+            self.pop_gui_window.grid_columnconfigure(0, weight=1)
+            self.pop_frame.grid_rowconfigure(1, weight=1)
+            self.pop_frame.grid_rowconfigure(3, weight=1)
+            self.pop_frame.grid_columnconfigure(0, weight=1)
+            self.pop_frame.grid_columnconfigure(1, weight=1)
+            
+            # 第一个事件列表 - 代理事件
+            agent_label = tk.Label(self.pop_frame, text="Agent Events at this Location", font=("Arial", TEXT_SIZE))
+            agent_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+            
             self.pop_event_listbox = tk.Listbox(self.pop_frame,
                                 width=35,
                                 height=9,
                                 font=("Arial",TEXT_SIZE),
                                 selectmode=tk.EXTENDED)
-            self.pop_event_listbox.grid(row=1, column=0, columnspan=5, sticky="w")
+            self.pop_event_listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5)
             self.pop_event_listbox.bind("<Double-1>", self.move_to_event)
-            scrollbar = tk.Scrollbar(self.pop_frame, orient="vertical", width=20)
-            self.pop_event_listbox.config(yscrollcommand = scrollbar.set)
-            scrollbar.config(command=self.pop_event_listbox.yview)
-            scrollbar.grid(row=1, column=5, sticky="ns")
-        self.pop_gui_window.title(f"Location ({grid_loc[0]}, {grid_loc[1]})")
+            
+            agent_scrollbar = tk.Scrollbar(self.pop_frame, orient="vertical", width=20)
+            self.pop_event_listbox.config(yscrollcommand = agent_scrollbar.set)
+            agent_scrollbar.config(command=self.pop_event_listbox.yview)
+            agent_scrollbar.grid(row=1, column=2, sticky="ns")
+            
+            # 第二个事件列表 - 位置事件  
+            location_label = tk.Label(self.pop_frame, text="Tasks at this Location", font=("Arial", TEXT_SIZE))
+            location_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=(10,5))
+            
+            # 创建第二个事件列表框
+            self.pop_location_listbox = tk.Listbox(self.pop_frame,
+                                width=35,
+                                height=9,
+                                font=("Arial",TEXT_SIZE),
+                                selectmode=tk.EXTENDED)
+            self.pop_location_listbox.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=(0,5))
+            self.pop_location_listbox.bind("<Double-1>", self.move_to_event)
+            
+            location_scrollbar = tk.Scrollbar(self.pop_frame, orient="vertical", width=20)
+            self.pop_location_listbox.config(yscrollcommand = location_scrollbar.set)
+            location_scrollbar.config(command=self.pop_location_listbox.yview)
+            location_scrollbar.grid(row=3, column=2, sticky="ns")
+            
+        else:
+            # 如果窗口已经存在，只更新标题
+            self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
 
     def right_click(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
@@ -1663,7 +1775,10 @@ class PlanViz2024:
                 self.right_click_all_tasks_idx += all_tasks_idx
         if self.right_click_status == "right":
             self.create_pop_window(grid_loc)
+            # 更新代理事件列表（与原来相同的逻辑）
             self.update_event_list(self.pop_event_listbox, 1)
+            # 更新位置事件列表（新的逻辑，显示所有在该位置的事件）
+            self.update_location_event_list(self.pop_location_listbox)
                  
 
     def get_ag_idx(self, event):
@@ -2036,6 +2151,16 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
+        # 如果弹出窗口的位置列表存在，也要更新它
+        if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
+            # 从弹出窗口标题中提取网格位置信息
+            title = self.pop_gui_window.title()
+            if "Location" in title:
+                # 解析标题中的坐标 "Event List - Location (x, y)"
+                match = re.search(r'Location \((\d+), (\d+)\)', title)
+                if match:
+                    grid_x, grid_y = int(match.group(1)), int(match.group(2))
+                    self.update_location_event_list(self.pop_location_listbox)
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
             for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
@@ -2153,6 +2278,16 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
+        # 如果弹出窗口的位置列表存在，也要更新它
+        if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
+            # 从弹出窗口标题中提取网格位置信息
+            title = self.pop_gui_window.title()
+            if "Location" in title:
+                # 解析标题中的坐标 "Event List - Location (x, y)"
+                match = re.search(r'Location \((\d+), (\d+)\)', title)
+                if match:
+                    grid_x, grid_y = int(match.group(1)), int(match.group(2))
+                    self.update_location_event_list(self.pop_location_listbox)
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
@@ -2280,6 +2415,16 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
+        # 如果弹出窗口的位置列表存在，也要更新它
+        if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
+            # 从弹出窗口标题中提取网格位置信息
+            title = self.pop_gui_window.title()
+            if "Location" in title:
+                # 解析标题中的坐标 "Event List - Location (x, y)"
+                match = re.search(r'Location \((\d+), (\d+)\)', title)
+                if match:
+                    grid_x, grid_y = int(match.group(1)), int(match.group(2))
+                    self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
         self.pcf.canvas.update()
 
