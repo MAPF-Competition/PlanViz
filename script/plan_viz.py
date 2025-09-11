@@ -1372,31 +1372,31 @@ class PlanViz2024:
             
 
     def update_location_event_list(self, event_listbox):
-        """更新位置事件列表，显示在该位置发生的任务相关事件"""
+        """Update location event list to show task-related events"""
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
         
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.max_event_t
         
-        # 清空并重新填充位置事件列表
+        # Clear and refill the location event listbox
         event_listbox.delete(0, tk.END)
         monospace_font = font.Font(family='Courier')
         event_listbox.config(font=monospace_font)
         
-        # 添加标题和表头，类似update_event_list的格式
+        # Add header in the same format as update_event_list
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
         event_listbox.insert(0, header)
         event_listbox.insert(1, "-" * 34)  # Separator line
         eve_id = 2
         
-        # 类似update_event_list，遍历时间步和事件
+        # Similar to update_event_list, iterate through timesteps and events
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
         
         for tstep in range(end_tstep, -1, -1):
-            # 检查分配事件
+            # Check assignment events
             if tstep in self.pcf.events["assigned"]:
                 cur_events = self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -1404,7 +1404,7 @@ class PlanViz2024:
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     
-                    # 检查任务是否在指定位置
+                    # Check if task is in the selected task list
                     if (not (task_id in self.right_click_all_tasks_idx)): 
                         continue
                     if seq_id == 0:
@@ -1544,17 +1544,17 @@ class PlanViz2024:
             return 
         selected_idx = selected_idx[0]
         
-        # 确定是从哪个事件列表框触发的事件
+        # Determine which event listbox triggered the event
         widget = event.widget
         eve_str = None
         
         if widget == self.pop_location_listbox:
-            # 从位置事件列表框获取事件
+            # Get event from location event listbox
             eve_str = self.pop_location_listbox.get(selected_idx)
-            # 检查是否是标题行或分隔线
+            # Check if it's a header row or separator line
             if "------" in eve_str or "Time" in eve_str or "No events found" in eve_str:
                 return
-            # 解析位置事件字符串，格式如："123   1      Assigned   5"
+            # Parse location event string, format: "123   1      Assigned   5"
             parts = eve_str.split()
             if len(parts) >= 4:
                 try:
@@ -1698,13 +1698,13 @@ class PlanViz2024:
             self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
-            width = 300  # 增加宽度以容纳两个列表
-            height = int(8 * self.pcf.tile_size)  # 增加高度
+            width = 300  # Width to accommodate two lists
+            height = int(8 * self.pcf.tile_size)  # Increase height
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
             self.pop_frame.grid(row=0, column=0, sticky="nsew")
             
-            # 配置网格权重以使组件能够正确缩放
+            # Configure grid weights for proper component scaling
             self.pop_gui_window.grid_rowconfigure(0, weight=1)
             self.pop_gui_window.grid_columnconfigure(0, weight=1)
             self.pop_frame.grid_rowconfigure(1, weight=1)
@@ -1712,7 +1712,7 @@ class PlanViz2024:
             self.pop_frame.grid_columnconfigure(0, weight=1)
             self.pop_frame.grid_columnconfigure(1, weight=1)
             
-            # 第一个事件列表 - 代理事件
+            # First event list - agent events
             agent_label = tk.Label(self.pop_frame, text="Agent Events at this Location", font=("Arial", TEXT_SIZE))
             agent_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=5)
             
@@ -1729,11 +1729,11 @@ class PlanViz2024:
             agent_scrollbar.config(command=self.pop_event_listbox.yview)
             agent_scrollbar.grid(row=1, column=2, sticky="ns")
             
-            # 第二个事件列表 - 位置事件  
+            # Second event list - location events  
             location_label = tk.Label(self.pop_frame, text="Tasks at this Location", font=("Arial", TEXT_SIZE))
             location_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=(10,5))
             
-            # 创建第二个事件列表框
+            # Create second event listbox
             self.pop_location_listbox = tk.Listbox(self.pop_frame,
                                 width=35,
                                 height=9,
@@ -1748,7 +1748,7 @@ class PlanViz2024:
             location_scrollbar.grid(row=3, column=2, sticky="ns")
             
         else:
-            # 如果窗口已经存在，只更新标题
+            # If window already exists, just update the title
             self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
 
     def right_click(self, event):
@@ -1775,9 +1775,9 @@ class PlanViz2024:
                 self.right_click_all_tasks_idx += all_tasks_idx
         if self.right_click_status == "right":
             self.create_pop_window(grid_loc)
-            # 更新代理事件列表（与原来相同的逻辑）
+            # Update agent event list (same logic as before)
             self.update_event_list(self.pop_event_listbox, 1)
-            # 更新位置事件列表（新的逻辑，显示所有在该位置的事件）
+            # Update location event list (new logic for events at this location)
             self.update_location_event_list(self.pop_location_listbox)
                  
 
@@ -2151,12 +2151,12 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
-        # 如果弹出窗口的位置列表存在，也要更新它
+        # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
-            # 从弹出窗口标题中提取网格位置信息
+            # Extract grid location info from popup window title
             title = self.pop_gui_window.title()
             if "Location" in title:
-                # 解析标题中的坐标 "Event List - Location (x, y)"
+                # Parse coordinates from title "Event List - Location (x, y)"
                 match = re.search(r'Location \((\d+), (\d+)\)', title)
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
@@ -2278,12 +2278,12 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
-        # 如果弹出窗口的位置列表存在，也要更新它
+        # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
-            # 从弹出窗口标题中提取网格位置信息
+            # Extract grid location info from popup window title
             title = self.pop_gui_window.title()
             if "Location" in title:
-                # 解析标题中的坐标 "Event List - Location (x, y)"
+                # Parse coordinates from title "Event List - Location (x, y)"
                 match = re.search(r'Location \((\d+), (\d+)\)', title)
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
@@ -2415,12 +2415,12 @@ class PlanViz2024:
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
-        # 如果弹出窗口的位置列表存在，也要更新它
+        # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
-            # 从弹出窗口标题中提取网格位置信息
+            # Extract grid location info from popup window title
             title = self.pop_gui_window.title()
             if "Location" in title:
-                # 解析标题中的坐标 "Event List - Location (x, y)"
+                # Parse coordinates from title "Event List - Location (x, y)"
                 match = re.search(r'Location \((\d+), (\d+)\)', title)
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
