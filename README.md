@@ -10,7 +10,7 @@ PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3
 
 ## Installation
 
-This project requires Python 3.10 or higher. Choose one of the following methods to install the required packages.
+This project requires **Python 3.10 or higher**. Choose one of the following methods to install the required packages.
 
 ### Option1: Using [venv](https://docs.python.org/3/library/venv.html)
 1.  **Clone the repository:**
@@ -18,8 +18,14 @@ This project requires Python 3.10 or higher. Choose one of the following methods
     git clone https://github.com/MAPF-Competition/PlanViz.git
     cd PlanViz
     ```
+2.  **Verify your Python version:**
 
-2.  **Create and activate a virtual environment:**
+    Before creating the environment, check your default `python3` version. If the output version is less than 3.10, you'll need to use a specific Python command for a newer version you have installed (e.g., `python3.10`, `python3.11`).
+    ```bash
+    python3 --version
+    ```
+
+3.  **Create and activate a virtual environment:**
     * **macOS / Linux:**
         ```bash
         python3 -m venv venv
@@ -31,7 +37,7 @@ This project requires Python 3.10 or higher. Choose one of the following methods
         .\venv\Scripts\activate
         ```
 
-3.  **Install the required packages:**
+4.  **Install the required packages:**
     ```bash
     pip install -r requirements.txt
     ```
