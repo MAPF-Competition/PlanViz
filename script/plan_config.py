@@ -98,7 +98,8 @@ class PlanConfig2023:
         self.canvas = tk.Canvas(self.window,
                                 width=(self.width+1) * self.tile_size,
                                 height=(self.height+1) * self.tile_size,
-                                bg="white")
+                                bg="white",
+                                takefocus=True)
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
@@ -801,7 +802,8 @@ class PlanConfig2024:
         self.canvas = tk.Canvas(self.window,
                                 width=(self.width+1) * self.tile_size,
                                 height=(self.height+1) * self.tile_size,
-                                bg="white")
+                                bg="white",
+                                takefocus=True)
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 

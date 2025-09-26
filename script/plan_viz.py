@@ -24,7 +24,15 @@ class PlanViz2023:
 
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2023 = plan_config
-        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
+        
+        # Platform-specific right-click binding
+        if platform.system() == "Darwin":  # macOS
+            self.pcf.canvas.bind("<Button-2>", self.show_ag_plan_by_click)
+        else:  # Linux and Windows
+            self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
+
+        # Ensure canvas can receive focus and mouse events
+        self.pcf.canvas.focus_set()
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -32,7 +40,7 @@ class PlanViz2023:
         # linux scroll
         self.pcf.canvas.bind("<Button-4>", self.__wheel)
         self.pcf.canvas.bind("<Button-5>", self.__wheel)
-        # windows scroll
+        # windows and macOS scroll
         self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
 
         # Generate the UI panel
@@ -441,14 +449,14 @@ class PlanViz2023:
     def __wheel(self, event):
         """ Zoom with mouse wheel """
         scale = 1.0
-        # Respond to Linux (event.num) or Windows (event.delta) wheel event
-        if event.num == 5 or event.delta == -120:  # scroll down, smaller
+        # Respond to Linux (event.num) or Windows/macOS (event.delta) wheel event
+        if event.num == 5 or event.delta < 0:  # scroll down, smaller
             threshold = round(min(self.pcf.width, self.pcf.height) * self.pcf.tile_size)
             if threshold < 30:
                 return  # image is less than 30 pixels
             scale /= 1.10
             self.pcf.tile_size /= 1.10
-        if event.num == 4 or event.delta == 120:  # scroll up, bigger
+        if event.num == 4 or event.delta > 0:  # scroll up, bigger
             scale *= 1.10
             self.pcf.tile_size *= 1.10
         self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
@@ -1078,6 +1086,9 @@ class PlanViz2024:
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
         self.pcf.canvas.bind("<Motion>", self.on_hover)
 
+        # Ensure canvas can receive focus and mouse events
+        self.pcf.canvas.focus_set()
+
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
         self.pcf.canvas.bind("<B1-Motion>", self.on_mouse_drag)
@@ -1675,7 +1686,35 @@ class PlanViz2024:
         self.right_click_status = "left"
         if not (self.pop_gui_window is None) and self.pop_gui_window.winfo_exists() != 0:
             self.pop_gui_window.destroy()
+        
+        # Check for agents and tasks at click location for popup
+        x_adjusted = self.pcf.canvas.canvasx(event.x)
+        y_adjusted = self.pcf.canvas.canvasy(event.y)
+        grid_column = int(x_adjusted // self.pcf.tile_size)
+        grid_row = int(y_adjusted // self.pcf.tile_size)
+        grid_loc = [grid_column, grid_row]
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+                                                 x_adjusted+0.1, y_adjusted+0.1)
+        
         ag_idx = self.get_ag_idx(event)
+        show_popup = False
+        
+        # Check if there are tasks at this location
+        task_items = []
+        for item in items:
+            if item in self.pcf.grid2task.keys():
+                task_items.extend(self.pcf.grid2task[item])
+        
+        # Show popup if there are agents or tasks at this location
+        if ag_idx != -1 or len(task_items) > 0:
+            show_popup = True
+            self.right_click_agent = ag_idx
+            self.right_click_all_tasks_idx = task_items
+            self.create_pop_window(grid_loc)
+            self.update_event_list(self.pop_event_listbox, 1)
+            self.update_location_event_list(self.pop_location_listbox)
+        
+        # Original agent selection logic
         if ag_idx == -1 and self.run_button['state'] == tk.NORMAL:
             self.clear_agent_selection()
         if ag_idx != -1:
@@ -1700,6 +1739,37 @@ class PlanViz2024:
             self.pop_gui_window.lift()
             width = 300  # Width to accommodate two lists
             height = int(8 * self.pcf.tile_size)  # Increase height
+            # Ensure the popup window doesn't go off-screen
+            screen_width = self.pcf.window.winfo_screenwidth()
+            screen_height = self.pcf.window.winfo_screenheight()
+            width = 300  # 增加宽度以容纳两个列表
+            height = int(8 * self.pcf.tile_size)  # 增加高度
+            
+            # Adjust position if it would go off-screen
+            if window_x + width > screen_width:
+                window_x = screen_width - width - 10
+            if window_y + height > screen_height:
+                window_y = screen_height - height - 10
+            if window_x < 0:
+                window_x = 10
+            if window_y < 0:
+                window_y = 10
+            
+            self.pop_gui_window = tk.Toplevel()
+            self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
+            
+            # macOS-specific window handling
+            if platform.system() == "Darwin":
+                # On macOS, ensure proper window layering and focus
+                self.pop_gui_window.lift()
+                self.pop_gui_window.focus_force()
+                self.pop_gui_window.attributes('-topmost', True)
+                # Remove topmost after a short delay to allow normal window management
+                self.pop_gui_window.after(100, lambda: self.pop_gui_window.attributes('-topmost', False))
+            else:
+                self.pop_gui_window.transient(self.pcf.window)
+                self.pop_gui_window.lift()
+            
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
             self.pop_frame.grid(row=0, column=0, sticky="nsew")
@@ -1760,6 +1830,9 @@ class PlanViz2024:
         items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
                                                  x_adjusted+0.1, y_adjusted+0.1)
         
+        # Reset right click status
+        self.right_click_status = "left"
+        
         ag_idx = self.get_ag_idx(event)
         self.right_click_agent = ag_idx
         if ag_idx != -1:
@@ -1773,12 +1846,22 @@ class PlanViz2024:
             if len(all_tasks_idx) > 0:
                 self.right_click_status = "right"
                 self.right_click_all_tasks_idx += all_tasks_idx
+        
         if self.right_click_status == "right":
             self.create_pop_window(grid_loc)
             # Update agent event list (same logic as before)
             self.update_event_list(self.pop_event_listbox, 1)
             # Update location event list (new logic for events at this location)
             self.update_location_event_list(self.pop_location_listbox)
+        else:
+            # Even if no agents/tasks, show a basic location popup
+            self.create_pop_window(grid_loc)
+            if hasattr(self, 'pop_event_listbox') and self.pop_event_listbox:
+                self.pop_event_listbox.delete(0, tk.END)
+                self.pop_event_listbox.insert(0, "No events at this location")
+            if hasattr(self, 'pop_location_listbox') and self.pop_location_listbox:
+                self.pop_location_listbox.delete(0, tk.END)
+                self.pop_location_listbox.insert(0, "No tasks at this location")
                  
 
     def get_ag_idx(self, event):
