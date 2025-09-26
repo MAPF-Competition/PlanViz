@@ -26,13 +26,9 @@ class PlanViz2023:
         self.pcf:PlanConfig2023 = plan_config
         
         # Platform-specific right-click binding
-        if platform.system() == "Darwin":  # macOS
-            self.pcf.canvas.bind("<Button-2>", self.show_ag_plan_by_click)
-        else:  # Linux and Windows
-            self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
+        self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
 
         # Ensure canvas can receive focus and mouse events
-        self.pcf.canvas.focus_set()
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.__move_from)
@@ -1086,9 +1082,6 @@ class PlanViz2024:
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
         self.pcf.canvas.bind("<Motion>", self.on_hover)
 
-        # Ensure canvas can receive focus and mouse events
-        self.pcf.canvas.focus_set()
-
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
         self.pcf.canvas.bind("<B1-Motion>", self.on_mouse_drag)
@@ -1739,36 +1732,6 @@ class PlanViz2024:
             self.pop_gui_window.lift()
             width = 300  # Width to accommodate two lists
             height = int(8 * self.pcf.tile_size)  # Increase height
-            # Ensure the popup window doesn't go off-screen
-            screen_width = self.pcf.window.winfo_screenwidth()
-            screen_height = self.pcf.window.winfo_screenheight()
-            width = 300  # 增加宽度以容纳两个列表
-            height = int(8 * self.pcf.tile_size)  # 增加高度
-            
-            # Adjust position if it would go off-screen
-            if window_x + width > screen_width:
-                window_x = screen_width - width - 10
-            if window_y + height > screen_height:
-                window_y = screen_height - height - 10
-            if window_x < 0:
-                window_x = 10
-            if window_y < 0:
-                window_y = 10
-            
-            self.pop_gui_window = tk.Toplevel()
-            self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
-            
-            # macOS-specific window handling
-            if platform.system() == "Darwin":
-                # On macOS, ensure proper window layering and focus
-                self.pop_gui_window.lift()
-                self.pop_gui_window.focus_force()
-                self.pop_gui_window.attributes('-topmost', True)
-                # Remove topmost after a short delay to allow normal window management
-                self.pop_gui_window.after(100, lambda: self.pop_gui_window.attributes('-topmost', False))
-            else:
-                self.pop_gui_window.transient(self.pcf.window)
-                self.pop_gui_window.lift()
             
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
@@ -1830,9 +1793,6 @@ class PlanViz2024:
         items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
                                                  x_adjusted+0.1, y_adjusted+0.1)
         
-        # Reset right click status
-        self.right_click_status = "left"
-        
         ag_idx = self.get_ag_idx(event)
         self.right_click_agent = ag_idx
         if ag_idx != -1:
@@ -1853,15 +1813,6 @@ class PlanViz2024:
             self.update_event_list(self.pop_event_listbox, 1)
             # Update location event list (new logic for events at this location)
             self.update_location_event_list(self.pop_location_listbox)
-        else:
-            # Even if no agents/tasks, show a basic location popup
-            self.create_pop_window(grid_loc)
-            if hasattr(self, 'pop_event_listbox') and self.pop_event_listbox:
-                self.pop_event_listbox.delete(0, tk.END)
-                self.pop_event_listbox.insert(0, "No events at this location")
-            if hasattr(self, 'pop_location_listbox') and self.pop_location_listbox:
-                self.pop_location_listbox.delete(0, tk.END)
-                self.pop_location_listbox.insert(0, "No tasks at this location")
                  
 
     def get_ag_idx(self, event):
