@@ -1858,6 +1858,9 @@ class PlanViz2024:
 
 
     def show_ag_plan(self, ag_idx, first_errand_t, moving=False):
+
+        self.pcf.lazy_render_agent_path(ag_idx)
+
         if ag_idx in self.pcf.shown_path_agents and (not moving):  # Remove ag_id if it's already in the set
             self.pcf.shown_path_agents.remove(ag_idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:

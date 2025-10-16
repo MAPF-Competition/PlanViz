@@ -1147,27 +1147,10 @@ class PlanConfig2024:
         print("Rendering the agents... ", end="")
         # Separate the render of static locations and agents so that agents can overlap
         start_objs = []
-        path_objs = []
 
         for ag_id in range(self.team_size):
             start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", tk.DISABLED)
             start_objs.append(start)
-
-            ag_path = []  # Render paths as purple rectangles
-            for _pid_ in range(len(self.exec_paths[ag_id])):
-                p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
-                p_obj = None
-                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
-                                           self.exec_paths[ag_id][_pid_-1][1]):
-                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
-                else:  # non-wait action, smaller rectangle
-                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
-                if p_obj is not None:
-                    self.canvas.tag_lower(p_obj.obj)
-                    self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
-                    self.canvas.delete(p_obj.text)
-                    ag_path.append(p_obj)
-            path_objs.append(ag_path)
 
         if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
@@ -1188,6 +1171,27 @@ class PlanConfig2024:
                                                 outline="")
 
             agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
-                          path_objs[ag_id], self.exec_paths[ag_id], dir_obj)
+                          [], self.exec_paths[ag_id], dir_obj)
             self.agents[ag_id] = agent
         print("Done!")
+
+    def lazy_render_agent_path(self, ag_id: int) -> None:
+        if self.agents[ag_id].path_objs:
+            return
+
+        ag_path = [] # Render paths as purple rectangles
+        for _pid_ in range(len(self.exec_paths[ag_id])):
+            p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
+            p_obj = None
+            if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
+                                       self.exec_paths[ag_id][_pid_-1][1]):
+                p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
+            else:  # non-wait action, smaller rectangle
+                p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
+            if p_obj is not None:
+                self.canvas.tag_lower(p_obj.obj)
+                self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
+                self.canvas.delete(p_obj.text)
+                ag_path.append(p_obj)
+
+        self.agents[ag_id].path_objs = ag_path
