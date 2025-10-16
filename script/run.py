@@ -8,7 +8,7 @@ import numpy as np
 import json
 from plan_config import PlanConfig2023, PlanConfig2024
 from plan_viz import PlanViz2023, PlanViz2024
-
+import math
 
 def main() -> None:
     """The main function of the visualizer.
@@ -20,15 +20,16 @@ def main() -> None:
     parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
     parser.add_argument("--start", type=int, default=0, help="Starting timestep")
-    parser.add_argument("--end", type=int, default=100, help="Ending timestep")
+    parser.add_argument("--end", type=int, default=math.inf, help="Ending timestep")
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
     parser.add_argument("--delay", type=float, help="Wait time between timesteps")
-    parser.add_argument("--grid", dest="show_grid", action="store_true",
+    
+    parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
                         help="Show grid on the environment or not")
-    parser.add_argument("--aid", dest="show_ag_idx", action="store_true",
+    parser.add_argument("--aid", dest="show_ag_idx", type=bool, default=True,
                         help="Show agent indices or not")
-    parser.add_argument("--tid", dest="show_task_idx", action="store_true",
+    parser.add_argument("--tid", dest="show_task_idx", type=bool, default=False,
                         help="Show task indices or not")
     parser.add_argument("--static", dest="show_static", action="store_true",
                         help="Show start locations or not")
@@ -53,7 +54,7 @@ def main() -> None:
     
     if args.version != None:
         version = args.version
-
+    print(version)
     if version == "2024 LoRR":
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
                               args.ppm, args.moves, args.delay)

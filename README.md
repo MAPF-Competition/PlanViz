@@ -67,7 +67,7 @@ Please refer to the [PlanViz instruction manual](./PlanViz.md) for details about
 Open a terminal and type the following command:
 
 ```bash
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json
 ```
 
 ## Tracker Transfer
