@@ -755,6 +755,8 @@ class PlanConfig2024:
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
+        self.actual_path_data = {}
+        self.plan_path_data  = {}
         self.conflicts  = {}
         self.agent_assigned_task = {}
         self.agent_shown_task_arrow = {}
@@ -848,22 +850,23 @@ class PlanConfig2024:
 
         # Determine the actual end timestep based on window size
         if self.window_size is not None:
-            actual_end_tstep = min(self.start_tstep + self.window_size, self.end_tstep)
+            current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
         else:
-            actual_end_tstep = self.end_tstep
+            current_window_end = self.end_tstep
 
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.start_loc[ag_id] = start
 
-            self.exec_paths[ag_id] = [None] * (actual_end_tstep + 1)
+            self.exec_paths[ag_id] = [None] * (self.end_tstep + 1)
             self.exec_paths[ag_id][self.start_tstep] = start
 
             if "actualPaths" in data:
                 tmp_str = data["actualPaths"][ag_id].split(",")
+                self.actual_path_data[ag_id] = tmp_str
 
-                for idx in range(self.start_tstep, min(actual_end_tstep, len(tmp_str))):
+                for idx in range(self.start_tstep, min(current_window_end, len(tmp_str))):
                     motion = tmp_str[idx]
                     next_ = state_trans(self.exec_paths[ag_id][idx], motion)
                     self.exec_paths[ag_id][idx + 1] = next_
@@ -873,13 +876,14 @@ class PlanConfig2024:
             else:
                 print("No actual paths.", end=" ")
 
-            self.plan_paths[ag_id] = [None] * (actual_end_tstep + 1)
+            self.plan_paths[ag_id] = [None] * (self.end_tstep + 1)
             self.plan_paths[ag_id][self.start_tstep] = start
 
             if "plannerPaths" in data:
                 tmp_str = data["plannerPaths"][ag_id].split(",")
+                self.plan_path_data[ag_id] = tmp_str
 
-                for idx in range(self.start_tstep, min(actual_end_tstep, len(tmp_str))):
+                for idx in range(self.start_tstep, min(current_window_end, len(tmp_str))):
                     motion = tmp_str[idx]
                     next_ = state_trans(self.exec_paths[ag_id][idx], motion)
                     self.plan_paths[ag_id][idx + 1] = next_
@@ -887,6 +891,43 @@ class PlanConfig2024:
                 print("No planner paths.", end=" ")
 
         print("Done!")
+
+
+    def extend_path(self, ag_id: int, target_timestep: int) -> None:
+        if ag_id not in self.actual_path_data:
+            return
+
+        if self.exec_paths[ag_id][target_timestep] is not None:
+            return
+
+        state_trans = state_transition
+        if self.agent_model == "MAPF":
+            state_trans = state_transition_mapf
+
+        motion_list = self.actual_path_data[ag_id]
+
+        # Find the closest non-None index before target_timestep
+        start_idx = target_timestep - 1
+        while start_idx >= 0 and self.exec_paths[ag_id][start_idx] is None:
+            start_idx -= 1
+
+        if start_idx < 0:
+            # No valid starting point found
+            return
+
+        # Extend exec_paths
+        for idx in range(start_idx, target_timestep):
+            if idx < len(motion_list):
+                motion = motion_list[idx]
+                next_ = state_trans(self.exec_paths[ag_id][idx], motion)
+                self.exec_paths[ag_id][idx + 1] = next_
+
+        # Extend plan_paths
+        for idx in range(start_idx, target_timestep):
+            if idx < len(motion_list):
+                motion = motion_list[idx]
+                next_ = state_trans(self.plan_paths[ag_id][idx], motion)
+                self.plan_paths[ag_id][idx + 1] = next_
 
 
     def load_errors(self, data:Dict):

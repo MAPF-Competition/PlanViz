@@ -1897,6 +1897,13 @@ class PlanViz2024:
         if self.pcf.cur_tstep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
+        # Check and extend paths if needed (window_size lookahead)
+        if self.pcf.window_size is not None:
+            target_idx = min(self.pcf.cur_tstep + self.pcf.window_size, self.pcf.end_tstep)
+            for (ag_id, agent) in self.pcf.agents.items():
+                if agent.path[target_idx] is None:
+                    self.pcf.extend_path(ag_id, target_idx)
+
         self.next_button.config(state=tk.DISABLED)
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2
 
@@ -2119,7 +2126,14 @@ class PlanViz2024:
 
         self.pcf.cur_tstep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
-        
+
+        # Extend paths if needed when jumping to a specific timestep
+        if self.pcf.window_size is not None:
+            target_idx = min(self.pcf.cur_tstep + self.pcf.window_size, self.pcf.end_tstep)
+            for (ag_id, agent) in self.pcf.agents.items():
+                if target_idx < len(agent.path) and agent.path[target_idx] is None:
+                    self.pcf.extend_path(ag_id, target_idx)
+
         # Change tasks' and agents' colors according to assigned timesteps
         for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for (seq_id, task) in enumerate(seq_task.tasks):
