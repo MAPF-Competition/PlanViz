@@ -857,34 +857,32 @@ class PlanConfig2024:
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
             self.start_loc[ag_id] = start
 
-            self.exec_paths[ag_id] = []  # Get actual path
-            self.exec_paths[ag_id].append(start)
+            self.exec_paths[ag_id] = [None] * (actual_end_tstep + 1)
+            self.exec_paths[ag_id][self.start_tstep] = start
+
             if "actualPaths" in data:
                 tmp_str = data["actualPaths"][ag_id].split(",")
-                motion_start = self.start_tstep if self.window_size is not None else 0
-                motion_end = actual_end_tstep if self.window_size is not None else len(tmp_str)
 
-                for idx in range(motion_start, min(motion_end, len(tmp_str))):
+                for idx in range(self.start_tstep, min(actual_end_tstep, len(tmp_str))):
                     motion = tmp_str[idx]
-                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                    self.exec_paths[ag_id].append(next_)
+                    next_ = state_trans(self.exec_paths[ag_id][idx], motion)
+                    self.exec_paths[ag_id][idx + 1] = next_
+
                 if self.makespan < max(len(tmp_str), 0):
                     self.makespan = max(len(tmp_str), 0)
             else:
                 print("No actual paths.", end=" ")
 
-            self.plan_paths[ag_id] = []  # Get planned path
-            self.plan_paths[ag_id].append(start)
+            self.plan_paths[ag_id] = [None] * (actual_end_tstep + 1)
+            self.plan_paths[ag_id][self.start_tstep] = start
+
             if "plannerPaths" in data:
                 tmp_str = data["plannerPaths"][ag_id].split(",")
-                motion_start = self.start_tstep if self.window_size is not None else 0
-                motion_end = actual_end_tstep if self.window_size is not None else len(tmp_str)
 
-                for idx in range(motion_start, min(motion_end, len(tmp_str))):
+                for idx in range(self.start_tstep, min(actual_end_tstep, len(tmp_str))):
                     motion = tmp_str[idx]
-                    # Use the corresponding position from exec_paths (relative indexing)
-                    next_ = state_trans(self.exec_paths[ag_id][idx - motion_start], motion)
-                    self.plan_paths[ag_id].append(next_)
+                    next_ = state_trans(self.exec_paths[ag_id][idx], motion)
+                    self.plan_paths[ag_id][idx + 1] = next_
             else:
                 print("No planner paths.", end=" ")
 
