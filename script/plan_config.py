@@ -729,7 +729,7 @@ class PlanConfig2024:
 
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, window_size,
                  ppm, moves, delay):
         print("===== Initialize PlanConfig2 =====")
 
@@ -737,6 +737,7 @@ class PlanConfig2024:
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
+        self.window_size:int = window_size
 
         self.agent_model:str = ""
 
@@ -844,6 +845,13 @@ class PlanConfig2024:
         state_trans = state_transition
         if self.agent_model == "MAPF":
             state_trans = state_transition_mapf
+
+        # Determine the actual end timestep based on window size
+        if self.window_size is not None:
+            actual_end_tstep = min(self.start_tstep + self.window_size, self.end_tstep)
+        else:
+            actual_end_tstep = self.end_tstep
+
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -853,11 +861,15 @@ class PlanConfig2024:
             self.exec_paths[ag_id].append(start)
             if "actualPaths" in data:
                 tmp_str = data["actualPaths"][ag_id].split(",")
-                for motion in tmp_str:
+                motion_start = self.start_tstep if self.window_size is not None else 0
+                motion_end = actual_end_tstep if self.window_size is not None else len(tmp_str)
+
+                for idx in range(motion_start, min(motion_end, len(tmp_str))):
+                    motion = tmp_str[idx]
                     next_ = state_trans(self.exec_paths[ag_id][-1], motion)
                     self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+                if self.makespan < max(len(tmp_str), 0):
+                    self.makespan = max(len(tmp_str), 0)
             else:
                 print("No actual paths.", end=" ")
 
@@ -865,16 +877,16 @@ class PlanConfig2024:
             self.plan_paths[ag_id].append(start)
             if "plannerPaths" in data:
                 tmp_str = data["plannerPaths"][ag_id].split(",")
-                for tstep, motion in enumerate(tmp_str):
-                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
+                motion_start = self.start_tstep if self.window_size is not None else 0
+                motion_end = actual_end_tstep if self.window_size is not None else len(tmp_str)
+
+                for idx in range(motion_start, min(motion_end, len(tmp_str))):
+                    motion = tmp_str[idx]
+                    # Use the corresponding position from exec_paths (relative indexing)
+                    next_ = state_trans(self.exec_paths[ag_id][idx - motion_start], motion)
                     self.plan_paths[ag_id].append(next_)
             else:
                 print("No planner paths.", end=" ")
-
-        # Slice the paths according to the start and end timestep
-        for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
 
         print("Done!")
 
