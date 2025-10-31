@@ -1,6 +1,7 @@
 {
     "actionModel": "MAPF_T",
     "AllValid": "Yes",
+    "version": "2024 LoRR",
     "teamSize": 20,
     "start": [
         [
@@ -253,7 +254,8 @@
         0.190057042,
         0.1901035
     ],
-    "errors": [],
+    "errors": [
+    ],
     "actualSchedule": [
         "1:28,19:38,72:61",
         "1:31,32:44,66:58",
