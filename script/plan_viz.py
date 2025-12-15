@@ -1349,6 +1349,9 @@ class PlanViz2024:
             task_id (int): the index in self.pcf.seq_tasks
             color   (str): the color to be changed
         """
+        # Lazy render if not yet rendered
+        self.pcf.lazy_render_task(task_id, seq_id)
+
         # Change the color of the task
         cur_task_obj = self.pcf.seq_tasks[task_id].tasks[seq_id].task_obj.obj
         if self.pcf.canvas.itemcget(cur_task_obj, "fill") != color:
@@ -1499,7 +1502,8 @@ class PlanViz2024:
             for task_idx in self.pcf.shown_tasks_seq:
                 for arrow_id in self.pcf.agent_shown_task_arrow[ag_idx]:
                     self.pcf.canvas.delete(arrow_id)
-                for _, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+                for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+                    self.pcf.lazy_render_task(task_idx, idx)
                     self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
                     self.pcf.canvas.tag_lower(tsk.task_obj.obj)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
@@ -1530,7 +1534,7 @@ class PlanViz2024:
             x_center = (coords[0] + coords[2]) / 2
             y_center = (coords[1] + coords[3]) / 2
             return x_center, y_center
-        
+
         arrows = []
         self.pcf.shown_tasks_seq.add(task_idx)
         last_obj = None
@@ -1538,14 +1542,16 @@ class PlanViz2024:
             task_t = tsk.events["finished"]["timestep"]
             if self.pcf.cur_tstep >= task_t:
                 continue
-            
+
             self.change_task_color(task_idx,idx, "pink")
             if last_obj == None:
+                self.pcf.lazy_render_task(task_idx, idx)
                 last_obj = tsk.task_obj.obj
                 self.change_task_color(task_idx,idx, "orange")
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
                 continue
 
+            self.pcf.lazy_render_task(task_idx, idx)
             x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
             last_obj = tsk.task_obj.obj
             x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
@@ -1688,6 +1694,7 @@ class PlanViz2024:
             for arrow_id in self.pcf.agent_shown_task_arrow[agent_idx]:
                 self.pcf.canvas.delete(arrow_id)
             for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+                self.pcf.lazy_render_task(task_idx, idx)
                 self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(tsk.task_obj.obj)
         else:
@@ -1703,6 +1710,7 @@ class PlanViz2024:
                 if idx == first_errand:
                     self.change_task_color(task_idx,idx, "orange")
 
+                self.pcf.lazy_render_task(task_idx, idx)
                 x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
                 last_obj = tsk.task_obj.obj
                 x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
@@ -1773,8 +1781,9 @@ class PlanViz2024:
 
 
     def show_task_index(self) -> None:
-        for (_, seq_task) in self.pcf.seq_tasks.items():
+        for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
+                self.pcf.lazy_render_task(task_id, i)
                 self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
                 task_t = task.events["finished"]["timestep"]
                 if self.task_shown.get() == "Next Errand" and task_t >= self.pcf.cur_tstep:
@@ -1791,11 +1800,12 @@ class PlanViz2024:
 
 
     def show_tasks(self) -> None:
-        for (_, seq_task) in self.pcf.seq_tasks.items():
+        for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
+                self.pcf.lazy_render_task(task_id, i)
                 self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
 
-        for (_, seq_task) in self.pcf.seq_tasks.items():
+        for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
                 task_t = task.events["finished"]["timestep"]
                 if self.task_shown.get() == "Next Errand" and task_t > self.pcf.cur_tstep:
@@ -1820,6 +1830,7 @@ class PlanViz2024:
 
 
     def show_single_task(self, task_id:int, seq_id:int=0, ignore:int=0) -> None:
+        self.pcf.lazy_render_task(task_id, seq_id)
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
         self.hide_single_task(task_id, seq_id)
 
@@ -1875,6 +1886,7 @@ class PlanViz2024:
 
 
     def hide_single_task(self, task_id, seq_id) -> None:
+        self.pcf.lazy_render_task(task_id, seq_id)
         tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
         self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
         self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)

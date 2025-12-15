@@ -4,7 +4,7 @@
 
 import sys
 import math
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 TASK_COLORS: Dict[int, str] = {
     "unassigned": "#eeeaa2",
@@ -172,7 +172,7 @@ class Agent:
 
 
 class Task:
-    def __init__(self, idx:int, loc:Tuple[int,int], task_obj: BaseObj,
+    def __init__(self, idx:int, loc:Tuple[int,int], task_obj: Optional[BaseObj],
                  assigned:Tuple[int,int]=(math.inf,math.inf),
                  finished:Tuple[int,int]=(math.inf,math.inf),
                  state:str="unassigned"):

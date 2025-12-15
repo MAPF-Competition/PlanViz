@@ -1021,16 +1021,25 @@ class PlanConfig2024:
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                tobj = self.render_obj(
-                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
-                )
-                if not (tloc in self.grid2task.keys()):
-                    self.grid2task[tobj.obj] = []
-                self.grid2task[tobj.obj].append(tid)
-                tasks.append(Task(tid, tloc, tobj))
+                tasks.append(Task(tid, tloc, None))
             self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
+
+    def lazy_render_task(self, task_id: int, seq_id: int) -> None:
+        task = self.seq_tasks[task_id].tasks[seq_id]
+        if task.task_obj is not None:
+            return
+
+        tid = task.idx
+        tloc = task.loc
+        tobj = self.render_obj(
+            tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
+        )
+        task.task_obj = tobj
+        if tobj.obj not in self.grid2task:
+            self.grid2task[tobj.obj] = []
+        self.grid2task[tobj.obj].append(tid)
 
 
     def load_plan(self, plan_file):
@@ -1058,7 +1067,7 @@ class PlanConfig2024:
         self.load_events(data)
 
 
-    def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",
+    def render_obj(self, idx:int, loc:Tuple[int, int], shape:str="rectangle",
                    color:str="blue", state=tk.NORMAL,
                    offset:float=0.05, tag:str="obj", outline:str=""):
         """Mark certain positions on the visualizer
