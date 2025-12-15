@@ -747,6 +747,7 @@ class PlanConfig2024:
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
+        self.rendered_tasks: Set[Tuple[int, int]] = set()
         self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
         self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
         self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
@@ -1037,6 +1038,7 @@ class PlanConfig2024:
             tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
         )
         task.task_obj = tobj
+        self.rendered_tasks.add((task_id, seq_id))
         if tobj.obj not in self.grid2task:
             self.grid2task[tobj.obj] = []
         self.grid2task[tobj.obj].append(tid)
