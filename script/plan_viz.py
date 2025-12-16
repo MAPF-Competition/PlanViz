@@ -1270,11 +1270,15 @@ class PlanViz2024:
 
     def update_event_list(self):
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+
+        window_size = 200
         if self.right_click_status == "ctrlright":
             end_tstep = self.pcf.end_tstep
+            start_timestep = 0
         if self.right_click_status == "right":
             self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
-            end_tstep = self.max_event_t
+            end_tstep = self.pcf.cur_tstep
+            start_timestep = max(0, end_tstep - window_size)
         self.eve_id = 0
         self.event_listbox.delete(0, tk.END)
         
@@ -1289,7 +1293,7 @@ class PlanViz2024:
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
-        for tstep in range(end_tstep, -1, -1):
+        for tstep in range(end_tstep, start_timestep - 1, -1):
             if tstep in self.pcf.events["assigned"]:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -2005,7 +2009,10 @@ class PlanViz2024:
         # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
             return
+
+        start_time = time.time()
         self.update_event_list()
+        print(f"Update time: {time.time() - start_time}")
 
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
