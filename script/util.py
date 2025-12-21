@@ -5,6 +5,7 @@
 import sys
 import math
 from typing import List, Tuple, Dict, Optional
+from numba import njit, prange
 
 TASK_COLORS: Dict[int, str] = {
     "unassigned": "#eeeaa2",
@@ -38,6 +39,8 @@ INT_MAX:int = 2**31 - 1
 DBL_MAX:int = 1.79769e+308
 TEXT_SIZE:int = 12
 
+MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
+MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
 
 def get_map_name(in_file:str) -> str:
     """Get the map name from the file name
@@ -149,6 +152,47 @@ def state_transition_mapf(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int
     print("Invalid motion")
     sys.exit()
 
+@njit(parallel=True, cache=True)
+def compute_all_paths(motion_codes, starts, results, is_mapf, team_size, num_steps):
+    for ag_id in prange(team_size):
+        row = starts[ag_id, 0]
+        col = starts[ag_id, 1]
+        direction = starts[ag_id, 2]
+
+        results[ag_id, 0, 0] = row
+        results[ag_id, 0, 1] = col
+        results[ag_id, 0, 2] = direction
+
+        for i in range(num_steps):
+            motion = motion_codes[ag_id, i]
+
+            if is_mapf:
+                if motion == 0:
+                    row += 1
+                elif motion == 1:
+                    col -= 1
+                elif motion == 2:
+                    col += 1
+                elif motion == 3:
+                    row -= 1
+            else:
+                if motion == 0:
+                    if direction == 0:
+                        col += 1
+                    elif direction == 1:
+                        row -= 1
+                    elif direction == 2:
+                        col -= 1
+                    else:
+                        row += 1
+                elif motion == 1:
+                    direction = (direction + 3) % 4
+                elif motion == 2:
+                    direction = (direction + 1) % 4
+
+            results[ag_id, i + 1, 0] = row
+            results[ag_id, i + 1, 1] = col
+            results[ag_id, i + 1, 2] = direction
 
 class BaseObj:
     def __init__(self, _obj_, _text_, _loc_, _color_) -> None:
