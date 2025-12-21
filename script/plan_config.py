@@ -7,6 +7,7 @@ All rights reserved.
 import os
 import sys
 import logging
+import time
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
@@ -18,7 +19,10 @@ from matplotlib import cm
 from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
-    BaseObj, Agent, Task, SequentialTask)
+    BaseObj, Agent, Task, SequentialTask, compute_all_paths)
+
+MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
+MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -842,57 +846,66 @@ class PlanConfig2024:
         print("Done!")
 
 
-    def load_paths(self, data:Dict):
+    def load_paths(self, data: Dict):
         print("Loading paths", end="... ")
 
-        state_trans = state_transition
-        if self.agent_model == "MAPF":
-            state_trans = state_transition_mapf
+        is_mapf = (self.agent_model == "MAPF")
+        motion_map = MOTION_CODE_MAPF if is_mapf else MOTION_CODE
+        default_wait = 4 if is_mapf else 3
 
-        # Determine the actual end timestep based on window size
-        if self.window_size is not None:
-            current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
-        else:
-            current_window_end = self.end_tstep
+        if "actualPaths" not in data:
+            print("No actual paths.")
+            return
+
+        max_len = max(len(data["actualPaths"][ag].split(",")) for ag in range(self.team_size))
+
+        starts = np.zeros((self.team_size, 3), dtype=np.int32)
+        motion_codes = np.full((self.team_size, max_len), default_wait, dtype=np.int32)
+        results = np.zeros((self.team_size, max_len + 1, 3), dtype=np.int32)
 
         for ag_id in range(self.team_size):
-            start = data["start"][ag_id]  # Get start location
-            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
-            self.start_loc[ag_id] = start
+            start = data["start"][ag_id]
+            starts[ag_id, 0] = int(start[0])
+            starts[ag_id, 1] = int(start[1])
+            starts[ag_id, 2] = DIRECTION[start[2]]
+            self.start_loc[ag_id] = (starts[ag_id, 0], starts[ag_id, 1], starts[ag_id, 2])
 
-            self.exec_paths[ag_id] = [None] * (self.end_tstep + 1)
-            self.exec_paths[ag_id][self.start_tstep] = start
+            tmp_str = data["actualPaths"][ag_id].split(",")
+            self.actual_path_data[ag_id] = tmp_str
 
-            if "actualPaths" in data:
-                tmp_str = data["actualPaths"][ag_id].split(",")
-                self.actual_path_data[ag_id] = tmp_str
+            for i, m in enumerate(tmp_str):
+                motion_codes[ag_id, i] = motion_map.get(m, default_wait)
 
-                for idx in range(self.start_tstep, min(current_window_end, len(tmp_str))):
-                    motion = tmp_str[idx]
-                    next_ = state_trans(self.exec_paths[ag_id][idx], motion)
-                    self.exec_paths[ag_id][idx + 1] = next_
+            if self.makespan < len(tmp_str):
+                self.makespan = len(tmp_str)
 
-                if self.makespan < max(len(tmp_str), 0):
-                    self.makespan = max(len(tmp_str), 0)
-            else:
-                print("No actual paths.", end=" ")
+        compute_all_paths(motion_codes, starts, results, is_mapf, self.team_size, max_len)
 
-            self.plan_paths[ag_id] = [None] * (self.end_tstep + 1)
-            self.plan_paths[ag_id][self.start_tstep] = start
+        for ag_id in range(self.team_size):
+            self.exec_paths[ag_id] = results[ag_id]
 
-            if "plannerPaths" in data:
+        if "plannerPaths" in data:
+            plan_motion_codes = np.full((self.team_size, max_len), default_wait, dtype=np.int32)
+            plan_results = np.zeros((self.team_size, max_len + 1, 3), dtype=np.int32)
+
+            for ag_id in range(self.team_size):
                 tmp_str = data["plannerPaths"][ag_id].split(",")
                 self.plan_path_data[ag_id] = tmp_str
 
-                for idx in range(self.start_tstep, min(current_window_end, len(tmp_str))):
-                    motion = tmp_str[idx]
-                    next_ = state_trans(self.exec_paths[ag_id][idx], motion)
-                    self.plan_paths[ag_id][idx + 1] = next_
-            else:
-                print("No planner paths.", end=" ")
+                for i, m in enumerate(tmp_str):
+                    if i < max_len:
+                        plan_motion_codes[ag_id, i] = motion_map.get(m, default_wait)
+
+            compute_all_paths(plan_motion_codes, starts, plan_results, is_mapf, self.team_size, max_len)
+
+            for ag_id in range(self.team_size):
+                self.plan_paths[ag_id] = plan_results[ag_id]
+        else:
+            print("No planner paths.", end=" ")
+            for ag_id in range(self.team_size):
+                self.plan_paths[ag_id] = self.exec_paths[ag_id].copy()
 
         print("Done!")
-
 
     def extend_path(self, ag_id: int, target_timestep: int) -> None:
         if ag_id not in self.actual_path_data:
