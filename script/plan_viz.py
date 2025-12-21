@@ -1279,20 +1279,13 @@ class PlanViz2024:
             self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
             end_tstep = self.pcf.cur_tstep
             start_timestep = max(0, end_tstep - window_size)
-        self.eve_id = 0
+
         self.event_listbox.delete(0, tk.END)
-        
-        monospace_font = font.Font(family='Courier')
-        self.event_listbox.config(font=monospace_font)
+
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
-        self.event_listbox.insert(self.eve_id, header)
-        self.eve_id += 1
-        self.event_listbox.insert(self.eve_id, "-" * 34)  # Separator line
-        self.eve_id += 1
-        
-        time_list = list(self.pcf.events["assigned"])
-        time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
-        time_list = sorted(time_list, reverse=False)
+        items = [header, "-" * 34]
+        highlight_indices = []
+
         for tstep in range(end_tstep, start_timestep - 1, -1):
             if tstep in self.pcf.events["assigned"]:
                 cur_events= self.pcf.events["assigned"][tstep]
@@ -1304,11 +1297,10 @@ class PlanViz2024:
                     if seq_id == 0:
                         e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "assigned")
-                        self.event_listbox.insert(self.eve_id, e_str)
                         if tstep == self.pcf.cur_tstep:
-                            self.event_listbox.itemconfigure(self.eve_id, background='yellow')
-                            
-                        self.eve_id += 1
+                            highlight_indices.append(len(items))
+                        items.append(e_str)
+
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -1322,11 +1314,15 @@ class PlanViz2024:
                     else:
                         e_str = f"{tstep:<6}{ag_id:<8}{'E-Finished':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "errand_finished")
-                        
-                    self.event_listbox.insert(self.eve_id, e_str)
                     if tstep == self.pcf.cur_tstep:
-                            self.event_listbox.itemconfigure(self.eve_id, background='yellow')
-                    self.eve_id += 1
+                        highlight_indices.append(len(items))
+                    items.append(e_str)
+
+
+        self.event_listbox.insert(tk.END, *items)
+
+        for idx in highlight_indices:
+            self.event_listbox.itemconfigure(idx, background='yellow')
             
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
