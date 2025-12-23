@@ -857,7 +857,13 @@ class PlanConfig2024:
             print("No actual paths.")
             return
 
-        max_len = max(len(data["actualPaths"][ag].split(",")) for ag in range(self.team_size))
+        # Build lookup table for fast character to code conversion
+        char_to_code = np.full(128, default_wait, dtype=np.int32)
+        for char, code in motion_map.items():
+            char_to_code[ord(char)] = code
+
+        all_actual_paths = data["actualPaths"]
+        max_len = max(path.count(',') + 1 for path in all_actual_paths[:self.team_size])
 
         starts = np.zeros((self.team_size, 3), dtype=np.int32)
         motion_codes = np.full((self.team_size, max_len), default_wait, dtype=np.int32)
@@ -870,14 +876,16 @@ class PlanConfig2024:
             starts[ag_id, 2] = DIRECTION[start[2]]
             self.start_loc[ag_id] = (starts[ag_id, 0], starts[ag_id, 1], starts[ag_id, 2])
 
-            tmp_str = data["actualPaths"][ag_id].split(",")
-            self.actual_path_data[ag_id] = tmp_str
+            path_str = all_actual_paths[ag_id]
+            self.actual_path_data[ag_id] = path_str.split(",")
 
-            for i, m in enumerate(tmp_str):
-                motion_codes[ag_id, i] = motion_map.get(m, default_wait)
+            # Fast parsing: remove commas and convert directly via byte array
+            motions = path_str.replace(",", "")
+            motion_bytes = np.frombuffer(motions.encode('ascii'), dtype=np.uint8)
+            motion_codes[ag_id, :len(motion_bytes)] = char_to_code[motion_bytes]
 
-            if self.makespan < len(tmp_str):
-                self.makespan = len(tmp_str)
+            if self.makespan < len(motion_bytes):
+                self.makespan = len(motion_bytes)
 
         compute_all_paths(motion_codes, starts, results, is_mapf, self.team_size, max_len)
 
@@ -888,13 +896,15 @@ class PlanConfig2024:
             plan_motion_codes = np.full((self.team_size, max_len), default_wait, dtype=np.int32)
             plan_results = np.zeros((self.team_size, max_len + 1, 3), dtype=np.int32)
 
+            all_planner_paths = data["plannerPaths"]
             for ag_id in range(self.team_size):
-                tmp_str = data["plannerPaths"][ag_id].split(",")
-                self.plan_path_data[ag_id] = tmp_str
+                path_str = all_planner_paths[ag_id]
+                self.plan_path_data[ag_id] = path_str.split(",")
 
-                for i, m in enumerate(tmp_str):
-                    if i < max_len:
-                        plan_motion_codes[ag_id, i] = motion_map.get(m, default_wait)
+                motions = path_str.replace(",", "")
+                motion_bytes = np.frombuffer(motions.encode('ascii'), dtype=np.uint8)
+                length = min(len(motion_bytes), max_len)
+                plan_motion_codes[ag_id, :length] = char_to_code[motion_bytes[:length]]
 
             compute_all_paths(plan_motion_codes, starts, plan_results, is_mapf, self.team_size, max_len)
 
