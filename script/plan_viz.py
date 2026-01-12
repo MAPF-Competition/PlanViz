@@ -2441,8 +2441,9 @@ class PlanViz2024:
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t, moving=True)
         
-        self.update_event_list(self.event_listbox, 0)
-        self.update_event_list(self.pop_event_listbox, 1)
+        # self.update_event_list(self.event_listbox, 0)
+        # self.update_event_list(self.pop_event_listbox, 1)
+        self.update_combined_list()
         # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
             # Extract grid location info from popup window title
@@ -2578,8 +2579,9 @@ class PlanViz2024:
         self.show_agent_index()
         
         
-        self.update_event_list(self.event_listbox, 0)
-        self.update_event_list(self.pop_event_listbox, 1)
+        # self.update_event_list(self.event_listbox, 0)
+        # self.update_event_list(self.pop_event_listbox, 1)
+        self.update_combined_list()
         # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
             # Extract grid location info from popup window title
@@ -2590,7 +2592,7 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
-        self.update_error_list(self.conflict_listbox)
+        # self.update_error_list(self.conflict_listbox)
         self.pcf.canvas.update()
 
 
