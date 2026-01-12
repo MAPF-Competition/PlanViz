@@ -1198,49 +1198,78 @@ class PlanViz2024:
         self.update_button.grid(row=self.row_idx, column=2, sticky="w")
         self.row_idx += 1
 
-        # ---------- Show the list of errors ----------------------- #
-        err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
-        err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        # ---------- Show the combined list of errors and events ----------------------- #
+        combined_label = tk.Label(self.frame, text="Errors & Events", font=("Arial",TEXT_SIZE))
+        combined_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
         self.shown_conflicts:Dict[str, List[List,bool]] = {}
-        self.conflict_listbox = tk.Listbox(self.frame,
+        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+
+        # Combined listbox for both errors and events
+        self.combined_listbox = tk.Listbox(self.frame,
                                            width=35,
-                                           height=9,
+                                           height=18,
                                            font=("Arial",TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
 
-        self.conflict_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
-        self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
-        self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
+        self.combined_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
+        self.combined_listbox.bind("<<ListboxSelect>>", self.select_combined_item)
+        self.combined_listbox.bind("<Double-1>", self.move_to_combined_item)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
-        self.conflict_listbox.config(yscrollcommand = scrollbar.set)
-        scrollbar.config(command=self.conflict_listbox.yview)
+        self.combined_listbox.config(yscrollcommand = scrollbar.set)
+        scrollbar.config(command=self.combined_listbox.yview)
         scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
+
+        # Keep references for compatibility
+        self.conflict_listbox = self.combined_listbox
+        self.event_listbox = self.combined_listbox
+
+        # ---------- Show the list of errors ----------------------- #
+        # err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
+        # err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        # self.row_idx += 1
+        #
+        # self.shown_conflicts:Dict[str, List[List,bool]] = {}
+        # self.conflict_listbox = tk.Listbox(self.frame,
+        #                                    width=35,
+        #                                    height=9,
+        #                                    font=("Arial",TEXT_SIZE),
+        #                                    selectmode=tk.EXTENDED)
+        #
+        # self.conflict_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
+        # self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
+        # self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
+        #
+        # scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
+        # self.conflict_listbox.config(yscrollcommand = scrollbar.set)
+        # scrollbar.config(command=self.conflict_listbox.yview)
+        # scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
+        # self.row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
-        event_label = tk.Label(self.frame, text="Most recent of events", font=("Arial",TEXT_SIZE))
-        event_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
-        self.row_idx += 1
-
-        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
-        self.event_listbox = tk.Listbox(self.frame,
-                                        width=35,
-                                        height=9,
-                                        font=("Arial",TEXT_SIZE),
-                                        selectmode=tk.EXTENDED)
-        
-
-        self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
-        self.event_listbox.bind("<Double-1>", self.move_to_event)
-
-        scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
-        self.event_listbox.config(yscrollcommand = scrollbar.set)
-        scrollbar.config(command=self.event_listbox.yview)
-        scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
-        self.row_idx += 1
+        # event_label = tk.Label(self.frame, text="Most recent of events", font=("Arial",TEXT_SIZE))
+        # event_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        # self.row_idx += 1
+        #
+        # self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        # self.event_listbox = tk.Listbox(self.frame,
+        #                                 width=35,
+        #                                 height=9,
+        #                                 font=("Arial",TEXT_SIZE),
+        #                                 selectmode=tk.EXTENDED)
+        #
+        #
+        # self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
+        # self.event_listbox.bind("<Double-1>", self.move_to_event)
+        #
+        # scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
+        # self.event_listbox.config(yscrollcommand = scrollbar.set)
+        # scrollbar.config(command=self.event_listbox.yview)
+        # scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
+        # self.row_idx += 1
         print("Done!")
 
         self.show_grid()
@@ -1265,6 +1294,104 @@ class PlanViz2024:
         wd_height = str(wd_height)
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
+
+    def update_combined_list(self, pop=0):
+        """Update the combined errors & events listbox"""
+        if self.combined_listbox == None or (not self.combined_listbox.winfo_exists()):
+            return
+
+        item_id = 0
+        self.combined_listbox.delete(0, tk.END)
+        monospace_font = font.Font(family='Courier')
+        self.combined_listbox.config(font=monospace_font)
+
+        tstep = self.pcf.cur_tstep  # 현재 timestep
+
+        # ===== HEADER =====
+        header = f"{'Time':<6}{'Type':<6}{'Agent':<8}{'Detail':<20}"
+        self.combined_listbox.insert(item_id, header)
+        item_id += 1
+        self.combined_listbox.insert(item_id, "-" * 40)
+        item_id += 1
+
+        # ===== ERRORS =====
+        if tstep in self.pcf.conflicts:
+            for conf in self.pcf.conflicts[tstep]:
+                if len(conf) == 5:
+                    task_id, agent1, agent2, tstep_std, description = conf
+                if len(conf) == 4:
+                    agent1, agent2, tstep_std, description = conf
+                if agent1 > (self.pcf.team_size-1) or agent2 > (self.pcf.team_size-1):
+                    continue
+                assert tstep == tstep_std
+                pid = tstep - self.pcf.start_tstep
+
+                # Agent column
+                agent_str = f"{agent1},{agent2}"
+
+                # Detail column
+                if description == "vertex conflict":
+                    _loc = "(" + str(self.pcf.agents[agent1].plan_path[pid][0]) + "," + \
+                           str(self.pcf.agents[agent1].plan_path[pid][1]) + ")"
+                    detail_str = "v: " + _loc
+                elif description == "edge conflict":
+                    _loc1 = "(" + str(self.pcf.agents[agent1].plan_path[pid-1][0]) + "," + \
+                            str(self.pcf.agents[agent1].plan_path[pid-1][1]) + ")"
+                    _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid][0]) + "," + \
+                            str(self.pcf.agents[agent1].plan_path[pid][1]) + ")"
+                    detail_str = "e: " + _loc1 + "->" + _loc2
+                elif description == "incorrect vector size":
+                    detail_str = "Planner timeout"
+                elif "already assigned" in description:
+                    detail_str = f"T({task_id}) !-> a{agent1}"
+                else:
+                    detail_str = description
+
+                conf_str = f"{tstep:<6}{'ERR':<6}{agent_str:<8}{detail_str:<20}"
+                self.combined_listbox.insert(item_id, conf_str)
+                self.combined_listbox.itemconfigure(item_id, background='red', foreground='white')
+                self.shown_conflicts[conf_str] = [conf, False]
+                item_id += 1
+
+        # ===== EVENTS =====
+        if tstep in self.pcf.events["assigned"]:
+            cur_events = self.pcf.events["assigned"][tstep]
+            for global_task_id in sorted(cur_events.keys(), reverse=False):
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                ag_id = cur_events[global_task_id]
+                if pop and (ag_id != self.right_click_agent):
+                    continue
+                if seq_id == 0:
+                    e_str = f"{tstep:<6}{'ASN':<6}{ag_id:<8}{'Task ' + str(task_id):<20}"
+                    self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "assigned")
+                    self.combined_listbox.insert(item_id, e_str)
+                    self.combined_listbox.itemconfigure(item_id, background='yellow')
+                    item_id += 1
+
+        if tstep in self.pcf.events["finished"]:
+            cur_events = self.pcf.events["finished"][tstep]
+            for global_task_id in sorted(cur_events.keys(), reverse=False):
+                task_id = global_task_id // self.pcf.max_seq_num
+                if pop and self.right_click_agent < 0 and not (task_id in self.right_click_all_tasks_idx):
+                    continue
+                seq_id = global_task_id % self.pcf.max_seq_num
+                ag_id = cur_events[global_task_id]
+                if pop and (self.right_click_agent > -1 and ag_id != self.right_click_agent):
+                    continue
+
+                if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
+                    type_str = "T-FIN"
+                    event_type = "task_finished"
+                else:
+                    type_str = "E-FIN"
+                    event_type = "errand_finished"
+
+                e_str = f"{tstep:<6}{type_str:<6}{ag_id:<8}{'Task ' + str(task_id):<20}"
+                self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, event_type)
+                self.combined_listbox.insert(item_id, e_str)
+                self.combined_listbox.itemconfigure(item_id, background='lightgreen')
+                item_id += 1
 
     def update_error_list(self, error_listbox):
         if error_listbox == None:
@@ -1344,7 +1471,7 @@ class PlanViz2024:
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
                     if pop and \
-                       (ag_id != self.right_click_agent): 
+                       (ag_id != self.right_click_agent):
                         continue
                     if seq_id == 0:
                         e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
@@ -1352,7 +1479,7 @@ class PlanViz2024:
                         event_listbox.insert(self.eve_id, e_str)
                         if tstep == self.pcf.cur_tstep:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
-                            
+
                         self.eve_id += 1
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
@@ -1368,7 +1495,7 @@ class PlanViz2024:
                     else:
                         e_str = f"{tstep:<6}{ag_id:<8}{'E-Finished':<12}{task_id:<8}"
                         self.shown_events[e_str] = (tstep, ag_id, task_id, seq_id, "errand_finished")
-                        
+
                     event_listbox.insert(self.eve_id, e_str)
                     if tstep == self.pcf.cur_tstep:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
@@ -2185,9 +2312,10 @@ class PlanViz2024:
         # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
             return
-        
-        self.update_event_list(self.event_listbox, 0)
-        self.update_event_list(self.pop_event_listbox, 1)
+
+        self.update_combined_list(0)
+        # self.update_event_list(self.event_listbox, 0)
+        # self.update_event_list(self.pop_event_listbox, 1)
         # If popup window location list exists, update it too
         if self.pop_location_listbox and self.pop_location_listbox.winfo_exists():
             # Extract grid location info from popup window title
