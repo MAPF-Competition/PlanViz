@@ -1393,6 +1393,30 @@ class PlanViz2024:
                 self.combined_listbox.itemconfigure(item_id, background='lightgreen')
                 item_id += 1
 
+    def select_combined_item(self, event):
+        """Route to appropriate handler based on item type"""
+        selected_indices = event.widget.curselection()
+        if not selected_indices:
+            return
+
+        item_str = self.combined_listbox.get(selected_indices[0])
+
+        if item_str in self.shown_conflicts:
+            self.select_conflict(event)
+
+    def move_to_combined_item(self, event):
+        """Route to appropriate handler based on item type"""
+        selection = event.widget.curselection()
+        if not selection:
+            return
+
+        item_str = self.combined_listbox.get(selection[0])
+
+        if item_str in self.shown_conflicts:
+            self.move_to_conflict(event)
+        elif item_str in self.shown_events:
+            self.move_to_event(event)
+
     def update_error_list(self, error_listbox):
         if error_listbox == None:
             return
