@@ -24,7 +24,7 @@ class PlanViz2023:
 
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2023 = plan_config
-        
+
         # Platform-specific right-click binding
         self.pcf.canvas.bind("<Button-3>", self.show_ag_plan_by_click)
 
@@ -51,7 +51,7 @@ class PlanViz2023:
         self.is_heat_map = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
-        
+
         self.is_run.set(False)
         self.is_grid.set(_grid)
         self.show_ag_idx.set(_ag_idx)
@@ -254,7 +254,7 @@ class PlanViz2023:
                 elif conf[-1] == "incorrect vector size":
                     conf_str += "Planner timeout"
                 # elif conf[-1] == "incorrect vector size":
-                    
+
                 else:
                     conf_str += conf[-1]
                 conf_str += ", t: " + str(tstep)
@@ -607,7 +607,7 @@ class PlanViz2023:
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
         for (_, _agent_) in self.pcf.agents.items():
-            
+
             self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
 
@@ -1025,6 +1025,11 @@ class PlanViz2024:
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
 
+        # Event filter variables
+        self.all_events = []
+        self.active_filters = []  # List of (field, pattern) tuples
+        self.filtered_events = []
+
         gui_window = self.pcf.window
         self.gui_column = 1
         if (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
@@ -1040,7 +1045,7 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
-        
+
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.pcf.cur_tstep:03d}",
                                        font=("Arial", TEXT_SIZE + 10))
@@ -1054,14 +1059,165 @@ class PlanViz2024:
 
         self.init_button()
         self.init_label()
+        self.build_event_list()
 
         print("=====          DONE         =====")
 
 
+    def build_event_list(self):
+        """Build a flat list of all events for filtering purposes."""
+        self.all_events = []
+
+        # Assigned events
+        for tstep, tasks in self.pcf.events["assigned"].items():
+            for global_task_id, agent_id in tasks.items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                if seq_id == 0:  # Only count first errand as "Assigned"
+                    self.all_events.append({
+                        "timestep": tstep,
+                        "agent": agent_id,
+                        "task": task_id,
+                        "type": "Assigned"
+                    })
+
+        # Finished events
+        for tstep, tasks in self.pcf.events["finished"].items():
+            for global_task_id, agent_id in tasks.items():
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+
+                # Distinguish T-Finished vs E-Finished
+                if seq_id == len(self.pcf.seq_tasks[task_id].tasks) - 1:
+                    event_type = "T-Finished"
+                else:
+                    event_type = "E-Finished"
+
+                self.all_events.append({
+                    "timestep": tstep,
+                    "agent": agent_id,
+                    "task": task_id,
+                    "type": event_type
+                })
+
+        # Sort by timestep descending (most recent first)
+        self.all_events.sort(key=lambda x: -x["timestep"])
+
+    def on_filter_entry_focus_in(self, event):
+        """Clear placeholder text when entry is focused."""
+        if self.filter_entry.get() == "Regex (e.g., 37.*, .*ed)":
+            self.filter_entry.delete(0, tk.END)
+            self.filter_entry.config(fg="black")
+
+    def on_filter_entry_focus_out(self, event):
+        """Restore placeholder text if entry is empty."""
+        if self.filter_entry.get() == "":
+            self.filter_entry.insert(0, "Regex (e.g., 37.*, .*ed)")
+            self.filter_entry.config(fg="grey")
+
+    def remove_filter(self):
+        """Remove the selected filter from the active filters list."""
+        selection = self.filter_listbox.curselection()
+        if not selection:
+            return
+
+        idx = selection[0]
+        self.filter_listbox.delete(idx)
+        self.active_filters.pop(idx)
+        self.apply_filters()
+
+    def add_filter(self):
+        """Add a new filter to the active filters list."""
+        field = self.filter_field.get()
+        pattern = self.filter_pattern.get()
+
+        # Ignore placeholder text
+        if pattern == "" or pattern == "Regex (e.g., 37.*, .*ed)":
+            return
+
+        # Validate regex
+        try:
+            re.compile(pattern)
+        except re.error:
+            print(f"Invalid regex pattern: {pattern}")
+            return
+
+        self.active_filters.append((field, pattern))
+        self.filter_listbox.insert(tk.END, f"{field}: {pattern}")
+        self.filter_pattern.set("")
+        self.filter_entry.delete(0, tk.END)
+        self.apply_filters()
+
+    def clear_filters(self):
+        """Clear all active filters."""
+        self.active_filters = []
+        self.filter_listbox.delete(0, tk.END)
+        self.apply_filters()
+
+    def apply_filters(self):
+        """Apply all active filters to the event list."""
+        # If no filters, show current timestep events (default behavior)
+        if not self.active_filters:
+            self.update_combined_list()
+            return
+
+        # Build event list if not already built
+        if not self.all_events:
+            self.build_event_list()
+
+        # Start with all events
+        self.filtered_events = self.all_events.copy()
+
+        # Apply each filter
+        for field, pattern in self.active_filters:
+            regex = re.compile(pattern)
+            self.filtered_events = [
+                e for e in self.filtered_events
+                if regex.search(str(e[field]))
+            ]
+
+        self.update_filtered_list()
+
+    def update_filtered_list(self):
+        """Update the combined listbox with filtered events."""
+        if self.combined_listbox is None or not self.combined_listbox.winfo_exists():
+            return
+
+        self.combined_listbox.delete(0, tk.END)
+
+        total_count = len(self.filtered_events)
+        window_size = self.window_size.get()
+        shown_count = min(window_size, total_count)
+
+        # Add events to listbox
+        for i, event in enumerate(self.filtered_events[:window_size]):
+            event_str = f"{event['timestep']:<6}{event['agent']:<6}{event['type']:<12}{event['task']}"
+            self.combined_listbox.insert(i, event_str)
+
+            # Color coding
+            if event['type'] == "Assigned":
+                self.combined_listbox.itemconfigure(i, background='yellow')
+            elif event['type'] == "T-Finished":
+                self.combined_listbox.itemconfigure(i, background='lightgreen')
+            elif event['type'] == "E-Finished":
+                self.combined_listbox.itemconfigure(i, background='lightblue')
+
+    def move_to_filtered_event(self, event):
+        """Jump to the selected event's timestep."""
+        selection = self.filtered_listbox.curselection()
+        if not selection:
+            return
+
+        idx = selection[0]
+        if idx < len(self.filtered_events):
+            target_event = self.filtered_events[idx]
+            self.new_time.set(target_event['timestep'])
+            self.update_curtime()
+
     def init_pcf(self, plan_config):
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2024 = plan_config
-        
+
         if platform.system() == "Darwin":
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-2>")
             self.pcf.canvas.event_add("<<CtrlRightClick>>", "<Control-Button-2>")
@@ -1086,7 +1242,7 @@ class PlanViz2024:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
         self.pcf.canvas.bind("<B1-Motion>", self.on_mouse_drag)
         self.pcf.canvas.bind("<ButtonRelease-1>", self.on_button_release)
-        
+
         # linux scroll
         self.pcf.canvas.bind("<Button-4>", self.__wheel)
         self.pcf.canvas.bind("<Button-5>", self.__wheel)
@@ -1154,7 +1310,7 @@ class PlanViz2024:
                                                       command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        
+
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show selected agent path",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_agent_path,
@@ -1162,8 +1318,8 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        
-                
+
+
         self.show_hover_loc_button = tk.Checkbutton(self.frame, text="Show location when mouse hover",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_hover_loc,
@@ -1196,6 +1352,60 @@ class PlanViz2024:
         self.update_button = tk.Button(self.frame, text="Go", font=("Arial",TEXT_SIZE),
                                        command=self.update_curtime)
         self.update_button.grid(row=self.row_idx, column=2, sticky="w")
+        self.row_idx += 1
+
+
+        # ---------- Event Filter Section --------------------- #
+        filter_label = tk.Label(self.frame, text="Event Filter", font=("Arial", TEXT_SIZE, "bold"))
+        filter_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        # Filter field dropdown + regex entry + Add button
+        self.filter_field = tk.StringVar(value="type")
+        self.filter_dropdown = ttk.Combobox(self.frame, width=8, state="readonly",
+                                            textvariable=self.filter_field,
+                                            values=["type", "agent", "task", "timestep"])
+        self.filter_dropdown.grid(row=self.row_idx, column=0, sticky="w")
+
+        self.filter_pattern = tk.StringVar()
+        self.filter_entry = tk.Entry(self.frame, width=15, textvariable=self.filter_pattern,
+                                     font=("Arial", TEXT_SIZE))
+        self.filter_entry.insert(0, "Regex (e.g., 37.*, .*ed)")
+        self.filter_entry.config(fg="grey")
+        self.filter_entry.bind("<FocusIn>", self.on_filter_entry_focus_in)
+        self.filter_entry.bind("<FocusOut>", self.on_filter_entry_focus_out)
+        self.filter_entry.grid(row=self.row_idx, column=1, sticky="w")
+
+        self.add_filter_button = tk.Button(self.frame, text="Add", font=("Arial", TEXT_SIZE),
+                                           command=self.add_filter)
+        self.add_filter_button.grid(row=self.row_idx, column=2, sticky="w")
+        self.row_idx += 1
+
+        # Active filters listbox
+        self.filter_listbox = tk.Listbox(self.frame,
+                                         width=30,
+                                         height=3,
+                                         font=("Arial", TEXT_SIZE),
+                                         selectmode=tk.SINGLE)
+        self.filter_listbox.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        # Remove and Clear All buttons
+        self.remove_filter_button = tk.Button(self.frame, text="Remove", font=("Arial", TEXT_SIZE),
+                                              command=self.remove_filter)
+        self.remove_filter_button.grid(row=self.row_idx, column=0, sticky="w")
+
+        self.clear_filter_button = tk.Button(self.frame, text="Clear All", font=("Arial", TEXT_SIZE),
+                                             command=self.clear_filters)
+        self.clear_filter_button.grid(row=self.row_idx, column=1, sticky="w")
+
+        # Window size
+        ws_label = tk.Label(self.frame, text="Window size:", font=("Arial", TEXT_SIZE))
+        ws_label.grid(row=self.row_idx, column=1, sticky="e")
+        self.window_size = tk.IntVar(value=20)
+        self.window_size_entry = tk.Entry(self.frame, width=5, textvariable=self.window_size,
+                                          font=("Arial", TEXT_SIZE))
+        self.window_size_entry.grid(row=self.row_idx, column=2, sticky="w")
         self.row_idx += 1
 
         # ---------- Show the combined list of errors and events ----------------------- #
@@ -1281,6 +1491,9 @@ class PlanViz2024:
         self.new_time.set(self.pcf.start_tstep)
         self.max_event_t = 0
         self.update_curtime()
+
+        # Initialize filtered event list
+        self.apply_filters()
 
         self.frame.update()  # Adjust window size
         # Use width and height for scaling
@@ -1466,8 +1679,8 @@ class PlanViz2024:
                 self.shown_conflicts[conf_str] = [conf, False]
                 conf_id += 1
 
-        
-    
+
+
     def update_event_list(self, event_listbox, pop):
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
@@ -1524,32 +1737,32 @@ class PlanViz2024:
                     if tstep == self.pcf.cur_tstep:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
                     self.eve_id += 1
-            
+
 
     def update_location_event_list(self, event_listbox):
         """Update location event list to show task-related events"""
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
-        
+
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.max_event_t
-        
+
         # Clear and refill the location event listbox
         event_listbox.delete(0, tk.END)
         monospace_font = font.Font(family='Courier')
         event_listbox.config(font=monospace_font)
-        
+
         # Add header in the same format as update_event_list
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
         event_listbox.insert(0, header)
         event_listbox.insert(1, "-" * 34)  # Separator line
         eve_id = 2
-        
+
         # Similar to update_event_list, iterate through timesteps and events
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted(time_list, reverse=False)
-        
+
         for tstep in range(end_tstep, -1, -1):
             # Check assignment events
             if tstep in self.pcf.events["assigned"]:
@@ -1558,9 +1771,9 @@ class PlanViz2024:
                     task_id = global_task_id // self.pcf.max_seq_num
                     seq_id = global_task_id % self.pcf.max_seq_num
                     ag_id = cur_events[global_task_id]
-                    
+
                     # Check if task is in the selected task list
-                    if (not (task_id in self.right_click_all_tasks_idx)): 
+                    if (not (task_id in self.right_click_all_tasks_idx)):
                         continue
                     if seq_id == 0:
                         e_str = f"{tstep:<6}{ag_id:<8}{'Assigned':<12}{task_id:<8}"
@@ -1607,7 +1820,7 @@ class PlanViz2024:
             if len(conf[0]) == 5:
                 task_id, agent1, agent2, tstep_std, description = conf[0]
             if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
+                agent1, agent2, tstep_std, description = conf[0]
             if agent1 != -1:
                 self.pcf.canvas.itemconfig(self.pcf.agents[agent1].agent_obj.obj,
                                            fill=self.pcf.agents[agent1].agent_obj.color)
@@ -1621,7 +1834,7 @@ class PlanViz2024:
             if len(conf[0]) == 5:
                 task_id, agent1, agent2, tstep_std, description = conf[0]
             if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
+                agent1, agent2, tstep_std, description = conf[0]
             if agent1 != -1:
                 self.change_ag_color(agent1, AGENT_COLORS["collide"])
             if agent2 != -1:
@@ -1638,7 +1851,7 @@ class PlanViz2024:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
         self.pcf.shown_path_agents.clear()
         self.pcf.shown_tasks_seq.clear()
-        
+
         self.pcf.event_tracker["aid"] = 0
         self.pcf.event_tracker["fid"] = 0
 
@@ -1650,7 +1863,7 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
-        
+
 
 
     def on_hover(self, event):
@@ -1658,14 +1871,14 @@ class PlanViz2024:
         y_adjusted = self.pcf.canvas.canvasy(event.y)
         grid_x = int(x_adjusted // self.pcf.tile_size)
         grid_y = int(y_adjusted // self.pcf.tile_size)
-        
+
         if 0 <= grid_x < self.pcf.width and 0 <= grid_y < self.pcf.height:
             self.mouse_loc_label.config(text=f"Mouse Position: ({grid_x}, {grid_y})")
             self.pcf.canvas.delete("hover_text")
             if self.show_hover_loc.get():
-                self.pcf.canvas.create_text((grid_x + 0.5) * self.pcf.tile_size, 
-                                        (grid_y + 0.5) * self.pcf.tile_size, 
-                                        text=f"({grid_x}, {grid_y})", 
+                self.pcf.canvas.create_text((grid_x + 0.5) * self.pcf.tile_size,
+                                        (grid_y + 0.5) * self.pcf.tile_size,
+                                        text=f"({grid_x}, {grid_y})",
                                         fill="red", tags="hover_text", font=("Arial", TEXT_SIZE))
 
 
@@ -1681,7 +1894,7 @@ class PlanViz2024:
         if len(conf[0]) == 5:
             task_id, agent1, agent2, tstep_std, description = conf[0]
         if len(conf[0]) == 4:
-            agent1, agent2, tstep_std, description = conf[0]    
+            agent1, agent2, tstep_std, description = conf[0]
         if agent1 != -1 and agent1 < self.pcf.team_size:
             self.change_ag_color(agent1, AGENT_COLORS["collide"])
         if agent2 != -1 and agent2 < self.pcf.team_size:
@@ -1696,13 +1909,13 @@ class PlanViz2024:
             return
         selected_idx = event.widget.curselection()  # get all selected indices
         if len(selected_idx) < 1:
-            return 
+            return
         selected_idx = selected_idx[0]
-        
+
         # Determine which event listbox triggered the event
         widget = event.widget
         eve_str = None
-        
+
         if widget == self.pop_location_listbox:
             # Get event from location event listbox
             eve_str = self.pop_location_listbox.get(selected_idx)
@@ -1726,17 +1939,17 @@ class PlanViz2024:
                     return
             else:
                 return
-                
+
         elif self.right_click_status == "right":
             eve_str = self.pop_event_listbox.get(selected_idx)
         else:
             eve_str = self.event_listbox.get(selected_idx)
-            
-        if "------" in eve_str: 
+
+        if "------" in eve_str:
             return
         if eve_str not in self.shown_events:
             return
-            
+
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
         self.clear_agent_selection()
@@ -1746,7 +1959,7 @@ class PlanViz2024:
         first_errand_t = self.show_colorful_errands(ag_idx)
         if first_errand_t != -1:
             self.show_ag_plan(ag_idx, first_errand_t)
-        
+
     def check_left_click(self, event):
         self.last_click_pos = (event.x, event.y)
         self.dragging = False  # Not actually dragging yet
@@ -1830,25 +2043,25 @@ class PlanViz2024:
         self.right_click_status = "left"
         if not (self.pop_gui_window is None) and self.pop_gui_window.winfo_exists() != 0:
             self.pop_gui_window.destroy()
-        
+
         # Check for agents and tasks at click location for popup
         x_adjusted = self.pcf.canvas.canvasx(event.x)
         y_adjusted = self.pcf.canvas.canvasy(event.y)
         grid_column = int(x_adjusted // self.pcf.tile_size)
         grid_row = int(y_adjusted // self.pcf.tile_size)
         grid_loc = [grid_column, grid_row]
-        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1,
                                                  x_adjusted+0.1, y_adjusted+0.1)
-        
+
         ag_idx = self.get_ag_idx(event)
         show_popup = False
-        
+
         # Check if there are tasks at this location
         task_items = []
         for item in items:
             if item in self.pcf.grid2task.keys():
                 task_items.extend(self.pcf.grid2task[item])
-        
+
         # Show popup if there are agents or tasks at this location
         if ag_idx != -1 or len(task_items) > 0:
             show_popup = True
@@ -1857,7 +2070,7 @@ class PlanViz2024:
             self.create_pop_window(grid_loc)
             self.update_event_list(self.pop_event_listbox, 1)
             self.update_location_event_list(self.pop_location_listbox)
-        
+
         # Original agent selection logic
         if ag_idx == -1 and self.run_button['state'] == tk.NORMAL:
             self.clear_agent_selection()
@@ -1866,28 +2079,28 @@ class PlanViz2024:
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t)
 
-            
+
 
     def create_pop_window(self, grid_loc):
-        if self.pop_gui_window == None or self.pop_gui_window.winfo_exists() == 0:       
+        if self.pop_gui_window == None or self.pop_gui_window.winfo_exists() == 0:
             mouse_x = self.pcf.window.winfo_pointerx()
             mouse_y = self.pcf.window.winfo_pointery()
-            offset_x = 20  
-            offset_y = 20 
+            offset_x = 20
+            offset_y = 20
             window_x = mouse_x + offset_x
             window_y = mouse_y + offset_y
-            
+
             self.pop_gui_window = tk.Toplevel()
             self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
             self.pop_gui_window.transient(self.pcf.window)
             self.pop_gui_window.lift()
             width = 300  # Width to accommodate two lists
             height = int(8 * self.pcf.tile_size)  # Increase height
-            
+
             self.pop_gui_window.geometry(f"{width}x{height}+{window_x}+{window_y}")
             self.pop_frame = tk.Frame(self.pop_gui_window)
             self.pop_frame.grid(row=0, column=0, sticky="nsew")
-            
+
             # Configure grid weights for proper component scaling
             self.pop_gui_window.grid_rowconfigure(0, weight=1)
             self.pop_gui_window.grid_columnconfigure(0, weight=1)
@@ -1895,11 +2108,11 @@ class PlanViz2024:
             self.pop_frame.grid_rowconfigure(3, weight=1)
             self.pop_frame.grid_columnconfigure(0, weight=1)
             self.pop_frame.grid_columnconfigure(1, weight=1)
-            
+
             # First event list - agent events
             agent_label = tk.Label(self.pop_frame, text="Agent Events at this Location", font=("Arial", TEXT_SIZE))
             agent_label.grid(row=0, column=0, columnspan=2, sticky="w", padx=5, pady=5)
-            
+
             self.pop_event_listbox = tk.Listbox(self.pop_frame,
                                 width=35,
                                 height=9,
@@ -1907,16 +2120,16 @@ class PlanViz2024:
                                 selectmode=tk.EXTENDED)
             self.pop_event_listbox.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=5)
             self.pop_event_listbox.bind("<Double-1>", self.move_to_event)
-            
+
             agent_scrollbar = tk.Scrollbar(self.pop_frame, orient="vertical", width=20)
             self.pop_event_listbox.config(yscrollcommand = agent_scrollbar.set)
             agent_scrollbar.config(command=self.pop_event_listbox.yview)
             agent_scrollbar.grid(row=1, column=2, sticky="ns")
-            
-            # Second event list - location events  
+
+            # Second event list - location events
             location_label = tk.Label(self.pop_frame, text="Tasks at this Location", font=("Arial", TEXT_SIZE))
             location_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=5, pady=(10,5))
-            
+
             # Create second event listbox
             self.pop_location_listbox = tk.Listbox(self.pop_frame,
                                 width=35,
@@ -1925,12 +2138,12 @@ class PlanViz2024:
                                 selectmode=tk.EXTENDED)
             self.pop_location_listbox.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=(0,5))
             self.pop_location_listbox.bind("<Double-1>", self.move_to_event)
-            
+
             location_scrollbar = tk.Scrollbar(self.pop_frame, orient="vertical", width=20)
             self.pop_location_listbox.config(yscrollcommand = location_scrollbar.set)
             location_scrollbar.config(command=self.pop_location_listbox.yview)
             location_scrollbar.grid(row=3, column=2, sticky="ns")
-            
+
         else:
             # If window already exists, just update the title
             self.pop_gui_window.title(f"Event List - Location ({grid_loc[0]}, {grid_loc[1]})")
@@ -1941,14 +2154,14 @@ class PlanViz2024:
         grid_column = int(x_adjusted // self.pcf.tile_size)
         grid_row = int(y_adjusted // self.pcf.tile_size)
         grid_loc = [grid_column, grid_row]
-        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1,
                                                  x_adjusted+0.1, y_adjusted+0.1)
-        
+
         ag_idx = self.get_ag_idx(event)
         self.right_click_agent = ag_idx
         if ag_idx != -1:
             self.right_click_status = "right"
-        
+
         self.right_click_all_tasks_idx = []
         for item in items:
             all_tasks_idx = []
@@ -1957,14 +2170,14 @@ class PlanViz2024:
             if len(all_tasks_idx) > 0:
                 self.right_click_status = "right"
                 self.right_click_all_tasks_idx += all_tasks_idx
-        
+
         if self.right_click_status == "right":
             self.create_pop_window(grid_loc)
             # Update agent event list (same logic as before)
             self.update_event_list(self.pop_event_listbox, 1)
             # Update location event list (new logic for events at this location)
             self.update_location_event_list(self.pop_location_listbox)
-                 
+
 
     def get_ag_idx(self, event):
         x_adjusted = self.pcf.canvas.canvasx(event.x)
@@ -1972,7 +2185,7 @@ class PlanViz2024:
         grid_column = int(x_adjusted // self.pcf.tile_size)
         grid_row = int(y_adjusted // self.pcf.tile_size)
         grid_loc = [grid_column, grid_row]
-        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1, 
+        items = self.pcf.canvas.find_overlapping(x_adjusted-0.1, y_adjusted-0.1,
                                                  x_adjusted+0.1, y_adjusted+0.1)
         ag_idx = -1
         for item in items:
@@ -1980,7 +2193,7 @@ class PlanViz2024:
             if len(tags) > 1 and tags[1] == "current" and tags[0].isnumeric():
                 ag_idx = int(tags[0])  # get the id of the agent
                 return ag_idx
-                
+
         return ag_idx
 
 
@@ -2019,14 +2232,14 @@ class PlanViz2024:
                 self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
-            if not self.show_agent_path.get(): 
+            if not self.show_agent_path.get():
                 return
             ml = min(first_errand_t+1, len(self.pcf.agents[ag_idx].path_objs))
             for _pid_ in range(self.pcf.cur_tstep+1, ml):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
-        
+
         if len(self.pcf.shown_path_agents) == 0:
             self.clear_agent_selection()
 
@@ -2066,9 +2279,9 @@ class PlanViz2024:
             x_center = (coords[0] + coords[2]) / 2
             y_center = (coords[1] + coords[3]) / 2
             return x_center, y_center
-        
+
         arrows = []
-        
+
         if task_idx in self.pcf.shown_tasks_seq and (not moving):
             self.pcf.shown_tasks_seq.remove(task_idx)
             for arrow_id in self.pcf.agent_shown_task_arrow[agent_idx]:
@@ -2084,7 +2297,7 @@ class PlanViz2024:
                 if self.pcf.cur_tstep >= task_t:
                     self.change_task_color(task_idx, idx, TASK_COLORS["finished"])
                     continue
-                
+
                 self.change_task_color(task_idx,idx, "pink")
                 if idx == first_errand:
                     self.change_task_color(task_idx,idx, "orange")
@@ -2159,7 +2372,7 @@ class PlanViz2024:
             self.pcf.canvas.tag_raise(_agent_.start_obj.obj, 'all')
             self.pcf.canvas.tag_raise(_agent_.agent_obj.text, 'all')
             self.pcf.canvas.tag_raise(_agent_.start_obj.text, 'all')
-            
+
             self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
             self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
 
@@ -2180,7 +2393,7 @@ class PlanViz2024:
                         break
                 elif self.task_shown.get() == "All Tasks":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-                    
+
                 elif self.task_shown.get() == "none":
                     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
                 elif self.task_shown.get() == "Assigned Tasks":
@@ -2188,7 +2401,7 @@ class PlanViz2024:
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                 # elif task.state == self.task_shown.get():
                 #     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-        
+
         errand_list = []
         for (_, seq_task) in self.pcf.seq_tasks.items():
             for i, task in enumerate(seq_task.tasks):
@@ -2314,14 +2527,14 @@ class PlanViz2024:
                 if self.pcf.agent_model == "MAPF_T":
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
-                    
-            
+
+
             self.clear_agent_selection(moving=True)
             for ag_idx in self.pcf.shown_path_agents:
                 first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
                 if first_errand_t != -1:
                     self.show_ag_plan(ag_idx, first_errand_t, moving=True)
-                    
+
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
 
@@ -2375,7 +2588,7 @@ class PlanViz2024:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
-        
+
 
     def back_agents_per_timestep(self) -> None:
         """ Move agents in one reversed timestep, reducing cur_tstep by 1.
@@ -2458,13 +2671,13 @@ class PlanViz2024:
             agent.agent_obj.loc = prev_loc[ag_id]
 
         self.pcf.cur_tstep = prev_timestep
-        
+
         self.clear_agent_selection(moving=True)
         for ag_idx in self.pcf.shown_path_agents:
             first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
             if first_errand_t != -1:
                 self.show_ag_plan(ag_idx, first_errand_t, moving=True)
-        
+
         # self.update_event_list(self.event_listbox, 0)
         # self.update_event_list(self.pop_event_listbox, 1)
         self.update_combined_list()
@@ -2529,7 +2742,7 @@ class PlanViz2024:
 
         self.pcf.cur_tstep = self.new_time.get()
         self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
-        
+
         # Change tasks' and agents' colors according to assigned timesteps
         for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for (seq_id, task) in enumerate(seq_task.tasks):
@@ -2584,7 +2797,7 @@ class PlanViz2024:
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
                                                    agent_.agent_obj.color,
                                                    tk.NORMAL, 0.05, str(ag_id))
-            
+
             if self.pcf.agent_model == "MAPF_T":
                 self.pcf.canvas.delete(agent_.dir_obj)
                 dir_loc = get_dir_loc(agent_.path[tstep])
@@ -2601,8 +2814,8 @@ class PlanViz2024:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
         self.show_tasks()
         self.show_agent_index()
-        
-        
+
+
         # self.update_event_list(self.event_listbox, 0)
         # self.update_event_list(self.pop_event_listbox, 1)
         self.update_combined_list()
