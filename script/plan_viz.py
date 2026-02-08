@@ -994,6 +994,12 @@ class PlanViz2023:
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
+    AGENT_OBJ_TAG = "pv24_agent_obj"
+    AGENT_DIR_TAG = "pv24_agent_dir"
+    AGENT_START_OBJ_TAG = "pv24_agent_start_obj"
+    AGENT_TEXT_TAG = "pv24_agent_text"
+    AGENT_START_TEXT_TAG = "pv24_agent_start_text"
+
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz2    =====")
 
@@ -1061,6 +1067,7 @@ class PlanViz2024:
     def init_pcf(self, plan_config):
         # Load the yaml file or the input arguments
         self.pcf:PlanConfig2024 = plan_config
+        self._init_agent_canvas_tags()
         
         if platform.system() == "Darwin":
             self.pcf.canvas.event_add("<<RightClick>>", "<Button-2>")
@@ -1092,6 +1099,24 @@ class PlanViz2024:
         self.pcf.canvas.bind("<Button-5>", self.__wheel)
         # windows scroll
         self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
+
+
+    def _tag_agent_dynamic_canvas_items(self, agent_) -> None:
+        self.pcf.canvas.addtag_withtag(self.AGENT_OBJ_TAG, agent_.agent_obj.obj)
+        self.pcf.canvas.addtag_withtag(self.AGENT_TEXT_TAG, agent_.agent_obj.text)
+        if agent_.dir_obj:
+            self.pcf.canvas.addtag_withtag(self.AGENT_DIR_TAG, agent_.dir_obj)
+
+
+    def _tag_agent_static_canvas_items(self, agent_) -> None:
+        self.pcf.canvas.addtag_withtag(self.AGENT_START_OBJ_TAG, agent_.start_obj.obj)
+        self.pcf.canvas.addtag_withtag(self.AGENT_START_TEXT_TAG, agent_.start_obj.text)
+
+
+    def _init_agent_canvas_tags(self) -> None:
+        for _, agent_ in self.pcf.agents.items():
+            self._tag_agent_dynamic_canvas_items(agent_)
+            self._tag_agent_static_canvas_items(agent_)
 
 
     def init_button(self):
@@ -2002,15 +2027,14 @@ class PlanViz2024:
         _state_ = tk.DISABLED if self.show_ag_idx.get() is True else tk.HIDDEN
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
-        for (_, _agent_) in self.pcf.agents.items():
-            self.pcf.canvas.tag_raise(_agent_.agent_obj.obj, 'all')
-            self.pcf.canvas.tag_raise(_agent_.dir_obj, 'all')
-            self.pcf.canvas.tag_raise(_agent_.start_obj.obj, 'all')
-            self.pcf.canvas.tag_raise(_agent_.agent_obj.text, 'all')
-            self.pcf.canvas.tag_raise(_agent_.start_obj.text, 'all')
-            
-            self.pcf.canvas.itemconfig(_agent_.agent_obj.text, state=_state_)
-            self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
+        self.pcf.canvas.tag_raise(self.AGENT_OBJ_TAG, "all")
+        self.pcf.canvas.tag_raise(self.AGENT_DIR_TAG, "all")
+        self.pcf.canvas.tag_raise(self.AGENT_START_OBJ_TAG, "all")
+        self.pcf.canvas.tag_raise(self.AGENT_TEXT_TAG, "all")
+        self.pcf.canvas.tag_raise(self.AGENT_START_TEXT_TAG, "all")
+
+        self.pcf.canvas.itemconfig(self.AGENT_TEXT_TAG, state=_state_)
+        self.pcf.canvas.itemconfig(self.AGENT_START_TEXT_TAG, state=_ts_)
 
 
     def show_tasks(self) -> None:
@@ -2121,9 +2145,8 @@ class PlanViz2024:
         _os_ = tk.DISABLED if self.show_static.get() is True else tk.HIDDEN
         _ts_ = tk.DISABLED if (self.show_ag_idx.get() is True and\
             self.show_static.get() is True) else tk.HIDDEN
-        for (_, _agent_) in self.pcf.agents.items():
-            self.pcf.canvas.itemconfig(_agent_.start_obj.obj, state=_os_)
-            self.pcf.canvas.itemconfig(_agent_.start_obj.text, state=_ts_)
+        self.pcf.canvas.itemconfig(self.AGENT_START_OBJ_TAG, state=_os_)
+        self.pcf.canvas.itemconfig(self.AGENT_START_TEXT_TAG, state=_ts_)
 
 
     def move_agents_per_timestep(self) -> None:
@@ -2443,6 +2466,7 @@ class PlanViz2024:
                                                              tag="dir",
                                                              state=tk.DISABLED,
                                                              outline="")
+            self._tag_agent_dynamic_canvas_items(agent_)
             # Check colliding agents
             if show_collide:
                 self.change_ag_color(ag_id, AGENT_COLORS["collide"])
@@ -2464,6 +2488,4 @@ class PlanViz2024:
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
         self.pcf.canvas.update()
-
-
 
