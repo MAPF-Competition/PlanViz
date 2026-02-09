@@ -994,11 +994,11 @@ class PlanViz2023:
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
-    AGENT_OBJ_TAG = "pv24_agent_obj"
-    AGENT_DIR_TAG = "pv24_agent_dir"
-    AGENT_START_OBJ_TAG = "pv24_agent_start_obj"
-    AGENT_TEXT_TAG = "pv24_agent_text"
-    AGENT_START_TEXT_TAG = "pv24_agent_start_text"
+    AGENT_OBJ_TAG = "agent_obj"
+    AGENT_DIR_TAG = "agent_dir"
+    AGENT_START_OBJ_TAG = "agent_start_obj"
+    AGENT_TEXT_TAG = "agent_text"
+    AGENT_START_TEXT_TAG = "agent_start_text"
 
     def __init__(self, plan_config, _grid, _ag_idx, _task_idx, _static, _conf_ag):
         print("===== Initialize PlanViz2    =====")
