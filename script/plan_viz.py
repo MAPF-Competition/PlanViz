@@ -1851,9 +1851,13 @@ class PlanViz2024:
         ag_idx = -1
         for item in items:
             tags:Set[str] = self.pcf.canvas.gettags(item)
-            if len(tags) > 1 and tags[1] == "current" and tags[0].isnumeric():
-                ag_idx = int(tags[0])  # get the id of the agent
-                return ag_idx
+            is_agent_item = (self.AGENT_OBJ_TAG in tags) or (self.AGENT_TEXT_TAG in tags)
+            if not is_agent_item:
+                continue
+            for tag in tags:
+                if tag.isnumeric():
+                    ag_idx = int(tag)
+                    return ag_idx
                 
         return ag_idx
 
@@ -2488,4 +2492,3 @@ class PlanViz2024:
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
         self.pcf.canvas.update()
-
