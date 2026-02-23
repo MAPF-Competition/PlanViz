@@ -53,14 +53,17 @@ def get_map_name(in_file:str) -> str:
 
 def get_angle(glob_dir:int):
     out_angle = 0
-    if glob_dir == 0:
+    if glob_dir == 0:  # East
         out_angle = 0
-    elif glob_dir == 1:
+    elif glob_dir == 1:  # North
         out_angle = math.pi / 2.
-    elif glob_dir == 2:
+    elif glob_dir == 2:  # West
         out_angle = math.pi
-    elif glob_dir == 3:
+    elif glob_dir == 3:  # South
         out_angle = -1 * math.pi / 2.
+    else:
+        # Support fractional orientations (e.g. tick-based intermediate states)
+        out_angle = float(glob_dir) * math.pi / 2.
     return out_angle
 
 
@@ -86,6 +89,16 @@ def get_dir_loc(_loc_:Tuple[int]):
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
         dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
         dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+    else:
+        # Support fractional orientations (e.g. tick-based intermediate states)
+        ang = get_angle(_loc_[2])
+        offset = 0.5 - DIR_OFFSET - DIR_DIAMETER
+        center_col = _loc_[1] + 0.5 + offset * math.cos(ang)
+        center_row = _loc_[0] + 0.5 - offset * math.sin(ang)
+        dir_loc[0] = center_col - DIR_DIAMETER
+        dir_loc[1] = center_row - DIR_DIAMETER
+        dir_loc[2] = center_col + DIR_DIAMETER
+        dir_loc[3] = center_row + DIR_DIAMETER
     return dir_loc
 
 
@@ -112,6 +125,14 @@ def get_rotation(cur_dir:int, next_dir:int):
             return 1
         if next_dir == 2:
             return -1
+
+    # Support fractional orientations (e.g. tick-based intermediate states)
+    cur_f = float(cur_dir)
+    nxt_f = float(next_dir)
+    delta = (nxt_f - cur_f) % 4.0
+    if delta > 2.0:
+        delta -= 4.0
+    return delta
 
 
 def state_transition(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:

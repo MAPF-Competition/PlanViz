@@ -7,6 +7,7 @@ All rights reserved.
 import os
 import sys
 import logging
+import re
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
@@ -795,6 +796,9 @@ class PlanConfig2024:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
                 self.delay = 0.06
+        self.time_unit:str = "timestep"
+        self.ticks_per_timestep:int = 1
+        self.animation_substeps:int = self.moves
         self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -814,6 +818,161 @@ class PlanConfig2024:
         # Render instance on canvas
         self.render_env()
         self.render_agents()
+
+    def get_ticks_per_timestep(self, data:Dict) -> int:
+        """Get the ticks per timestep from planEncoding in the data dict."""
+        ticks_per_timestep = 10
+        if "planEncoding" in data:
+            plan_encoding = data["planEncoding"]
+            if isinstance(plan_encoding, dict) and "ticksPerTimestep" in plan_encoding:
+                ticks_per_timestep = int(plan_encoding["ticksPerTimestep"])
+        if ticks_per_timestep <= 0:
+            raise ValueError("planEncoding.ticksPerTimestep must be > 0.")
+        return ticks_per_timestep
+
+
+    def is_tick_time_unit(self, data:Dict) -> bool:
+        """Check if the plan uses tick-based time unit."""
+        if "planEncoding" not in data:
+            return False
+        plan_encoding = data["planEncoding"]
+        if not isinstance(plan_encoding, dict):
+            return False
+        if "timeUnit" not in plan_encoding:
+            return False
+        return str(plan_encoding["timeUnit"]).lower() == "tick"
+
+
+    def transition_state(self, cur_state, motion:str, ticks_per_timestep:int):
+        """Compute one-tick fractional transition state."""
+        row = float(cur_state[0])
+        col = float(cur_state[1])
+        ori = float(cur_state[2])
+        frac = 1.0 / float(ticks_per_timestep)
+
+        if self.agent_model == "MAPF":
+            if motion == "U":  # south (down)
+                row += frac
+            elif motion == "D":  # north (up)
+                row -= frac
+            elif motion == "L":  # west (left)
+                col -= frac
+            elif motion == "R":  # east (right)
+                col += frac
+            elif motion in ["W", "T"]:
+                pass  # Wait or task action, no movement
+            return (round(row, 6), round(col, 6), round(ori, 6))
+
+        # MAPF_T / default
+        if motion == "F":  # Forward
+            angle = ori * (math.pi / 2.0)
+            row -= math.sin(angle) * frac
+            col += math.cos(angle) * frac
+        elif motion == "R":  # Clockwise
+            ori = (ori - frac) % 4.0
+        elif motion == "C":  # Counter-clockwise
+            ori = (ori + frac) % 4.0
+        elif motion in ["W", "T"]:
+            pass  # Wait or task action, no movement
+
+        return (round(row, 6), round(col, 6), round(ori, 6))
+
+
+    def decode_segmented_rle_string_path(self, path_str:str, path_label:str) -> List[str]:
+        """Decode segmented-rle-v1 path string:
+        [(startTick,x,y,dir,counter):(A 10,W 20)]...
+        """
+        chunk_pattern = re.compile(r"\[\(([^)]*)\):\(([^)]*)\)\]")
+        actions: List[str] = []
+        if path_str.strip() == "":
+            return actions
+
+        cur_tick = 0
+        match_count = 0
+        cursor = 0
+        for chunk_idx, match in enumerate(chunk_pattern.finditer(path_str)):
+            if path_str[cursor:match.start()].strip() != "":
+                raise ValueError(f"{path_label} has invalid text between chunks.")
+
+            state_payload = match.group(1)
+            actions_payload = match.group(2)
+            state_parts = [part.strip() for part in state_payload.split(",")]
+            if len(state_parts) != 5:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} state must have 5 fields "
+                    "(startTick,x,y,direction,counter)."
+                )
+
+            start_tick = int(state_parts[0])
+            if start_tick != cur_tick:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} must be contiguous and ordered: "
+                    f"expected startTick {cur_tick}, got {start_tick}."
+                )
+
+            segment_ticks = 0
+            run_tokens = [token.strip() for token in actions_payload.split(",") if token.strip()]
+            for run_idx, run_token in enumerate(run_tokens):
+                run_parts = run_token.split()
+                if len(run_parts) != 2:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} must be '<action> <ticks>'."
+                    )
+                action = run_parts[0]
+                run_ticks = int(run_parts[1])
+                if run_ticks < 0:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} has negative ticks."
+                    )
+                if run_ticks == 0:
+                    continue
+                actions.extend([action] * run_ticks)
+                segment_ticks += run_ticks
+
+            cur_tick = start_tick + segment_ticks
+            cursor = match.end()
+            match_count += 1
+
+        if path_str[cursor:].strip() != "":
+            raise ValueError(f"{path_label} has trailing invalid text.")
+        if match_count == 0:
+            raise ValueError(
+                f"{path_label} looks like segmented RLE path but no chunks were parsed."
+            )
+        return actions
+
+
+    def extract_agent_actions(self, data:Dict, path_field:str, team_size:int):
+        """Extract per-agent action lists from actualPaths/plannerPaths.
+        Supports:
+        - segmented-rle-v1 string chunks in the path field (tick mode), and
+        - legacy comma-separated motions.
+        """
+        if path_field not in data:
+            raise KeyError(f"Missing {path_field}.")
+
+        legacy_paths = data[path_field]
+        if not isinstance(legacy_paths, list):
+            raise ValueError(f"{path_field} must be a list.")
+        if len(legacy_paths) < team_size:
+            raise ValueError(f"{path_field} must contain at least {team_size} entries.")
+
+        actions_by_agent = [[] for _ in range(team_size)]
+        for ag_id in range(team_size):
+            path_str = legacy_paths[ag_id]
+            if not isinstance(path_str, str):
+                raise ValueError(f"{path_field}[{ag_id}] must be a string.")
+
+            # New segmented-rle-v1 string-in-path format
+            if self.is_tick_time_unit(data) and "[(" in path_str and "):(" in path_str:
+                actions_by_agent[ag_id] = self.decode_segmented_rle_string_path(
+                    path_str, f"{path_field}[{ag_id}]"
+                )
+                continue
+
+            # Legacy comma-separated motion list
+            actions_by_agent[ag_id] = [part.strip() for part in path_str.split(",") if part.strip()]
+        return actions_by_agent
 
 
     def load_map(self, map_file:str) -> None:
@@ -844,8 +1003,14 @@ class PlanConfig2024:
         print("Loading paths", end="... ")
 
         state_trans = state_transition
+        tick_time_unit = self.is_tick_time_unit(data)
+        ticks_per_timestep = self.get_ticks_per_timestep(data)
         if self.agent_model == "MAPF":
             state_trans = state_transition_mapf
+
+        actual_actions_by_agent = self.extract_agent_actions(data, "actualPaths", self.team_size)
+        planner_actions_by_agent = self.extract_agent_actions(data, "plannerPaths", self.team_size)
+
         for ag_id in range(self.team_size):
             start = data["start"][ag_id]  # Get start location
             start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
@@ -853,25 +1018,24 @@ class PlanConfig2024:
 
             self.exec_paths[ag_id] = []  # Get actual path
             self.exec_paths[ag_id].append(start)
-            if "actualPaths" in data:
-                tmp_str = data["actualPaths"][ag_id].split(",")
-                for motion in tmp_str:
+            for motion in actual_actions_by_agent[ag_id]:
+                if tick_time_unit:
+                    next_ = self.transition_state(self.exec_paths[ag_id][-1], motion, ticks_per_timestep)
+                else:
                     next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                    self.exec_paths[ag_id].append(next_)
+                self.exec_paths[ag_id].append(next_)
                 if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
                     self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
-            else:
-                print("No actual paths.", end=" ")
 
             self.plan_paths[ag_id] = []  # Get planned path
             self.plan_paths[ag_id].append(start)
-            if "plannerPaths" in data:
-                tmp_str = data["plannerPaths"][ag_id].split(",")
-                for tstep, motion in enumerate(tmp_str):
-                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
-                    self.plan_paths[ag_id].append(next_)
-            else:
-                print("No planner paths.", end=" ")
+            for tstep, motion in enumerate(planner_actions_by_agent[ag_id]):
+                base_state = self.exec_paths[ag_id][min(tstep, len(self.exec_paths[ag_id])-1)]
+                if tick_time_unit:
+                    next_ = self.transition_state(base_state, motion, ticks_per_timestep)
+                else:
+                    next_ = state_trans(base_state, motion)
+                self.plan_paths[ag_id].append(next_)
 
         # Slice the paths according to the start and end timestep
         for ag_id in range(self.team_size):
@@ -1008,13 +1172,26 @@ class PlanConfig2024:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
+        if self.is_tick_time_unit(data):
+            self.time_unit = "tick"
+            self.animation_substeps = 1
+            self.ticks_per_timestep = self.get_ticks_per_timestep(data)
+            self.delay = max((self.delay / self.ticks_per_timestep) * 2.0, 0.001)
+        else:
+            self.time_unit = "timestep"
+            self.animation_substeps = self.moves
+            self.ticks_per_timestep = 1
+
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
 
         if self.end_tstep == math.inf:
-            if "makespan" not in data.keys():
-                raise KeyError("Missing makespan!")
-            self.end_tstep = data["makespan"]
+            if self.time_unit == "tick" and "makespanTicks" in data:
+                self.end_tstep = data["makespanTicks"]
+            else:
+                if "makespan" not in data.keys():
+                    raise KeyError("Missing makespan!")
+                self.end_tstep = data["makespan"]
 
         if self.agent_model == "":
             if 'actionModel' not in data.keys():
