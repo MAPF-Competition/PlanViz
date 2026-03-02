@@ -11,7 +11,7 @@ TASK_COLORS: Dict[int, str] = {
     "unassigned": "#eeeaa2",
     "newlyassigned": "yellowgreen",
     "assigned": "orange",
-    "finished": "grey"
+    "finished": "#C0C0C0"
 }
 
 AGENT_COLORS: Dict[str, str] = {
