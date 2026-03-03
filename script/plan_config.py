@@ -732,7 +732,7 @@ class PlanConfig2024:
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay):
+                 ppm, moves, delay, version=None):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
@@ -741,6 +741,7 @@ class PlanConfig2024:
         self.end_tstep:int = end_tstep
 
         self.agent_model:str = ""
+        self.version = version
 
         self.width:int = -1
         self.height:int = -1
@@ -796,9 +797,13 @@ class PlanConfig2024:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
                 self.delay = 0.06
-        self.time_unit:str = "timestep"
+        if self.version == "2026 LoRR":
+            self.time_unit:str = "tick"
+            self.animation_substeps:int = 1
+        else:
+            self.time_unit:str = "timestep"
+            self.animation_substeps:int = self.moves
         self.ticks_per_timestep:int = 1
-        self.animation_substeps:int = self.moves
         self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -820,27 +825,13 @@ class PlanConfig2024:
         self.render_agents()
 
     def get_ticks_per_timestep(self, data:Dict) -> int:
-        """Get the ticks per timestep from planEncoding in the data dict."""
+        """Get ticks per timestep from 2026-compatible fields."""
         ticks_per_timestep = 10
-        if "planEncoding" in data:
-            plan_encoding = data["planEncoding"]
-            if isinstance(plan_encoding, dict) and "ticksPerTimestep" in plan_encoding:
-                ticks_per_timestep = int(plan_encoding["ticksPerTimestep"])
+        if "agentMaxCounter" in data:
+            ticks_per_timestep = int(data["agentMaxCounter"])
         if ticks_per_timestep <= 0:
-            raise ValueError("planEncoding.ticksPerTimestep must be > 0.")
+            raise ValueError("ticksPerTimestep must be > 0.")
         return ticks_per_timestep
-
-
-    def is_tick_time_unit(self, data:Dict) -> bool:
-        """Check if the plan uses tick-based time unit."""
-        if "planEncoding" not in data:
-            return False
-        plan_encoding = data["planEncoding"]
-        if not isinstance(plan_encoding, dict):
-            return False
-        if "timeUnit" not in plan_encoding:
-            return False
-        return str(plan_encoding["timeUnit"]).lower() == "tick"
 
 
     def transition_state(self, cur_state, motion:str, ticks_per_timestep:int):
@@ -963,15 +954,13 @@ class PlanConfig2024:
             if not isinstance(path_str, str):
                 raise ValueError(f"{path_field}[{ag_id}] must be a string.")
 
-            # New segmented-rle-v1 string-in-path format
-            if self.is_tick_time_unit(data) and "[(" in path_str and "):(" in path_str:
+            if self.time_unit == "tick":
                 actions_by_agent[ag_id] = self.decode_segmented_rle_string_path(
                     path_str, f"{path_field}[{ag_id}]"
                 )
-                continue
-
-            # Legacy comma-separated motion list
-            actions_by_agent[ag_id] = [part.strip() for part in path_str.split(",") if part.strip()]
+            else:
+                # Legacy comma-separated motion list
+                actions_by_agent[ag_id] = [part.strip() for part in path_str.split(",") if part.strip()]
         return actions_by_agent
 
 
@@ -1003,7 +992,6 @@ class PlanConfig2024:
         print("Loading paths", end="... ")
 
         state_trans = state_transition
-        tick_time_unit = self.is_tick_time_unit(data)
         ticks_per_timestep = self.get_ticks_per_timestep(data)
         if self.agent_model == "MAPF":
             state_trans = state_transition_mapf
@@ -1019,7 +1007,7 @@ class PlanConfig2024:
             self.exec_paths[ag_id] = []  # Get actual path
             self.exec_paths[ag_id].append(start)
             for motion in actual_actions_by_agent[ag_id]:
-                if tick_time_unit:
+                if self.time_unit == "tick":
                     next_ = self.transition_state(self.exec_paths[ag_id][-1], motion, ticks_per_timestep)
                 else:
                     next_ = state_trans(self.exec_paths[ag_id][-1], motion)
@@ -1031,7 +1019,7 @@ class PlanConfig2024:
             self.plan_paths[ag_id].append(start)
             for tstep, motion in enumerate(planner_actions_by_agent[ag_id]):
                 base_state = self.exec_paths[ag_id][min(tstep, len(self.exec_paths[ag_id])-1)]
-                if tick_time_unit:
+                if self.time_unit == "tick":
                     next_ = self.transition_state(base_state, motion, ticks_per_timestep)
                 else:
                     next_ = state_trans(base_state, motion)
@@ -1047,11 +1035,16 @@ class PlanConfig2024:
 
     def load_errors(self, data:Dict):
         print("Loading errors", end="... ")
-        if "errors" not in data:
+
+        errors = data.get("errors", [])
+        schedule_errors = data.get("scheduleErrors", [])
+
+        if not errors and not schedule_errors:
             print("No errors.")
             return
+
         task_id, agent1, agent2, tstep, description = -1, -1, -1, -1, -1
-        for err in data["errors"]:
+        for err in errors:
             if len(err) == 5:
                 task_id, agent1, agent2, tstep, description = err
             if len(err) == 4:
@@ -1065,7 +1058,7 @@ class PlanConfig2024:
                 self.conflicts[tstep].append(err)
                 
         # [task_id, robot1, robot2, timestep, description] 
-        for err in data["scheduleErrors"]:
+        for err in schedule_errors:
             if len(err) == 5:
                 task_id, agent1, agent2, tstep, description = err
             if len(err) == 4:
@@ -1172,13 +1165,10 @@ class PlanConfig2024:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
-        if self.is_tick_time_unit(data):
-            self.time_unit = "tick"
-            self.animation_substeps = 1
+        if self.time_unit == "tick":
             self.ticks_per_timestep = self.get_ticks_per_timestep(data)
             self.delay = max((self.delay / self.ticks_per_timestep) * 2.0, 0.001)
         else:
-            self.time_unit = "timestep"
             self.animation_substeps = self.moves
             self.ticks_per_timestep = 1
 
