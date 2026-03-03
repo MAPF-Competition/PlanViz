@@ -1800,27 +1800,61 @@ class PlanViz2024:
 
 
     def show_tasks(self) -> None:
-        for (task_id, seq_task) in self.pcf.seq_tasks.items():
-            for i, task in enumerate(seq_task.tasks):
-                self.pcf.lazy_render_task(task_id, i)
-                self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
+        for (task_id, seq_id) in list(self.pcf.rendered_tasks):
+            task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+            if task.task_obj is None:
+                continue
+            self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
 
-        for (task_id, seq_task) in self.pcf.seq_tasks.items():
-            for i, task in enumerate(seq_task.tasks):
-                task_t = task.events["finished"]["timestep"]
-                if self.task_shown.get() == "Next Errand" and task_t > self.pcf.cur_tstep:
-                    if task.state in ["assigned", "newlyassigned"]:
+        mode = self.task_shown.get()
+        if mode == "none":
+            return
+
+        elif mode == "All Tasks":
+            for (task_id, seq_task) in self.pcf.seq_tasks.items():
+                for i, task in enumerate(seq_task.tasks):
+                    self.pcf.lazy_render_task(task_id, i)
+                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+
+        elif mode == "Next Errand":
+            for ag_id in range(self.pcf.team_size):
+                if ag_id not in self.pcf.agent_assigned_task:
+                    continue
+                current_task_id = None
+                for assign_t, task_id in self.pcf.agent_assigned_task[ag_id]:
+                    if assign_t <= self.pcf.cur_tstep:
+                        current_task_id = task_id
+
+                if current_task_id is None:
+                    continue
+
+                seq_task = self.pcf.seq_tasks[current_task_id]
+                for i, task in enumerate(seq_task.tasks):
+                    task_t = task.events["finished"]["timestep"]
+                    if task.state in ["assigned", "newlyassigned"] and task_t > self.pcf.cur_tstep:
+                        self.pcf.lazy_render_task(current_task_id, i)
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
                         break
-                elif self.task_shown.get() == "All Tasks":
-                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-                elif self.task_shown.get() == "none":
-                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
-                elif self.task_shown.get() == "Assigned Tasks":
+
+        elif mode == "Assigned Tasks":
+            for ag_id in range(self.pcf.team_size):
+                if ag_id not in self.pcf.agent_assigned_task:
+                    continue
+                current_task_id = None
+                for assign_t, task_id in self.pcf.agent_assigned_task[ag_id]:
+                    if assign_t <= self.pcf.cur_tstep:
+                        current_task_id = task_id
+
+                if current_task_id is None:
+                    continue
+
+                seq_task = self.pcf.seq_tasks[current_task_id]
+                for i, task in enumerate(seq_task.tasks):
+                    task_t = task.events["finished"]["timestep"]
                     if task.state in ["assigned", "newlyassigned"] and task_t >= self.pcf.cur_tstep:
+                        self.pcf.lazy_render_task(current_task_id, i)
                         self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
-                # elif task.state == self.task_shown.get():
-                #     self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+
         if self.show_task_idx.get():
             self.show_task_index()
 
@@ -2150,8 +2184,10 @@ class PlanViz2024:
         for (task_id, seq_task) in self.pcf.seq_tasks.items():
             for (seq_id, task) in enumerate(seq_task.tasks):
                 task.state = "unassigned"  # Initialize all the task states to unassigned
-                self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
-                self.hide_single_task(task_id, seq_id)
+
+        for (task_id, seq_id) in self.pcf.rendered_tasks:
+            self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
+            self.hide_single_task(task_id, seq_id)
 
         for a_id, a_time in enumerate(self.pcf.event_tracker["aTime"]):
             if a_time == -1:
