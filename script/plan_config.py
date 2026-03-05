@@ -31,6 +31,8 @@ VIEWPORT_MIN_WIDTH = 640
 VIEWPORT_MIN_HEIGHT = 360
 VIEWPORT_WIDTH_MARGIN = 24
 VIEWPORT_HEIGHT_MARGIN = 40
+VIEWPORT_TARGET_VISIBLE_COLS = 80
+VIEWPORT_TARGET_VISIBLE_ROWS = 45
 MINIMAP_WIDTH = 220
 MINIMAP_HEIGHT = 160
 INITIAL_FOCUS_PADDING = 5
@@ -927,9 +929,13 @@ class PlanConfig2024:
         self.world_height_px:int = 0
         self.minimap_width_px:int = MINIMAP_WIDTH
         self.minimap_height_px:int = MINIMAP_HEIGHT
-        self.minimap_scale_x:float = 1.0
-        self.minimap_scale_y:float = 1.0
+        self.minimap_scale:float = 1.0
+        self.minimap_render_width_px:int = self.minimap_width_px
+        self.minimap_render_height_px:int = self.minimap_height_px
+        self.minimap_offset_x_px:int = 0
+        self.minimap_offset_y_px:int = 0
         self.initial_focus_bbox:Tuple[int, int, int, int] | None = None
+        self.default_tile_size:int = 0
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
@@ -990,7 +996,12 @@ class PlanConfig2024:
             self.animation_substeps:int = self.moves
         self.ticks_per_timestep:int = 1
         self.tile_size:int = self.ppm * self.moves
-        self.use_viewport_mode = self.use_rasterized_env
+        self.use_viewport_mode = True
+        if not self.use_rasterized_env:
+            self.tile_size = max(self.tile_size, self.compute_default_tile_size())
+        if self.base_env_image is None:
+            self.base_env_image = _build_base_env_image(self.env_map)
+        self.default_tile_size = self.tile_size
         self.update_viewport_metrics()
 
         # Show MAPF instance
@@ -1179,26 +1190,63 @@ class PlanConfig2024:
 
 
     def update_world_view_metrics(self) -> None:
-        self.world_width_px = max(1, int(round(self.width * self.tile_size)))
-        self.world_height_px = max(1, int(round(self.height * self.tile_size)))
-        self.minimap_scale_x = self.minimap_width_px / self.world_width_px
-        self.minimap_scale_y = self.minimap_height_px / self.world_height_px
+        coord_padding = self.tile_size if self.show_coord_labels else 0
+        self.world_width_px = max(1, int(round(self.width * self.tile_size + coord_padding)))
+        self.world_height_px = max(1, int(round(self.height * self.tile_size + coord_padding)))
+        self.minimap_scale = min(
+            self.minimap_width_px / self.world_width_px,
+            self.minimap_height_px / self.world_height_px,
+        )
+        self.minimap_render_width_px = max(
+            1, int(round(self.world_width_px * self.minimap_scale))
+        )
+        self.minimap_render_height_px = max(
+            1, int(round(self.world_height_px * self.minimap_scale))
+        )
+        self.minimap_offset_x_px = (self.minimap_width_px - self.minimap_render_width_px) // 2
+        self.minimap_offset_y_px = (self.minimap_height_px - self.minimap_render_height_px) // 2
 
 
     def update_viewport_metrics(self) -> None:
         self.update_world_view_metrics()
         if self.use_viewport_mode:
             self.viewport_width_px = max(
-                VIEWPORT_MIN_WIDTH,
-                self.screen_width - self.panel_width_px - VIEWPORT_WIDTH_MARGIN,
+                1,
+                min(
+                    self.world_width_px,
+                    max(
+                        VIEWPORT_MIN_WIDTH,
+                        self.screen_width - self.panel_width_px - VIEWPORT_WIDTH_MARGIN,
+                    ),
+                ),
             )
             self.viewport_height_px = max(
-                VIEWPORT_MIN_HEIGHT,
-                self.screen_height - VIEWPORT_HEIGHT_MARGIN,
+                1,
+                min(
+                    self.world_height_px,
+                    max(
+                        VIEWPORT_MIN_HEIGHT,
+                        self.screen_height - VIEWPORT_HEIGHT_MARGIN,
+                    ),
+                ),
             )
         else:
             self.viewport_width_px = (self.width + 1) * self.tile_size
             self.viewport_height_px = (self.height + 1) * self.tile_size
+
+
+    def compute_default_tile_size(self) -> int:
+        available_width = max(
+            VIEWPORT_MIN_WIDTH,
+            self.screen_width - self.panel_width_px - VIEWPORT_WIDTH_MARGIN,
+        )
+        available_height = max(
+            VIEWPORT_MIN_HEIGHT,
+            self.screen_height - VIEWPORT_HEIGHT_MARGIN,
+        )
+        width_target = max(1, available_width // VIEWPORT_TARGET_VISIBLE_COLS)
+        height_target = max(1, available_height // VIEWPORT_TARGET_VISIBLE_ROWS)
+        return max(1, min(width_target, height_target))
 
 
     def update_canvas_scrollregion(self) -> None:

@@ -1171,13 +1171,26 @@ class PlanViz2024:
         self.minimap_canvas.bind("<ButtonRelease-1>", self.on_minimap_release)
 
         if self.pcf.base_env_image is not None:
-            scaled = self.pcf.base_env_image.resize(
-                (self.pcf.minimap_width_px, self.pcf.minimap_height_px),
+            source_image = self.pcf.base_env_image
+            if self.pcf.show_coord_labels:
+                padded_image = Image.new(
+                    "RGBA",
+                    (self.pcf.width + 1, self.pcf.height + 1),
+                    (255, 255, 255, 0),
+                )
+                padded_image.paste(self.pcf.base_env_image, (0, 0))
+                source_image = padded_image
+
+            scaled = source_image.resize(
+                (self.pcf.minimap_render_width_px, self.pcf.minimap_render_height_px),
                 Image.Resampling.NEAREST,
             )
             self.minimap_photo = ImageTk.PhotoImage(scaled)
             self.minimap_image_obj = self.minimap_canvas.create_image(
-                0, 0, anchor="nw", image=self.minimap_photo
+                self.pcf.minimap_offset_x_px,
+                self.pcf.minimap_offset_y_px,
+                anchor="nw",
+                image=self.minimap_photo,
             )
 
         self.minimap_view_obj = self.minimap_canvas.create_rectangle(
@@ -1387,10 +1400,10 @@ class PlanViz2024:
         self.pcf.update_world_view_metrics()
         left, top, right, bottom = self.get_visible_world_bbox()
         self.minimap_canvas.coords(self.minimap_view_obj,
-                                   left * self.pcf.minimap_scale_x,
-                                   top * self.pcf.minimap_scale_y,
-                                   right * self.pcf.minimap_scale_x,
-                                   bottom * self.pcf.minimap_scale_y)
+                                   self.pcf.minimap_offset_x_px + left * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + top * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_x_px + right * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + bottom * self.pcf.minimap_scale)
 
 
     def center_view_on_world(self, center_x:float, center_y:float):
@@ -1427,8 +1440,10 @@ class PlanViz2024:
         if not self.pcf.use_viewport_mode:
             return
 
-        world_x = min(max(event.x / self.pcf.minimap_scale_x, 0), self.pcf.world_width_px)
-        world_y = min(max(event.y / self.pcf.minimap_scale_y, 0), self.pcf.world_height_px)
+        local_x = event.x - self.pcf.minimap_offset_x_px
+        local_y = event.y - self.pcf.minimap_offset_y_px
+        world_x = min(max(local_x / self.pcf.minimap_scale, 0), self.pcf.world_width_px)
+        world_y = min(max(local_y / self.pcf.minimap_scale, 0), self.pcf.world_height_px)
         self.center_view_on_world(world_x, world_y)
 
 
@@ -1830,9 +1845,12 @@ class PlanViz2024:
 
 
     def resume_zoom(self):
-        __scale = self.pcf.ppm * self.pcf.moves / self.pcf.tile_size
+        base_tile_size = self.pcf.default_tile_size
+        if base_tile_size < 1:
+            base_tile_size = self.pcf.ppm * self.pcf.moves
+        __scale = base_tile_size / self.pcf.tile_size
         self.pcf.canvas.scale("all", 0, 0, __scale, __scale)
-        self.pcf.tile_size = self.pcf.ppm * self.pcf.moves
+        self.pcf.tile_size = base_tile_size
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
