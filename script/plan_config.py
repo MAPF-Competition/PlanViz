@@ -26,6 +26,14 @@ from util import (
 RASTERIZED_ENV_CELL_THRESHOLD = 200_000
 RASTERIZED_ENV_OBSTACLE_THRESHOLD = 100_000
 COORD_LABEL_LIMIT = 1_000
+VIEWPORT_PANEL_WIDTH = 340
+VIEWPORT_MIN_WIDTH = 640
+VIEWPORT_MIN_HEIGHT = 360
+VIEWPORT_WIDTH_MARGIN = 24
+VIEWPORT_HEIGHT_MARGIN = 40
+MINIMAP_WIDTH = 220
+MINIMAP_HEIGHT = 160
+INITIAL_FOCUS_PADDING = 5
 
 
 def _load_map_grid(map_file: str) -> Tuple[int, int, int, List[List[int]], int]:
@@ -85,6 +93,7 @@ def _refresh_rasterized_env(plan_config) -> None:
     if not plan_config.use_rasterized_env:
         return
 
+    plan_config.update_world_view_metrics()
     if plan_config.base_env_image is None:
         plan_config.base_env_image = _build_base_env_image(plan_config.env_map)
 
@@ -107,6 +116,7 @@ def _refresh_rasterized_env(plan_config) -> None:
     else:
         plan_config.canvas.itemconfigure(plan_config.env_image_obj, image=plan_config.env_photo)
         plan_config.canvas.coords(plan_config.env_image_obj, 0, 0)
+    plan_config.canvas.tag_lower(plan_config.env_image_obj)
 
 
 def _render_env_common(plan_config) -> None:
@@ -904,10 +914,22 @@ class PlanConfig2024:
         self.env_map:List[List[int]] = []
         self.obstacle_count:int = 0
         self.use_rasterized_env:bool = False
+        self.use_viewport_mode:bool = False
         self.show_coord_labels:bool = True
         self.base_env_image = None
         self.env_photo = None
         self.env_image_obj = None
+        self.screen_height:int = 0
+        self.panel_width_px:int = VIEWPORT_PANEL_WIDTH
+        self.viewport_width_px:int = 0
+        self.viewport_height_px:int = 0
+        self.world_width_px:int = 0
+        self.world_height_px:int = 0
+        self.minimap_width_px:int = MINIMAP_WIDTH
+        self.minimap_height_px:int = MINIMAP_HEIGHT
+        self.minimap_scale_x:float = 1.0
+        self.minimap_scale_y:float = 1.0
+        self.initial_focus_bbox:Tuple[int, int, int, int] | None = None
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
@@ -935,6 +957,7 @@ class PlanConfig2024:
         self.window = tk.Tk()
 
         self.screen_width = self.window.winfo_screenwidth()
+        self.screen_height = self.window.winfo_screenheight()
 
         pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
 
@@ -967,24 +990,28 @@ class PlanConfig2024:
             self.animation_substeps:int = self.moves
         self.ticks_per_timestep:int = 1
         self.tile_size:int = self.ppm * self.moves
+        self.use_viewport_mode = self.use_rasterized_env
+        self.update_viewport_metrics()
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
-                                width=(self.width+1) * self.tile_size,
-                                height=(self.height+1) * self.tile_size,
+                                width=self.viewport_width_px,
+                                height=self.viewport_height_px,
                                 bg="white",
                                 takefocus=True)
         self.canvas.grid(row=0, column=0,sticky="nsew")
-        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+        self.update_canvas_scrollregion()
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        self.compute_initial_focus_bbox()
         # self.load_errors()
 
         # Render instance on canvas
         self.render_env()
         self.render_agents()
+        self.update_canvas_scrollregion()
 
     def get_ticks_per_timestep(self, data:Dict) -> int:
         """Get ticks per timestep from 2026-compatible fields."""
@@ -1149,6 +1176,58 @@ class PlanConfig2024:
 
     def refresh_env_render(self) -> None:
         _refresh_rasterized_env(self)
+
+
+    def update_world_view_metrics(self) -> None:
+        self.world_width_px = max(1, int(round(self.width * self.tile_size)))
+        self.world_height_px = max(1, int(round(self.height * self.tile_size)))
+        self.minimap_scale_x = self.minimap_width_px / self.world_width_px
+        self.minimap_scale_y = self.minimap_height_px / self.world_height_px
+
+
+    def update_viewport_metrics(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.viewport_width_px = max(
+                VIEWPORT_MIN_WIDTH,
+                self.screen_width - self.panel_width_px - VIEWPORT_WIDTH_MARGIN,
+            )
+            self.viewport_height_px = max(
+                VIEWPORT_MIN_HEIGHT,
+                self.screen_height - VIEWPORT_HEIGHT_MARGIN,
+            )
+        else:
+            self.viewport_width_px = (self.width + 1) * self.tile_size
+            self.viewport_height_px = (self.height + 1) * self.tile_size
+
+
+    def update_canvas_scrollregion(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.canvas.configure(scrollregion=(0, 0, self.world_width_px, self.world_height_px))
+        else:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+    def compute_initial_focus_bbox(self) -> None:
+        agent_points = [(loc[0], loc[1]) for loc in self.start_loc.values()]
+        task_points = [task.loc for seq_task in self.seq_tasks.values() for task in seq_task.tasks]
+
+        if agent_points and task_points:
+            focus_points = agent_points + task_points
+        elif agent_points:
+            focus_points = agent_points
+        elif task_points:
+            focus_points = task_points
+        else:
+            self.initial_focus_bbox = (0, max(0, self.height - 1), 0, max(0, self.width - 1))
+            return
+
+        min_row = max(min(row for row, _ in focus_points) - INITIAL_FOCUS_PADDING, 0)
+        max_row = min(max(row for row, _ in focus_points) + INITIAL_FOCUS_PADDING, self.height - 1)
+        min_col = max(min(col for _, col in focus_points) - INITIAL_FOCUS_PADDING, 0)
+        max_col = min(max(col for _, col in focus_points) + INITIAL_FOCUS_PADDING, self.width - 1)
+        self.initial_focus_bbox = (min_row, max_row, min_col, max_col)
 
 
     def load_paths(self, data:Dict):
