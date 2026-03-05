@@ -1690,6 +1690,7 @@ class PlanViz2024:
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
+        self.pcf.refresh_env_render()
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
 
 
@@ -1703,6 +1704,7 @@ class PlanViz2024:
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
+        self.pcf.refresh_env_render()
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
         self.pcf.canvas.update()
 

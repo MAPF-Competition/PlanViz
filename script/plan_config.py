@@ -16,10 +16,166 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
+from PIL import Image, ImageTk
 from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
     BaseObj, Agent, Task, SequentialTask)
+
+
+RASTERIZED_ENV_CELL_THRESHOLD = 200_000
+RASTERIZED_ENV_OBSTACLE_THRESHOLD = 100_000
+COORD_LABEL_LIMIT = 1_000
+
+
+def _load_map_grid(map_file: str) -> Tuple[int, int, int, List[List[int]], int]:
+    env_map: List[List[int]] = []
+    obstacle_count = 0
+
+    with open(file=map_file, mode="r", encoding="UTF-8") as fin:
+        fin.readline()  # ignore type
+        header_height = int(fin.readline().strip().split(" ")[1])
+        width = int(fin.readline().strip().split(" ")[1])
+        fin.readline()  # ignore 'map' line
+        for raw_line in fin.readlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            out_line: List[int] = []
+            row_obstacles = 0
+            for word in line:
+                if word in OBSTACLES:
+                    out_line.append(0)
+                    row_obstacles += 1
+                elif word in [".", "S"]:
+                    out_line.append(1)
+                elif word == "E":
+                    out_line.append(2)
+
+            if len(out_line) != width:
+                raise ValueError(
+                    f"Invalid map row width in {map_file}: expected {width}, got {len(out_line)}."
+                )
+            env_map.append(out_line)
+            obstacle_count += row_obstacles
+
+    return header_height, width, len(env_map), env_map, obstacle_count
+
+
+def _should_rasterize_env(width: int, height: int, obstacle_count: int) -> bool:
+    return (width * height) >= RASTERIZED_ENV_CELL_THRESHOLD or \
+        obstacle_count >= RASTERIZED_ENV_OBSTACLE_THRESHOLD
+
+
+def _build_base_env_image(env_map: List[List[int]]) -> Image.Image:
+    height = len(env_map)
+    width = len(env_map[0]) if env_map else 0
+    image = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    pixels = image.load()
+
+    for rid, cur_row in enumerate(env_map):
+        for cid, cur_ele in enumerate(cur_row):
+            if cur_ele == 0:
+                pixels[cid, rid] = (0, 0, 0, 255)
+    return image
+
+
+def _refresh_rasterized_env(plan_config) -> None:
+    if not plan_config.use_rasterized_env:
+        return
+
+    if plan_config.base_env_image is None:
+        plan_config.base_env_image = _build_base_env_image(plan_config.env_map)
+
+    render_width = max(1, int(round(plan_config.width * plan_config.tile_size)))
+    render_height = max(1, int(round(plan_config.height * plan_config.tile_size)))
+    scaled = plan_config.base_env_image.resize(
+        (render_width, render_height), Image.Resampling.NEAREST
+    )
+    plan_config.env_photo = ImageTk.PhotoImage(scaled)
+
+    if plan_config.env_image_obj is None:
+        plan_config.env_image_obj = plan_config.canvas.create_image(
+            0,
+            0,
+            anchor="nw",
+            image=plan_config.env_photo,
+            state=tk.DISABLED,
+            tags=("env_bitmap",),
+        )
+    else:
+        plan_config.canvas.itemconfigure(plan_config.env_image_obj, image=plan_config.env_photo)
+        plan_config.canvas.coords(plan_config.env_image_obj, 0, 0)
+
+
+def _render_env_common(plan_config) -> None:
+    print("Rendering the environment ... ", end="")
+    # Render grids
+    for rid in range(plan_config.height):  # Render horizontal lines
+        _line_ = plan_config.canvas.create_line(0,
+                                                rid * plan_config.tile_size,
+                                                plan_config.width * plan_config.tile_size,
+                                                rid * plan_config.tile_size,
+                                                tags="grid",
+                                                state=tk.NORMAL,
+                                                fill="grey")
+        plan_config.grids.append(_line_)
+    for cid in range(plan_config.width):  # Render vertical lines
+        _line_ = plan_config.canvas.create_line(cid * plan_config.tile_size,
+                                                0,
+                                                cid * plan_config.tile_size,
+                                                plan_config.height * plan_config.tile_size,
+                                                tags="grid",
+                                                state=tk.NORMAL,
+                                                fill="grey")
+        plan_config.grids.append(_line_)
+
+    if plan_config.use_rasterized_env:
+        _refresh_rasterized_env(plan_config)
+    else:
+        for rid, cur_row in enumerate(plan_config.env_map):
+            for cid, cur_ele in enumerate(cur_row):
+                if cur_ele == 0:  # obstacles
+                    plan_config.canvas.create_rectangle(cid * plan_config.tile_size,
+                                                        rid * plan_config.tile_size,
+                                                        (cid+1) * plan_config.tile_size,
+                                                        (rid+1) * plan_config.tile_size,
+                                                        state=tk.DISABLED,
+                                                        outline="",
+                                                        fill="black")
+
+    if plan_config.show_coord_labels:
+        for cid in range(plan_config.width):
+            plan_config.canvas.create_text((cid+0.5) * plan_config.tile_size,
+                                           (plan_config.height+0.5) * plan_config.tile_size,
+                                           text=str(cid),
+                                           fill="black",
+                                           tag="text",
+                                           state=tk.DISABLED,
+                                           font=("Arial", int(plan_config.tile_size // 2)))
+        for rid in range(plan_config.height):
+            plan_config.canvas.create_text((plan_config.width+0.5) * plan_config.tile_size,
+                                           (rid+0.5) * plan_config.tile_size,
+                                           text=str(rid),
+                                           fill="black",
+                                           tag="text",
+                                           state=tk.DISABLED,
+                                           font=("Arial", int(plan_config.tile_size // 2)))
+
+    plan_config.canvas.create_line(plan_config.width * plan_config.tile_size,
+                                   0,
+                                   plan_config.width * plan_config.tile_size,
+                                   plan_config.height * plan_config.tile_size,
+                                   state=tk.DISABLED,
+                                   fill="black")
+    plan_config.canvas.create_line(0,
+                                   plan_config.height * plan_config.tile_size,
+                                   plan_config.width * plan_config.tile_size,
+                                   plan_config.height * plan_config.tile_size,
+                                   state=tk.DISABLED,
+                                   fill="black")
+    print("Done!")
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -746,6 +902,12 @@ class PlanConfig2024:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
+        self.obstacle_count:int = 0
+        self.use_rasterized_env:bool = False
+        self.show_coord_labels:bool = True
+        self.base_env_image = None
+        self.env_photo = None
+        self.env_image_obj = None
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
@@ -789,7 +951,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
-                self.ppm = pixel_per_grid // self.moves
+                self.ppm = max(1, pixel_per_grid // self.moves)
 
         self.delay:int = delay
         if self.delay is None:
@@ -967,25 +1129,26 @@ class PlanConfig2024:
     def load_map(self, map_file:str) -> None:
         print("Loading map from " + map_file, end = '... ')
 
-        with open(file=map_file, mode="r", encoding="UTF-8") as fin:
-            fin.readline()  # ignore type
-            self.height = int(fin.readline().strip().split(' ')[1])
-            self.width  = int(fin.readline().strip().split(' ')[1])
-            fin.readline()  # ignore 'map' line
-            for line in fin.readlines():
-                out_line: List[bool] = []
-                for word in list(line.strip()):
-                    if word in OBSTACLES:
-                        out_line.append(0)
-                    elif word in [".", "S"]:
-                        out_line.append(1)
-                    elif word == "E":
-                        out_line.append(2)
-
-                assert len(out_line) == self.width
-                self.env_map.append(out_line)
-        assert len(self.env_map) == self.height
+        header_height, self.width, actual_height, self.env_map, self.obstacle_count = \
+            _load_map_grid(map_file)
+        self.height = actual_height
+        self.use_rasterized_env = _should_rasterize_env(
+            self.width, self.height, self.obstacle_count
+        )
+        self.show_coord_labels = (self.width + self.height) <= COORD_LABEL_LIMIT
+        if header_height != actual_height:
+            print(
+                f"header height {header_height} does not match actual rows {actual_height}; "
+                "using actual rows.",
+                end=" ",
+            )
+        if self.use_rasterized_env:
+            print("using rasterized obstacle layer.", end=" ")
         print("Done!")
+
+
+    def refresh_env_render(self) -> None:
+        _refresh_rasterized_env(self)
 
 
     def load_paths(self, data:Dict):
@@ -1245,69 +1408,7 @@ class PlanConfig2024:
 
 
     def render_env(self) -> None:
-        print("Rendering the environment ... ", end="")
-        # Render grids
-        for rid in range(self.height):  # Render horizontal lines
-            _line_ = self.canvas.create_line(0,
-                                             rid * self.tile_size,
-                                             self.width * self.tile_size,
-                                             rid * self.tile_size,
-                                             tags="grid",
-                                             state= tk.NORMAL,
-                                             fill="grey")
-            self.grids.append(_line_)
-        for cid in range(self.width):  # Render vertical lines
-            _line_ = self.canvas.create_line(cid * self.tile_size,
-                                             0,
-                                             cid * self.tile_size,
-                                             self.height * self.tile_size,
-                                             tags="grid",
-                                             state= tk.NORMAL,
-                                             fill="grey")
-            self.grids.append(_line_)
-
-        # Render features
-        for rid, cur_row in enumerate(self.env_map):
-            for cid, cur_ele in enumerate(cur_row):
-                if cur_ele == 0:  # obstacles
-                    self.canvas.create_rectangle(cid * self.tile_size,
-                                                 rid * self.tile_size,
-                                                 (cid+1) * self.tile_size,
-                                                 (rid+1) * self.tile_size,
-                                                 state=tk.DISABLED,
-                                                 outline="",
-                                                 fill="black")
-
-        # Render coordinates
-        for cid in range(self.width):
-            self.canvas.create_text((cid+0.5)*self.tile_size,
-                                    (self.height+0.5)*self.tile_size,
-                                    text=str(cid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
-        for rid in range(self.height):
-            self.canvas.create_text((self.width+0.5)*self.tile_size,
-                                    (rid+0.5)*self.tile_size,
-                                    text=str(rid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
-        self.canvas.create_line(self.width * self.tile_size,
-                                0,
-                                self.width * self.tile_size,
-                                self.height * self.tile_size,
-                                state=tk.DISABLED,
-                                fill="black")
-        self.canvas.create_line(0,
-                                self.height * self.tile_size,
-                                self.width * self.tile_size,
-                                self.height * self.tile_size,
-                                state=tk.DISABLED,
-                                fill="black")
-        print("Done!")
+        _render_env_common(self)
 
 
     def render_agents(self):
