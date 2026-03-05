@@ -1047,10 +1047,17 @@ class PlanViz2024:
         self.pop_event_listbox = None
         self.pop_location_listbox = None
         
+        self.tick_label = tk.Label(self.frame,
+                                   text="Tick: 000",
+                                   font=("Arial", TEXT_SIZE + 10))
+        self.tick_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.row_idx += 1
+
         self.timestep_label = tk.Label(self.frame,
                                        text = f"Timestep: {self.pcf.cur_tstep:03d}",
                                        font=("Arial", TEXT_SIZE + 10))
         self.timestep_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.set_time_labels(self.pcf.cur_tstep)
         self.row_idx += 1
         self.mouse_loc_label = tk.Label(self.frame,
                                        text="Mouse Position: ",
@@ -1062,6 +1069,23 @@ class PlanViz2024:
         self.init_label()
 
         print("=====          DONE         =====")
+
+
+    def set_time_labels(self, timeline_value:int) -> None:
+        """Update tick and timestep labels based on the current timeline value."""
+        ticks_per_timestep = self.pcf.ticks_per_timestep
+        if ticks_per_timestep < 1:
+            ticks_per_timestep = 1
+
+        if self.pcf.time_unit == "tick":
+            tick_value = int(timeline_value)
+            timestep_value = tick_value // ticks_per_timestep
+        else:
+            timestep_value = int(timeline_value)
+            tick_value = timestep_value * ticks_per_timestep
+
+        self.tick_label.config(text=f"Tick: {tick_value:03d}")
+        self.timestep_label.config(text=f"Timestep: {int(timestep_value):03d}")
 
 
     def init_pcf(self, plan_config):
@@ -2161,6 +2185,9 @@ class PlanViz2024:
 
         self.next_button.config(state=tk.DISABLED)
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2
+        substeps = self.pcf.animation_substeps
+        if substeps < 1:
+            substeps = 1
 
         # Update the next timestep for each agent
         next_tstep = {}
@@ -2168,19 +2195,19 @@ class PlanViz2024:
             next_t = min(self.pcf.cur_tstep+1 - self.pcf.start_tstep, len(agent.path)-1)
             next_tstep[ag_id] = next_t
 
-        for _m_ in range(self.pcf.moves):
-            if _m_ == self.pcf.moves // 2:
-                self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep+1:03d}")
+        for _m_ in range(substeps):
+            if _m_ == substeps // 2:
+                self.set_time_labels(self.pcf.cur_tstep+1)
 
             for (ag_id, agent) in self.pcf.agents.items():
                 cur_angle = get_angle(agent.agent_obj.loc[2])
                 direction = (agent.path[next_tstep[ag_id]][1] - agent.agent_obj.loc[1],
                              agent.path[next_tstep[ag_id]][0] - agent.agent_obj.loc[0])
-                cur_move = (direction[0] * (self.pcf.tile_size / self.pcf.moves),
-                            direction[1] * (self.pcf.tile_size / self.pcf.moves))
+                cur_move = (direction[0] * (self.pcf.tile_size / substeps),
+                            direction[1] * (self.pcf.tile_size / substeps))
                 cur_rotation = get_rotation(agent.agent_obj.loc[2],
                                             agent.path[next_tstep[ag_id]][2])
-                next_ang = cur_rotation*(math.pi/2)/(self.pcf.moves)
+                next_ang = cur_rotation*(math.pi/2)/(substeps)
 
                 # Move agent
                 _cos = math.cos(cur_angle + next_ang * (_m_+1)) - math.cos(cur_angle+next_ang*_m_)
@@ -2307,17 +2334,20 @@ class PlanViz2024:
 
         # Move the agents backward
         _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2
-        for _m_ in range(self.pcf.moves):
-            if _m_ == self.pcf.moves // 2:
-                self.timestep_label.config(text = f"Timestep: {prev_timestep:03d}")
+        substeps = self.pcf.animation_substeps
+        if substeps < 1:
+            substeps = 1
+        for _m_ in range(substeps):
+            if _m_ == substeps // 2:
+                self.set_time_labels(prev_timestep)
             for (ag_id, agent) in self.pcf.agents.items():
                 cur_angle = get_angle(agent.agent_obj.loc[2])
                 direction = (prev_loc[ag_id][1] - agent.agent_obj.loc[1],
                              prev_loc[ag_id][0] - agent.agent_obj.loc[0])
-                cur_move = (direction[0] * (self.pcf.tile_size / self.pcf.moves),
-                            direction[1] * (self.pcf.tile_size / self.pcf.moves))
+                cur_move = (direction[0] * (self.pcf.tile_size / substeps),
+                            direction[1] * (self.pcf.tile_size / substeps))
                 cur_rotation = get_rotation(agent.agent_obj.loc[2], prev_loc[ag_id][2])
-                next_ang = cur_rotation*(math.pi/2)/(self.pcf.moves)
+                next_ang = cur_rotation*(math.pi/2)/(substeps)
 
                 # Move agent
                 _cos = math.cos(cur_angle+next_ang*(_m_+1)) - math.cos(cur_angle + next_ang*_m_)
@@ -2371,7 +2401,10 @@ class PlanViz2024:
         while self.pcf.cur_tstep < min(self.pcf.makespan, self.pcf.end_tstep):
             if self.is_run.get() is True:
                 self.move_agents_per_timestep()
-                time.sleep(self.pcf.delay * 2)
+                if self.pcf.time_unit != "tick":
+                    time.sleep(self.pcf.delay * 2)
+                else:
+                    time.sleep(self.pcf.delay)
             else:
                 break
 
@@ -2402,7 +2435,7 @@ class PlanViz2024:
             self.new_time.set(self.pcf.end_tstep)
 
         self.pcf.cur_tstep = self.new_time.get()
-        self.timestep_label.config(text = f"Timestep: {self.pcf.cur_tstep:03d}")
+        self.set_time_labels(self.pcf.cur_tstep)
         
         # Change tasks' and agents' colors according to assigned timesteps
         for (task_id, seq_task) in self.pcf.seq_tasks.items():

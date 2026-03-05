@@ -15,7 +15,12 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(description="Plan visualizer for a MAPF instance")
     parser.add_argument("--map", type=str, help="Path to the map file")
-    parser.add_argument("--version", type=str, default=None, help="Plan file version, '2024 LoRR' or '2023 LoRR'")
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="Plan file version, '2024 LoRR', '2026 LoRR' or '2023 LoRR'",
+    )
     parser.add_argument("--plan", type=str, help="Path to the planned path file")
     parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
@@ -55,9 +60,9 @@ def main() -> None:
     if args.version != None:
         version = args.version
     print(version)
-    if version == "2024 LoRR":
+    if version in ["2024 LoRR", "2026 LoRR"]:
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
-                              args.ppm, args.moves, args.delay)
+                              args.ppm, args.moves, args.delay, version)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
     else:
