@@ -1,7 +1,7 @@
 # PlanViz
 The primary purpose of PlanViz is to help participants in the [League of Robot Runners competition](https://leagueofrobotrunners.org) better understand the planned paths and executed commands of their robots. PlanViz offers insights into problem solving strategies, by showing how robots move across the map, and by highlighting and exploring the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). 
 
-Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the the competition Start-Kit. The log file describes the planned and executed actions of agents at each timestep and renders the result. An example of the application in action is shown in the following video.
+Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the the competition Start-Kit. For the 2024/2026 view, the log file describes the planned and executed actions of agents over time, where time is shown as the elapsed timeline index. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz.gif)
 
@@ -30,19 +30,19 @@ PlanViz provides a variety of visual markers to help users understand the result
 
 The user interface supports a variety of operations to control and focus the display of plans.
 
-- `Timestep` shows the current timestep.
+- In the 2024/2026 UI, `Time` shows the current time.
 - The buttons controls the progress of the plan/execution:
   - `Play`: Auto-play the plan/execution
-  - `Pause`: Pause the scenario to the current timestep
+  - `Pause`: Pause the scenario at the current time
   - `Fullsize`: Reset the scenario to fullsize
-  - `Next`: Move the scenario to the next timestep
-  - `Prev`: Move the scenario to the previous timestep
-  - `Restart`: Reset the scenario to timestep 0
+  - `Next`: Move the scenario to the next time
+  - `Prev`: Move the scenario to the previous time
+  - `Restart`: Reset the scenario to time 0
 - The checkbox controls what to be shown in the scenario.
-- `Start timestep`: Input the desire start timestep and move the scenario to.
+- In the 2024/2026 UI, `Start time`: Input the desired start time and move the scenario to it.
 - `List of errors` contains collisions and timeout issues from the Start-Kit. When the scenario is paused, you can double-click an error to see the invalid movements.
-- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at timestep $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
-- `Most recent events` contains information of task assignments, errands completion and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to the timestep when such event occurs.
+- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at time $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
+- `Most recent events` contains information of task assignments, errands completion and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to the time when such event occurs.
 
 ## Arguments
 
@@ -55,10 +55,10 @@ The user interface supports a variety of operations to control and focus the dis
 - `--static`: Whether to show the start locations. Set to True if specified.
 - `--ca`: Whether to mark all the colliding agents in red. Set to True if specified.
 - `--ppm` (type: *int*):  Number of pixels per move, depending on the size of the map.
-- `--mv` (type: *int*):  Number of moves per timestep; the tile size of the map is `ppm` $\times$ `mv`.
-- `--delay` (type: *float*):  Wait time for each timestep after agents' movements.
-- `--start` (type: *int*): Start timestep for visualization (*default*: 0).
-- `--end` (type: *int*): End timestep for visualization (*default*: 100).
+- `--mv` (type: *int*):  Number of moves per action; the tile size of the map is `ppm` $\times$ `mv`.
+- `--delay` (type: *float*):  Wait time between animation updates.
+- `--start` (type: *int*): Start time for visualization (*default*: 0).
+- `--end` (type: *int*): End time for visualization (*default*: 100).
 - `--hm` (type: *List[str]*): A list of path files (ends with `.json`) for generating heatmap.
 
 If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problems),
@@ -72,4 +72,4 @@ To run PlanViz, open a terminal under the directory `PlanViz/` and type the foll
 python script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json
 ```
 
-Please keep in mind the formats of `JSON` files are different between 2023 and 2024.
+Please keep in mind the formats of `JSON` files are different between 2023, 2024, and 2026.

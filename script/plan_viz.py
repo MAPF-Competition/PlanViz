@@ -1047,16 +1047,10 @@ class PlanViz2024:
         self.pop_event_listbox = None
         self.pop_location_listbox = None
         
-        self.tick_label = tk.Label(self.frame,
-                                   text="Tick: 000",
+        self.time_label = tk.Label(self.frame,
+                                   text=f"Time: {self.pcf.cur_tstep:03d}",
                                    font=("Arial", TEXT_SIZE + 10))
-        self.tick_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
-        self.row_idx += 1
-
-        self.timestep_label = tk.Label(self.frame,
-                                       text = f"Timestep: {self.pcf.cur_tstep:03d}",
-                                       font=("Arial", TEXT_SIZE + 10))
-        self.timestep_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.time_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
         self.set_time_labels(self.pcf.cur_tstep)
         self.row_idx += 1
         self.mouse_loc_label = tk.Label(self.frame,
@@ -1072,20 +1066,8 @@ class PlanViz2024:
 
 
     def set_time_labels(self, timeline_value:int) -> None:
-        """Update tick and timestep labels based on the current timeline value."""
-        ticks_per_timestep = self.pcf.ticks_per_timestep
-        if ticks_per_timestep < 1:
-            ticks_per_timestep = 1
-
-        if self.pcf.time_unit == "tick":
-            tick_value = int(timeline_value)
-            timestep_value = tick_value // ticks_per_timestep
-        else:
-            timestep_value = int(timeline_value)
-            tick_value = timestep_value * ticks_per_timestep
-
-        self.tick_label.config(text=f"Tick: {tick_value:03d}")
-        self.timestep_label.config(text=f"Timestep: {int(timestep_value):03d}")
+        """Update the displayed time based on the current timeline value."""
+        self.time_label.config(text=f"Time: {int(timeline_value):03d}")
 
 
     def init_pcf(self, plan_config):
@@ -1235,8 +1217,8 @@ class PlanViz2024:
         self.task_shown.grid(row=self.row_idx, column=1, sticky="w")
         self.row_idx += 1
 
-        # ---------- Set the starting timestep --------------------- #
-        st_label = tk.Label(self.frame, text="Start timestep", font=("Arial",TEXT_SIZE))
+        # ---------- Set the starting time ------------------------- #
+        st_label = tk.Label(self.frame, text="Start time", font=("Arial",TEXT_SIZE))
         st_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar(value=1)
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
@@ -2280,7 +2262,7 @@ class PlanViz2024:
         
 
     def back_agents_per_timestep(self) -> None:
-        """ Move agents in one reversed timestep, reducing cur_tstep by 1.
+        """ Move agents one step backward in time, reducing cur_tstep by 1.
         """
         if self.pcf.cur_tstep == self.pcf.start_tstep:
             return
@@ -2431,7 +2413,7 @@ class PlanViz2024:
         """ Update the agents and tasks' colors to the cur_tstep
         """
         if self.new_time.get() > self.pcf.end_tstep:
-            print("The target timestep is larger than the ending timestep")
+            print("The target time is larger than the ending time")
             self.new_time.set(self.pcf.end_tstep)
 
         self.pcf.cur_tstep = self.new_time.get()

@@ -24,11 +24,11 @@ def main() -> None:
     parser.add_argument("--plan", type=str, help="Path to the planned path file")
     parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
-    parser.add_argument("--start", type=int, default=0, help="Starting timestep")
-    parser.add_argument("--end", type=int, default=math.inf, help="Ending timestep")
+    parser.add_argument("--start", type=int, default=0, help="Starting time")
+    parser.add_argument("--end", type=int, default=math.inf, help="Ending time")
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
-    parser.add_argument("--delay", type=float, help="Wait time between timesteps")
+    parser.add_argument("--delay", type=float, help="Wait time between animation updates")
     
     parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
                         help="Show grid on the environment or not")
