@@ -29,6 +29,8 @@ def main() -> None:
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
     parser.add_argument("--delay", type=float, help="Wait time between animation updates")
+    parser.add_argument("--event-limit", dest="event_limit", type=int, default=10,
+                        help="Number of recent events to show in the event panel")
     
     parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
                         help="Show grid on the environment or not")
@@ -62,7 +64,8 @@ def main() -> None:
     print(version)
     if version in ["2024 LoRR", "2026 LoRR"]:
         plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
-                              args.ppm, args.moves, args.delay, version)
+                              args.ppm, args.moves, args.delay, version,
+                              event_limit=args.event_limit)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
     else:

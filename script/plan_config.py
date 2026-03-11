@@ -732,13 +732,14 @@ class PlanConfig2024:
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
     def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, version=None):
+                 ppm, moves, delay, version=None, event_limit=10):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
+        self.event_limit:int = event_limit
 
         self.agent_model:str = ""
         self.version = version
