@@ -1346,6 +1346,16 @@ class PlanViz2024:
                 self.shown_conflicts[conf_str] = [conf, False]
                 conf_id += 1
 
+    def set_event_listbox_height(self, event_listbox, event_count: int) -> None:
+        if event_listbox == None or (not event_listbox.winfo_exists()):
+            return
+
+        min_rows = 4
+        max_visible_events = 20
+        max_rows = max(min_rows, max_visible_events + 2)
+        total_rows = max(min_rows, min(event_count + 2, max_rows))
+        event_listbox.config(height=total_rows)
+
         
     
     def update_event_list(self, event_listbox, pop):
@@ -1369,6 +1379,7 @@ class PlanViz2024:
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
         time_list = sorted((tstep for tstep in time_list if tstep <= end_tstep), reverse=True)
         if self.pcf.event_limit == 0:
+            self.set_event_listbox_height(event_listbox, 0)
             return
         for tstep in time_list:
             if tstep in self.pcf.events["assigned"]:
@@ -1390,6 +1401,7 @@ class PlanViz2024:
                         self.eve_id += 1
                         shown_event_count += 1
                         if shown_event_count >= self.pcf.event_limit:
+                            self.set_event_listbox_height(event_listbox, shown_event_count)
                             return
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
@@ -1412,7 +1424,9 @@ class PlanViz2024:
                     self.eve_id += 1
                     shown_event_count += 1
                     if shown_event_count >= self.pcf.event_limit:
+                        self.set_event_listbox_height(event_listbox, shown_event_count)
                         return
+        self.set_event_listbox_height(event_listbox, shown_event_count)
             
 
     def update_location_event_list(self, event_listbox):
@@ -1433,6 +1447,7 @@ class PlanViz2024:
         event_listbox.insert(0, header)
         event_listbox.insert(1, "-" * 34)  # Separator line
         eve_id = 2
+        shown_event_count = 0
         
         # Similar to update_event_list, iterate through timesteps and events
         time_list = list(self.pcf.events["assigned"])
@@ -1457,6 +1472,8 @@ class PlanViz2024:
                         if tstep == self.pcf.cur_tstep:
                             event_listbox.itemconfigure(eve_id, background='yellow')
                         eve_id += 1
+                        shown_event_count += 1
+        self.set_event_listbox_height(event_listbox, shown_event_count)
 
     def change_ag_color(self, ag_idx:int, color:str) -> None:
         """ Change the color of the agent if collisions are not shown
