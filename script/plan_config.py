@@ -731,7 +731,7 @@ class PlanConfig2024:
 
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, window_size,
                  ppm, moves, delay, version=None):
         print("===== Initialize PlanConfig2 =====")
 
@@ -739,6 +739,7 @@ class PlanConfig2024:
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
+        self.window_size:int = window_size
 
         self.agent_model:str = ""
         self.version = version
@@ -758,6 +759,8 @@ class PlanConfig2024:
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
+        self.actual_path_data = {}
+        self.plan_path_data  = {}
         self.conflicts  = {}
         self.agent_assigned_task = {}
         self.agent_shown_task_arrow = {}
@@ -999,39 +1002,88 @@ class PlanConfig2024:
 
         actual_actions_by_agent = self.extract_agent_actions(data, "actualPaths", self.team_size)
         planner_actions_by_agent = self.extract_agent_actions(data, "plannerPaths", self.team_size)
+        if self.window_size is not None:
+            current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
+        else:
+            current_window_end = self.end_tstep
 
         for ag_id in range(self.team_size):
-            start = data["start"][ag_id]  # Get start location
-            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
-            self.start_loc[ag_id] = start
+            start = data["start"][ag_id]
+            start_state = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+            self.start_loc[ag_id] = start_state
 
-            self.exec_paths[ag_id] = []  # Get actual path
-            self.exec_paths[ag_id].append(start)
-            for motion in actual_actions_by_agent[ag_id]:
+            actual_actions = actual_actions_by_agent[ag_id]
+            planner_actions = planner_actions_by_agent[ag_id]
+            self.actual_path_data[ag_id] = actual_actions
+            self.plan_path_data[ag_id] = planner_actions
+
+            actual_limit = min(current_window_end, len(actual_actions))
+            actual_states = [start_state]
+            for abs_tstep in range(actual_limit):
+                motion = actual_actions[abs_tstep]
                 if self.time_unit == "tick":
-                    next_ = self.transition_state(self.exec_paths[ag_id][-1], motion, ticks_per_timestep)
+                    next_state = self.transition_state(actual_states[-1], motion, ticks_per_timestep)
                 else:
-                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+                    next_state = state_trans(actual_states[-1], motion)
+                actual_states.append(next_state)
 
-            self.plan_paths[ag_id] = []  # Get planned path
-            self.plan_paths[ag_id].append(start)
-            for tstep, motion in enumerate(planner_actions_by_agent[ag_id]):
-                base_state = self.exec_paths[ag_id][min(tstep, len(self.exec_paths[ag_id])-1)]
+            if self.makespan < len(actual_actions):
+                self.makespan = len(actual_actions)
+
+            start_idx = min(self.start_tstep, len(actual_states) - 1)
+            self.exec_paths[ag_id] = actual_states[start_idx:]
+
+            self.plan_paths[ag_id] = [self.exec_paths[ag_id][0]]
+            plan_limit = min(current_window_end, len(planner_actions))
+            for abs_tstep in range(self.start_tstep, plan_limit):
+                motion = planner_actions[abs_tstep]
+                base_idx = min(abs_tstep - self.start_tstep, len(self.exec_paths[ag_id]) - 1)
+                base_state = self.exec_paths[ag_id][base_idx]
                 if self.time_unit == "tick":
-                    next_ = self.transition_state(base_state, motion, ticks_per_timestep)
+                    next_state = self.transition_state(base_state, motion, ticks_per_timestep)
                 else:
-                    next_ = state_trans(base_state, motion)
-                self.plan_paths[ag_id].append(next_)
-
-        # Slice the paths according to the start and end timestep
-        for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
+                    next_state = state_trans(base_state, motion)
+                self.plan_paths[ag_id].append(next_state)
 
         print("Done!")
+
+    def extend_path(self, ag_id: int, target_timestep: int) -> None:
+        if ag_id not in self.actual_path_data:
+            return
+
+        target_timestep = min(target_timestep, self.end_tstep)
+        current_exec_end = self.start_tstep + len(self.exec_paths[ag_id]) - 1
+        if target_timestep <= current_exec_end:
+            return
+
+        state_trans = state_transition
+        ticks_per_timestep = self.ticks_per_timestep
+        if self.agent_model == "MAPF":
+            state_trans = state_transition_mapf
+
+        motion_list = self.actual_path_data[ag_id]
+        plan_motion_list = self.plan_path_data.get(ag_id, motion_list)
+
+        exec_limit = min(target_timestep, len(motion_list))
+        for abs_tstep in range(current_exec_end, exec_limit):
+            motion = motion_list[abs_tstep]
+            if self.time_unit == "tick":
+                next_state = self.transition_state(self.exec_paths[ag_id][-1], motion, ticks_per_timestep)
+            else:
+                next_state = state_trans(self.exec_paths[ag_id][-1], motion)
+            self.exec_paths[ag_id].append(next_state)
+
+        current_plan_end = self.start_tstep + len(self.plan_paths[ag_id]) - 1
+        plan_limit = min(target_timestep, len(plan_motion_list))
+        for abs_tstep in range(current_plan_end, plan_limit):
+            motion = plan_motion_list[abs_tstep]
+            base_idx = min(abs_tstep - self.start_tstep, len(self.exec_paths[ag_id]) - 1)
+            base_state = self.exec_paths[ag_id][base_idx]
+            if self.time_unit == "tick":
+                next_state = self.transition_state(base_state, motion, ticks_per_timestep)
+            else:
+                next_state = state_trans(base_state, motion)
+            self.plan_paths[ag_id].append(next_state)
 
 
     def load_errors(self, data:Dict):
