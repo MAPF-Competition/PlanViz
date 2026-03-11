@@ -1352,7 +1352,7 @@ class PlanViz2024:
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
-        end_tstep = self.max_event_t
+        end_tstep = self.pcf.cur_tstep
 
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.eve_id = 0
@@ -1364,10 +1364,13 @@ class PlanViz2024:
         self.eve_id += 1
         event_listbox.insert(self.eve_id, "-" * 34)  # Separator line
         self.eve_id += 1
+        shown_event_count = 0
         time_list = list(self.pcf.events["assigned"])
         time_list.extend(x for x in self.pcf.events["finished"] if x not in time_list)
-        time_list = sorted(time_list, reverse=False)
-        for tstep in range(end_tstep, -1, -1):
+        time_list = sorted((tstep for tstep in time_list if tstep <= end_tstep), reverse=True)
+        if self.pcf.event_limit == 0:
+            return
+        for tstep in time_list:
             if tstep in self.pcf.events["assigned"]:
                 cur_events= self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -1385,6 +1388,9 @@ class PlanViz2024:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
                             
                         self.eve_id += 1
+                        shown_event_count += 1
+                        if shown_event_count >= self.pcf.event_limit:
+                            return
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
@@ -1404,6 +1410,9 @@ class PlanViz2024:
                     if tstep == self.pcf.cur_tstep:
                             event_listbox.itemconfigure(self.eve_id, background='yellow')
                     self.eve_id += 1
+                    shown_event_count += 1
+                    if shown_event_count >= self.pcf.event_limit:
+                        return
             
 
     def update_location_event_list(self, event_listbox):
