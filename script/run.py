@@ -26,7 +26,7 @@ def main() -> None:
                         help="Number of agents")
     parser.add_argument("--start", type=int, default=0, help="Starting time")
     parser.add_argument("--end", type=int, default=math.inf, help="Ending time")
-    parser.add_argument("--window", type=int, default=100, help="Window size")
+    parser.add_argument("--window", type=int, default=50000, help="Window size")
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
     parser.add_argument("--delay", type=float, help="Wait time between animation updates")
