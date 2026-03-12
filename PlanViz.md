@@ -48,18 +48,20 @@ The user interface supports a variety of operations to control and focus the dis
 
 - `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/warehouse-small.map` for more information.
 - `--plan` (type: *str*): Path to the planned path file (ends with `.json`). See `example/warehouse-small-60.json` for more information.
-- `--n` (type: *int*): Number of agents need to show, starting from index 0 (*default*: All agents in the path file).
-- `--grid`: Whether to show the grids on the map. Set to True if specified.
-- `--aid`: Whether to show the agent indices. Set to True if specified.
-- `--tid`: Whether to show the task indices. Set to True if specified.
-- `--static`: Whether to show the start locations. Set to True if specified.
-- `--ca`: Whether to mark all the colliding agents in red. Set to True if specified.
-- `--ppm` (type: *int*):  Number of pixels per move, depending on the size of the map.
-- `--mv` (type: *int*):  Number of moves per action; the tile size of the map is `ppm` $\times$ `mv`.
-- `--delay` (type: *float*):  Wait time between animation updates.
+- `--n` (type: *int*): Number of agents to show, starting from index 0 (*default*: All agents in the path file).
+- `--grid` (type: *bool*): Whether to show the grids on the map (*default*: True).
+- `--aid` (type: *bool*): Whether to show the agent indices (*default*: True).
+- `--tid` (type: *bool*): Whether to show the task indices (*default*: False).
+- `--static`: Whether to show the start locations (*default*: False). Set to True if specified.
+- `--ca`: Whether to mark all the colliding agents in red (*default*: False). Set to True if specified.
+- `--ppm` (type: *int*): Number of pixels per move, depending on the size of the map (*default*: auto-configured per map).
+- `--mv` (type: *int*): Number of moves per action; the tile size of the map is `ppm` $\times$ `mv` (*default*: auto-configured per map).
+- `--delay` (type: *float*): Wait time between animation updates (*default*: auto-configured per map).
 - `--start` (type: *int*): Start time for visualization (*default*: 0).
-- `--end` (type: *int*): End time for visualization (*default*: 100).
-- `--hm` (type: *List[str]*): A list of path files (ends with `.json`) for generating heatmap.
+- `--end` (type: *int*): End time for visualization (*default*: inf).
+- `--version` (type: *str*): Plan file version. Supported values: `'2024 LoRR'`, `'2026 LoRR'`, or `'2023 LoRR'`. If not specified, the version is read from the plan JSON file. If neither is available, defaults to `2023 LoRR` (*default*: None).
+- `--window` (type: *int*): Number of timesteps to load from the start time. The visualization will cover timesteps from `start` to `start + window` (*default*: 50000).
+- `--event-limit` (type: *int*): Number of recent events to show in the event panel (*default*: 10).
 
 If one is using [our maps](https://github.com/MAPF-Competition/benchmark_problems),
 then we have default values for `ppm`, `mv`, and `delay`, so the user does not need to specify them.
