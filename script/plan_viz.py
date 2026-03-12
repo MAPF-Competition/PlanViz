@@ -1171,6 +1171,13 @@ class PlanViz2024:
         self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
+        self.id_button2 = tk.Checkbutton(self.frame, text="Show task indices",
+                                         font=("Arial",TEXT_SIZE),
+                                         variable=self.show_task_idx, onvalue=True, offvalue=False,
+                                         command=self.show_task_index)
+        self.id_button2.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
                                             font=("Arial",TEXT_SIZE),
                                             variable=self.show_static, onvalue=True, offvalue=False,
@@ -1723,10 +1730,7 @@ class PlanViz2024:
                 for arrow_id in self.pcf.agent_shown_task_arrow[ag_idx]:
                     self.pcf.canvas.delete(arrow_id)
                 for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
-                    self.pcf.lazy_render_task(task_idx, idx)
-                    self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
-                    self.pcf.canvas.tag_lower(tsk.task_obj.obj)
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
+                    self.hide_single_task(task_idx, idx)
             for _p_ in self.pcf.agents[ag_idx].path_objs:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
                 self.pcf.canvas.tag_lower(_p_.obj)
@@ -1988,9 +1992,7 @@ class PlanViz2024:
             for arrow_id in self.pcf.agent_shown_task_arrow[agent_idx]:
                 self.pcf.canvas.delete(arrow_id)
             for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
-                self.pcf.lazy_render_task(task_idx, idx)
-                self.pcf.canvas.itemconfigure(tsk.task_obj.obj,state=tk.HIDDEN)
-                self.pcf.canvas.tag_lower(tsk.task_obj.obj)
+                self.hide_single_task(task_idx, idx)
         else:
             self.pcf.shown_tasks_seq.add(task_idx)
             last_obj = self.pcf.agents[agent_idx].agent_obj.obj
@@ -2004,13 +2006,12 @@ class PlanViz2024:
                 if idx == first_errand:
                     self.change_task_color(task_idx,idx, "orange")
 
-                self.pcf.lazy_render_task(task_idx, idx)
+                self.set_task_visibility(task_idx, idx, True)
                 x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
                 last_obj = tsk.task_obj.obj
                 x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
                 _arrow = self.pcf.canvas.create_line(x1, y1, x2, y2, arrow=tk.LAST, width=2, fill="#4eb1a6")
                 arrows.append(_arrow)
-                self.pcf.canvas.itemconfigure(tsk.task_obj.obj, state=tk.DISABLED)
 
         # Hide tasks that are not in ag_id
         for task_id, seq_task in self.pcf.seq_tasks.items():
@@ -2082,38 +2083,40 @@ class PlanViz2024:
         self.pcf.canvas.tag_raise(self.AGENT_TEXT_TAG, "all")
         self.pcf.canvas.tag_raise(self.AGENT_START_TEXT_TAG, "all")
 
+    def set_task_visibility(self, task_id:int, seq_id:int, visible:bool) -> None:
+        self.pcf.lazy_render_task(task_id, seq_id)
+        task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+        box_state = tk.DISABLED if visible else tk.HIDDEN
+        text_state = tk.HIDDEN
+        if visible and self.show_task_idx.get():
+            text_state = tk.DISABLED
+
+        self.pcf.canvas.itemconfig(task.task_obj.obj, state=box_state)
+        self.pcf.canvas.itemconfig(task.task_obj.text, state=text_state)
+        if self.pcf.grids:
+            self.pcf.canvas.tag_lower(task.task_obj.obj, self.pcf.grids[0])
+
     def show_task_index(self) -> None:
-        for (task_id, seq_task) in self.pcf.seq_tasks.items():
-            for i, task in enumerate(seq_task.tasks):
-                self.pcf.lazy_render_task(task_id, i)
-                self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
-                task_t = task.events["finished"]["timestep"]
-                if self.task_shown.get() == "Next Errand" and task_t >= self.pcf.cur_tstep:
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
-                elif self.task_shown.get() == "All Tasks":
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
-                elif self.task_shown.get() == "none":
-                    self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.HIDDEN)
-                elif self.task_shown.get() == "Assigned Tasks" and task_t >= self.pcf.cur_tstep:
-                    if task.state in ["assigned", "newlyassigned"]:
-                        self.pcf.canvas.itemconfig(task.task_obj.text, state=tk.DISABLED)
+        for (task_id, seq_id) in list(self.pcf.rendered_tasks):
+            task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+            if task.task_obj is None:
+                continue
+            obj_state = self.pcf.canvas.itemcget(task.task_obj.obj, "state")
+            self.set_task_visibility(task_id, seq_id, obj_state != tk.HIDDEN)
         self.raise_agent_canvas_items()
 
 
     def show_tasks(self) -> None:
         for (task_id, seq_id) in list(self.pcf.rendered_tasks):
-            task = self.pcf.seq_tasks[task_id].tasks[seq_id]
-            if task.task_obj is None:
-                continue
-            self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.HIDDEN)
+            self.hide_single_task(task_id, seq_id)
         mode = self.task_shown.get()
         if mode == "none":
+            self.show_task_index()
             return
         elif mode == "All Tasks":
             for (task_id, seq_task) in self.pcf.seq_tasks.items():
                 for i, task in enumerate(seq_task.tasks):
-                    self.pcf.lazy_render_task(task_id, i)
-                    self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+                    self.set_task_visibility(task_id, i, True)
 
         elif mode == "Next Errand":
             for ag_id in range(self.pcf.team_size):
@@ -2131,8 +2134,7 @@ class PlanViz2024:
                 for i, task in enumerate(seq_task.tasks):
                     task_t = task.events["finished"]["timestep"]
                     if task.state in ["assigned", "newlyassigned"] and task_t > self.pcf.cur_tstep:
-                        self.pcf.lazy_render_task(current_task_id, i)
-                        self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+                        self.set_task_visibility(current_task_id, i, True)
                         break
 
         elif mode == "Assigned Tasks":
@@ -2151,13 +2153,9 @@ class PlanViz2024:
                 for i, task in enumerate(seq_task.tasks):
                     task_t = task.events["finished"]["timestep"]
                     if task.state in ["assigned", "newlyassigned"] and task_t >= self.pcf.cur_tstep:
-                        self.pcf.lazy_render_task(current_task_id, i)
-                        self.pcf.canvas.itemconfig(task.task_obj.obj, state=tk.DISABLED)
+                        self.set_task_visibility(current_task_id, i, True)
 
-        if self.show_task_idx.get():
-            self.show_task_index()
-        else:
-            self.raise_agent_canvas_items()
+        self.show_task_index()
 
 
     def show_tasks_by_click(self, _) -> None:
@@ -2165,70 +2163,39 @@ class PlanViz2024:
 
 
     def show_single_task(self, task_id:int, seq_id:int=0, ignore:int=0) -> None:
-        self.pcf.lazy_render_task(task_id, seq_id)
-        tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
-        self.hide_single_task(task_id, seq_id)
-
-        if self.task_shown.get() == "All Tasks" or ignore:
-            if self.pcf.canvas.itemcget(tsk.task_obj.obj, "state") == tk.HIDDEN:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
-                if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
+        visible = False
+        if ignore:
+            visible = True
+        else:
+            mode = self.task_shown.get()
+            if mode == "All Tasks":
+                visible = True
+            elif mode == "Assigned Tasks":
+                task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+                visible = task.state in ["assigned", "newlyassigned"]
+            elif mode == "Next Errand":
+                task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+                if seq_id == 0:
+                    visible = task.state in ["assigned", "newlyassigned"]
                 else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            self.raise_agent_canvas_items()
-            return
+                    last_task = self.pcf.seq_tasks[task_id].tasks[seq_id-1]
+                    last_t = last_task.events["finished"]["timestep"]
+                    time_t = task.events["finished"]["timestep"]
+                    visible = (
+                        last_t <= self.pcf.cur_tstep and
+                        time_t > self.pcf.cur_tstep and
+                        task.state in ["assigned", "newlyassigned"]
+                    )
+            elif mode != "none":
+                task = self.pcf.seq_tasks[task_id].tasks[seq_id]
+                visible = (task.state == mode)
 
-        if self.task_shown.get() == "Next Errand":
-            if seq_id == 0:
-                if tsk.state in ["assigned", "newlyassigned"]:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
-                if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
-                else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            else:
-                last_tsk = self.pcf.seq_tasks[task_id].tasks[seq_id-1]
-                last_t = last_tsk.events["finished"]["timestep"]
-                time_t = tsk.events["finished"]["timestep"]
-                if last_t <= self.pcf.cur_tstep and time_t > self.pcf.cur_tstep:
-                    if tsk.state in ["assigned", "newlyassigned"]:
-                        self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
-                    if self.show_task_idx.get():
-                        self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
-                    else:
-                        self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            self.raise_agent_canvas_items()
-            return
-
-        if self.task_shown.get() == "Assigned Tasks":
-            if tsk.state in ["assigned", "newlyassigned"]:
-                self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
-                if self.show_task_idx.get():
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
-                else:
-                    self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            self.raise_agent_canvas_items()
-            return
-
-        if self.task_shown.get() == "none":
-            return
-
-        if tsk.state == self.task_shown.get():
-            self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.DISABLED)
-            if self.show_task_idx.get():
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.DISABLED)
-            else:
-                self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
-            self.raise_agent_canvas_items()
-            return
+        self.set_task_visibility(task_id, seq_id, visible)
+        self.raise_agent_canvas_items()
 
 
     def hide_single_task(self, task_id, seq_id) -> None:
-        self.pcf.lazy_render_task(task_id, seq_id)
-        tsk = self.pcf.seq_tasks[task_id].tasks[seq_id]
-        self.pcf.canvas.itemconfig(tsk.task_obj.obj, state=tk.HIDDEN)
-        self.pcf.canvas.itemconfig(tsk.task_obj.text, state=tk.HIDDEN)
+        self.set_task_visibility(task_id, seq_id, False)
 
 
     def show_static_loc(self) -> None:

@@ -1405,6 +1405,9 @@ class PlanConfig2024:
             tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
         )
         task.task_obj = tobj
+        if self.grids:
+            self.canvas.tag_lower(tobj.obj, self.grids[0])
+        self.canvas.itemconfig(tobj.text, state=tk.HIDDEN)
         self.rendered_tasks.add((task_id, seq_id))
         if tobj.obj not in self.grid2task:
             self.grid2task[tobj.obj] = []
