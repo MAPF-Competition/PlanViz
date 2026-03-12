@@ -1,4 +1,20 @@
 # Changelog
+Version 3.0.0 - 2026-03-12
+---
+Added:
+- Added support for `2026 LoRR` plan files, including tick-based timelines, segmented RLE path decoding, `makespanTicks`, `agentMaxCounter`, and schedule error loading.
+- Unified the 2024/2026 UI and documentation around `Time` instead of `Timestep`, including start/end controls and playback labels.
+- Added `--window` support to load and extend path data incrementally, reducing upfront rendering cost for long runs.
+- Added `--event-limit` and dynamic event panel sizing so recent events remain readable on dense simulations.
+- Improved rendering performance:
+  - [numba](http://numba.pydata.org)-accelerated path computation
+  - Lazy task rendering
+  - Incremental agent path rendering
+
+Changes:
+- Fix a few rendering bugs in 2.1.0.
+
+# Changelog
 Version 2.1.0 - 2023-11-17
 ---
 Added:
