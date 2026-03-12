@@ -6,7 +6,7 @@ However, PlanViz can also be used for a variety of similar problems which are ou
 
 PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3/library/tkinter.html), a Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
-![plan_viz_gif](images/plan_viz.gif)
+![plan_viz_gif](images/plan_viz2026.gif)
 
 ## Installation
 

@@ -3,7 +3,7 @@ The primary purpose of PlanViz is to help participants in the [League of Robot R
 
 Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the the competition Start-Kit. For the 2024/2026 view, the log file describes the planned and executed actions of agents over time, where time is shown as the elapsed timeline index. An example of the application in action is shown in the following video.
 
-![plan_viz_gif](images/plan_viz.gif)
+![plan_viz_gif](images/plan_viz2026.gif)
 
 ## Visual Markers
 
