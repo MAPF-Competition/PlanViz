@@ -7,7 +7,7 @@ To use this tool, you need a MAPF plan, and the corresponding scenario file (`.s
 - `plan` (type: *str*): Path to the MAPF plan file (ends with `.csv`). See `example/random-32-32-20.csv` and `example/random-32-32-20_random_1_300.csv` for more information.
 - `multiPlan`: Indicates whether the input plan file contains multiple MAPF plans (True if specified).
 - `scen` (type: *str*): Path to scenario file for single plan file (ie. `example/random-32-32-20_random_1_300.csv`), path to the folder that contains the scenario files (ie. `example/scen-files`) if multiPlan is enabled.
-- `outputFile` (type: *str*): Path to the output file without extension (ie. `example/transfer_result`).
+- `outputFile` (type: *str*): Path to the output file without extension (*default*: `../example/transfer_result/result`).
 
 ## Run
 The following example shows how to convert the plan (CSV format) for a single instance involving 300 agents on a small grid map with randomly placed obstacles. The input MAPF plan and the corresponding scenario file (which details the start and target locations of the agents) can both be found in the `example/` subfolder of this repository. The output of this demo is an output file which can be passed to PlanViz, and which will be created at location `example/transfer_result`: 

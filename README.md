@@ -6,7 +6,7 @@ However, PlanViz can also be used for a variety of similar problems which are ou
 
 PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3/library/tkinter.html), a Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
-![plan_viz_gif](images/plan_viz.gif)
+![plan_viz_gif](images/plan_viz2026.gif)
 
 ## Installation
 
@@ -67,7 +67,7 @@ Please refer to the [PlanViz instruction manual](./PlanViz.md) for details about
 Open a terminal and type the following command:
 
 ```bash
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2026.json
 ```
 
 ## Tracker Transfer

@@ -5,6 +5,7 @@
 import sys
 import math
 from typing import List, Tuple, Dict
+from numba import njit, prange
 
 TASK_COLORS: Dict[int, str] = {
     "unassigned": "#eeeaa2",
@@ -38,6 +39,9 @@ INT_MAX:int = 2**31 - 1
 DBL_MAX:int = 1.79769e+308
 TEXT_SIZE:int = 12
 
+MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
+MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
+
 
 def get_map_name(in_file:str) -> str:
     """Get the map name from the file name
@@ -53,14 +57,17 @@ def get_map_name(in_file:str) -> str:
 
 def get_angle(glob_dir:int):
     out_angle = 0
-    if glob_dir == 0:
+    if glob_dir == 0:  # East
         out_angle = 0
-    elif glob_dir == 1:
+    elif glob_dir == 1:  # North
         out_angle = math.pi / 2.
-    elif glob_dir == 2:
+    elif glob_dir == 2:  # West
         out_angle = math.pi
-    elif glob_dir == 3:
+    elif glob_dir == 3:  # South
         out_angle = -1 * math.pi / 2.
+    else:
+        # Support fractional orientations (e.g. tick-based intermediate states)
+        out_angle = float(glob_dir) * math.pi / 2.
     return out_angle
 
 
@@ -86,6 +93,16 @@ def get_dir_loc(_loc_:Tuple[int]):
         dir_loc[0] = _loc_[1] + 0.5 - DIR_DIAMETER
         dir_loc[3] = _loc_[0] + DIR_OFFSET + DIR_DIAMETER*2
         dir_loc[2] = _loc_[1] + 0.5 + DIR_DIAMETER
+    else:
+        # Support fractional orientations (e.g. tick-based intermediate states)
+        ang = get_angle(_loc_[2])
+        offset = 0.5 - DIR_OFFSET - DIR_DIAMETER
+        center_col = _loc_[1] + 0.5 + offset * math.cos(ang)
+        center_row = _loc_[0] + 0.5 - offset * math.sin(ang)
+        dir_loc[0] = center_col - DIR_DIAMETER
+        dir_loc[1] = center_row - DIR_DIAMETER
+        dir_loc[2] = center_col + DIR_DIAMETER
+        dir_loc[3] = center_row + DIR_DIAMETER
     return dir_loc
 
 
@@ -112,6 +129,14 @@ def get_rotation(cur_dir:int, next_dir:int):
             return 1
         if next_dir == 2:
             return -1
+
+    # Support fractional orientations (e.g. tick-based intermediate states)
+    cur_f = float(cur_dir)
+    nxt_f = float(next_dir)
+    delta = (nxt_f - cur_f) % 4.0
+    if delta > 2.0:
+        delta -= 4.0
+    return delta
 
 
 def state_transition(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int,int,int]:
@@ -148,6 +173,98 @@ def state_transition_mapf(cur_state:Tuple[int,int,int], motion:str) -> Tuple[int
         return cur_state
     print("Invalid motion")
     sys.exit()
+
+
+@njit(cache=True)
+def apply_motion_code(row, col, direction, motion, is_mapf, is_tick, ticks_per_timestep):
+    if is_mapf:
+        step = 1.0
+        if is_tick:
+            step = 1.0 / float(ticks_per_timestep)
+        if motion == 0:
+            row += step
+        elif motion == 1:
+            col -= step
+        elif motion == 2:
+            col += step
+        elif motion == 3:
+            row -= step
+        return row, col, direction
+
+    if motion == 0:
+        if is_tick:
+            frac = 1.0 / float(ticks_per_timestep)
+            angle = direction * (math.pi / 2.0)
+            row -= math.sin(angle) * frac
+            col += math.cos(angle) * frac
+        else:
+            if direction == 0:
+                col += 1.0
+            elif direction == 1:
+                row -= 1.0
+            elif direction == 2:
+                col -= 1.0
+            else:
+                row += 1.0
+    elif motion == 1:
+        if is_tick:
+            direction = (direction - (1.0 / float(ticks_per_timestep))) % 4.0
+        else:
+            direction = (direction + 3.0) % 4.0
+    elif motion == 2:
+        if is_tick:
+            direction = (direction + (1.0 / float(ticks_per_timestep))) % 4.0
+        else:
+            direction = (direction + 1.0) % 4.0
+
+    return row, col, direction
+
+
+@njit(parallel=True, cache=True)
+def compute_exec_paths(motion_codes, starts, results, step_counts,
+                       is_mapf, is_tick, ticks_per_timestep):
+    for ag_id in prange(starts.shape[0]):
+        num_steps = step_counts[ag_id]
+        row = starts[ag_id, 0]
+        col = starts[ag_id, 1]
+        direction = starts[ag_id, 2]
+        results[ag_id, 0, 0] = row
+        results[ag_id, 0, 1] = col
+        results[ag_id, 0, 2] = direction
+
+        for i in range(num_steps):
+            motion = motion_codes[ag_id, i]
+            row, col, direction = apply_motion_code(
+                row, col, direction, motion, is_mapf, is_tick, ticks_per_timestep
+            )
+            results[ag_id, i + 1, 0] = row
+            results[ag_id, i + 1, 1] = col
+            results[ag_id, i + 1, 2] = direction
+
+
+@njit(parallel=True, cache=True)
+def compute_plan_next_states(motion_codes, starts, base_states, results, step_counts,
+                             is_mapf, is_tick, ticks_per_timestep):
+    for ag_id in prange(starts.shape[0]):
+        num_steps = step_counts[ag_id]
+        start_row = starts[ag_id, 0]
+        start_col = starts[ag_id, 1]
+        start_direction = starts[ag_id, 2]
+        results[ag_id, 0, 0] = start_row
+        results[ag_id, 0, 1] = start_col
+        results[ag_id, 0, 2] = start_direction
+
+        for i in range(num_steps):
+            row = base_states[ag_id, i, 0]
+            col = base_states[ag_id, i, 1]
+            direction = base_states[ag_id, i, 2]
+            motion = motion_codes[ag_id, i]
+            row, col, direction = apply_motion_code(
+                row, col, direction, motion, is_mapf, is_tick, ticks_per_timestep
+            )
+            results[ag_id, i + 1, 0] = row
+            results[ag_id, i + 1, 1] = col
+            results[ag_id, i + 1, 2] = direction
 
 
 class BaseObj:

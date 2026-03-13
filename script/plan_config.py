@@ -7,6 +7,7 @@ All rights reserved.
 import os
 import sys
 import logging
+import re
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
@@ -18,7 +19,11 @@ from matplotlib import cm
 from util import (
     TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
-    BaseObj, Agent, Task, SequentialTask)
+    BaseObj, Agent, Task, SequentialTask, compute_exec_paths, compute_plan_next_states)
+
+MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
+MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
+SEGMENTED_RLE_CHUNK_PATTERN = re.compile(r"\[\(([^)]*)\):\(([^)]*)\)\]")
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -730,16 +735,19 @@ class PlanConfig2024:
 
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay):
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, window_size,
+                 ppm, moves, delay, version=None, event_limit=10):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
         self.team_size:int = team_size
         self.start_tstep:int = start_tstep
         self.end_tstep:int = end_tstep
+        self.window_size:int = window_size
+        self.event_limit:int = event_limit
 
         self.agent_model:str = ""
+        self.version = version
 
         self.width:int = -1
         self.height:int = -1
@@ -747,6 +755,7 @@ class PlanConfig2024:
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
+        self.rendered_tasks: Set[Tuple[int, int]] = set()
         self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
         self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
         self.actual_schedule:Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
@@ -755,6 +764,8 @@ class PlanConfig2024:
         self.start_loc  = {}
         self.plan_paths = {}
         self.exec_paths = {}
+        self.actual_path_codes = {}
+        self.plan_path_codes = {}
         self.conflicts  = {}
         self.agent_assigned_task = {}
         self.agent_shown_task_arrow = {}
@@ -795,6 +806,13 @@ class PlanConfig2024:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
                 self.delay = 0.06
+        if self.version == "2026 LoRR":
+            self.time_unit:str = "tick"
+            self.animation_substeps:int = 1
+        else:
+            self.time_unit:str = "timestep"
+            self.animation_substeps:int = self.moves
+        self.ticks_per_timestep:int = 1
         self.tile_size:int = self.ppm * self.moves
 
         # Show MAPF instance
@@ -814,6 +832,202 @@ class PlanConfig2024:
         # Render instance on canvas
         self.render_env()
         self.render_agents()
+
+    def get_ticks_per_timestep(self, data:Dict) -> int:
+        """Get ticks per timestep from 2026-compatible fields."""
+        ticks_per_timestep = 10
+        if "agentMaxCounter" in data:
+            ticks_per_timestep = int(data["agentMaxCounter"])
+        if ticks_per_timestep <= 0:
+            raise ValueError("ticksPerTimestep must be > 0.")
+        return ticks_per_timestep
+
+
+    def transition_state(self, cur_state, motion:str, ticks_per_timestep:int):
+        """Compute one-tick fractional transition state."""
+        row = float(cur_state[0])
+        col = float(cur_state[1])
+        ori = float(cur_state[2])
+        frac = 1.0 / float(ticks_per_timestep)
+
+        if self.agent_model == "MAPF":
+            if motion == "U":  # south (down)
+                row += frac
+            elif motion == "D":  # north (up)
+                row -= frac
+            elif motion == "L":  # west (left)
+                col -= frac
+            elif motion == "R":  # east (right)
+                col += frac
+            elif motion in ["W", "T"]:
+                pass  # Wait or task action, no movement
+            return (round(row, 6), round(col, 6), round(ori, 6))
+
+        # MAPF_T / default
+        if motion == "F":  # Forward
+            angle = ori * (math.pi / 2.0)
+            row -= math.sin(angle) * frac
+            col += math.cos(angle) * frac
+        elif motion == "R":  # Clockwise
+            ori = (ori - frac) % 4.0
+        elif motion == "C":  # Counter-clockwise
+            ori = (ori + frac) % 4.0
+        elif motion in ["W", "T"]:
+            pass  # Wait or task action, no movement
+
+        return (round(row, 6), round(col, 6), round(ori, 6))
+
+
+    def decode_segmented_rle_codes(self, path_str:str, path_label:str,
+                                   char_to_code: np.ndarray, wait_code: int) -> np.ndarray:
+        """Decode segmented-rle-v1 path string:
+        [(startTick,x,y,dir,counter):(A 10,W 20)]...
+        """
+        if path_str.strip() == "":
+            return np.empty(0, dtype=np.int32)
+
+        cur_tick = 0
+        match_count = 0
+        cursor = 0
+        run_codes: List[int] = []
+        run_lengths: List[int] = []
+        for chunk_idx, match in enumerate(SEGMENTED_RLE_CHUNK_PATTERN.finditer(path_str)):
+            if path_str[cursor:match.start()].strip() != "":
+                raise ValueError(f"{path_label} has invalid text between chunks.")
+
+            state_payload = match.group(1)
+            actions_payload = match.group(2)
+            state_parts = [part.strip() for part in state_payload.split(",")]
+            if len(state_parts) != 5:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} state must have 5 fields "
+                    "(startTick,x,y,direction,counter)."
+                )
+
+            start_tick = int(state_parts[0])
+            if start_tick != cur_tick:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} must be contiguous and ordered: "
+                    f"expected startTick {cur_tick}, got {start_tick}."
+                )
+
+            segment_ticks = 0
+            run_tokens = [token.strip() for token in actions_payload.split(",") if token.strip()]
+            for run_idx, run_token in enumerate(run_tokens):
+                run_parts = run_token.split()
+                if len(run_parts) != 2:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} must be '<action> <ticks>'."
+                    )
+                action = run_parts[0]
+                run_ticks = int(run_parts[1])
+                if run_ticks < 0:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} has negative ticks."
+                    )
+                if run_ticks == 0:
+                    continue
+                if len(action) == 1 and ord(action) < len(char_to_code):
+                    run_codes.append(int(char_to_code[ord(action)]))
+                else:
+                    run_codes.append(wait_code)
+                run_lengths.append(run_ticks)
+                segment_ticks += run_ticks
+
+            cur_tick = start_tick + segment_ticks
+            cursor = match.end()
+            match_count += 1
+
+        if path_str[cursor:].strip() != "":
+            raise ValueError(f"{path_label} has trailing invalid text.")
+        if match_count == 0:
+            raise ValueError(
+                f"{path_label} looks like segmented RLE path but no chunks were parsed."
+            )
+        codes = np.empty(cur_tick, dtype=np.int32)
+        offset = 0
+        for run_idx, run_ticks in enumerate(run_lengths):
+            next_offset = offset + run_ticks
+            codes[offset:next_offset] = run_codes[run_idx]
+            offset = next_offset
+        return codes
+
+
+    def extract_agent_codes(self, data:Dict, path_field:str, team_size:int,
+                            char_to_code: np.ndarray, wait_code: int):
+        """Extract per-agent motion code arrays from actualPaths/plannerPaths.
+        Supports:
+        - segmented-rle-v1 string chunks in the path field (tick mode), and
+        - legacy comma-separated motions.
+        """
+        if path_field not in data:
+            raise KeyError(f"Missing {path_field}.")
+
+        legacy_paths = data[path_field]
+        if not isinstance(legacy_paths, list):
+            raise ValueError(f"{path_field} must be a list.")
+        if len(legacy_paths) < team_size:
+            raise ValueError(f"{path_field} must contain at least {team_size} entries.")
+
+        codes_by_agent = []
+        for ag_id in range(team_size):
+            path_str = legacy_paths[ag_id]
+            if not isinstance(path_str, str):
+                raise ValueError(f"{path_field}[{ag_id}] must be a string.")
+
+            if self.time_unit == "tick":
+                codes_by_agent.append(
+                    self.decode_segmented_rle_codes(
+                        path_str, f"{path_field}[{ag_id}]", char_to_code, wait_code
+                    )
+                )
+            else:
+                action_str = "".join(part.strip() for part in path_str.split(",") if part.strip())
+                if action_str:
+                    action_bytes = np.frombuffer(action_str.encode("ascii"), dtype=np.uint8)
+                    codes_by_agent.append(char_to_code[action_bytes])
+                else:
+                    codes_by_agent.append(np.empty(0, dtype=np.int32))
+        return codes_by_agent
+
+
+    def get_motion_config(self):
+        is_mapf = (self.agent_model == "MAPF")
+        motion_map = MOTION_CODE_MAPF if is_mapf else MOTION_CODE
+        wait_code = 4 if is_mapf else 3
+        return is_mapf, motion_map, wait_code
+
+
+    def build_motion_batch(self, code_store: Dict[int, np.ndarray], agent_ids: List[int],
+                           start_indices: List[int], step_counts: List[int], wait_code: int):
+        max_steps = max(step_counts, default=0)
+        motion_batch = np.full((len(agent_ids), max_steps), wait_code, dtype=np.int32)
+        for row_idx, ag_id in enumerate(agent_ids):
+            cur_count = step_counts[row_idx]
+            if cur_count <= 0:
+                continue
+            start_idx = start_indices[row_idx]
+            motion_batch[row_idx, :cur_count] = code_store[ag_id][start_idx:start_idx + cur_count]
+        return motion_batch
+
+
+    def build_plan_base_state_batch(self, agent_ids: List[int], start_timesteps: List[int],
+                                    step_counts: List[int]) -> np.ndarray:
+        max_steps = max(step_counts, default=0)
+        base_states = np.zeros((len(agent_ids), max_steps, 3), dtype=np.float64)
+        for row_idx, ag_id in enumerate(agent_ids):
+            cur_count = step_counts[row_idx]
+            if cur_count <= 0:
+                continue
+            exec_path = self.exec_paths[ag_id]
+            start_idx = max(start_timesteps[row_idx] - self.start_tstep, 0)
+            end_idx = min(start_idx + cur_count, len(exec_path))
+            copied_count = max(0, end_idx - start_idx)
+            if copied_count > 0:
+                base_states[row_idx, :copied_count] = exec_path[start_idx:end_idx]
+            if copied_count < cur_count:
+                base_states[row_idx, copied_count:cur_count] = exec_path[-1]
+        return base_states
 
 
     def load_map(self, map_file:str) -> None:
@@ -842,52 +1056,236 @@ class PlanConfig2024:
 
     def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
+        is_mapf, motion_map, wait_code = self.get_motion_config()
+        char_to_code = np.full(256, wait_code, dtype=np.int32)
+        for action, code in motion_map.items():
+            char_to_code[ord(action)] = code
+        is_tick = (self.time_unit == "tick")
+        agent_ids = list(range(self.team_size))
 
-        state_trans = state_transition
-        if self.agent_model == "MAPF":
-            state_trans = state_transition_mapf
+        actual_codes_by_agent = self.extract_agent_codes(
+            data, "actualPaths", self.team_size, char_to_code, wait_code
+        )
+        planner_codes_by_agent = self.extract_agent_codes(
+            data, "plannerPaths", self.team_size, char_to_code, wait_code
+        )
+        if self.window_size is not None:
+            current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
+        else:
+            current_window_end = self.end_tstep
+
+        start_states = []
+        exec_step_counts = []
         for ag_id in range(self.team_size):
-            start = data["start"][ag_id]  # Get start location
-            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
-            self.start_loc[ag_id] = start
+            start = data["start"][ag_id]
+            start_state = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+            self.start_loc[ag_id] = start_state
+            start_states.append(start_state)
 
-            self.exec_paths[ag_id] = []  # Get actual path
-            self.exec_paths[ag_id].append(start)
-            if "actualPaths" in data:
-                tmp_str = data["actualPaths"][ag_id].split(",")
-                for motion in tmp_str:
-                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                    self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id])-1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id])-1, 0)
+            actual_codes = actual_codes_by_agent[ag_id]
+            planner_codes = planner_codes_by_agent[ag_id]
+            self.actual_path_codes[ag_id] = actual_codes
+            self.plan_path_codes[ag_id] = planner_codes
+
+            actual_limit = min(current_window_end, len(actual_codes))
+            if self.makespan < len(actual_codes):
+                self.makespan = len(actual_codes)
+            exec_step_counts.append(actual_limit)
+
+        starts_batch = np.zeros((len(start_states), 3), dtype=np.float64)
+        for row_idx, state in enumerate(start_states):
+            starts_batch[row_idx, 0] = float(state[0])
+            starts_batch[row_idx, 1] = float(state[1])
+            starts_batch[row_idx, 2] = float(state[2])
+        exec_counts_arr = np.asarray(exec_step_counts, dtype=np.int32)
+        exec_motion_batch = self.build_motion_batch(
+            self.actual_path_codes, agent_ids, [0] * self.team_size, exec_step_counts, wait_code
+        )
+        exec_results = np.zeros((self.team_size, max(exec_step_counts, default=0) + 1, 3), dtype=np.float64)
+        compute_exec_paths(
+            exec_motion_batch, starts_batch, exec_results, exec_counts_arr,
+            is_mapf, is_tick, self.ticks_per_timestep
+        )
+
+        for row_idx, ag_id in enumerate(agent_ids):
+            end_idx = exec_step_counts[row_idx] + 1
+            start_idx = min(self.start_tstep, end_idx - 1)
+            exec_path_block = exec_results[row_idx, start_idx:end_idx]
+            if is_tick:
+                self.exec_paths[ag_id] = np.round(exec_path_block, 6)
             else:
-                print("No actual paths.", end=" ")
+                self.exec_paths[ag_id] = np.rint(exec_path_block).astype(np.int32)
 
-            self.plan_paths[ag_id] = []  # Get planned path
-            self.plan_paths[ag_id].append(start)
-            if "plannerPaths" in data:
-                tmp_str = data["plannerPaths"][ag_id].split(",")
-                for tstep, motion in enumerate(tmp_str):
-                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
-                    self.plan_paths[ag_id].append(next_)
+        plan_step_counts = []
+        for ag_id in agent_ids:
+            plan_limit = min(current_window_end, len(self.plan_path_codes[ag_id]))
+            plan_step_counts.append(max(0, plan_limit - self.start_tstep))
+
+        plan_motion_batch = self.build_motion_batch(
+            self.plan_path_codes, agent_ids, [self.start_tstep] * self.team_size, plan_step_counts, wait_code
+        )
+        plan_start_states = [self.exec_paths[ag_id][0] for ag_id in agent_ids]
+        plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
+        for row_idx, state in enumerate(plan_start_states):
+            plan_starts_batch[row_idx, 0] = float(state[0])
+            plan_starts_batch[row_idx, 1] = float(state[1])
+            plan_starts_batch[row_idx, 2] = float(state[2])
+        plan_base_states = self.build_plan_base_state_batch(
+            agent_ids, [self.start_tstep] * self.team_size, plan_step_counts
+        )
+        plan_results = np.zeros((self.team_size, max(plan_step_counts, default=0) + 1, 3), dtype=np.float64)
+        compute_plan_next_states(
+            plan_motion_batch, plan_starts_batch, plan_base_states, plan_results,
+            np.asarray(plan_step_counts, dtype=np.int32),
+            is_mapf, is_tick, self.ticks_per_timestep
+        )
+
+        for row_idx, ag_id in enumerate(agent_ids):
+            plan_path_block = plan_results[row_idx, :plan_step_counts[row_idx] + 1]
+            if is_tick:
+                self.plan_paths[ag_id] = np.round(plan_path_block, 6)
             else:
-                print("No planner paths.", end=" ")
-
-        # Slice the paths according to the start and end timestep
-        for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep+1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep+1]
+                self.plan_paths[ag_id] = np.rint(plan_path_block).astype(np.int32)
 
         print("Done!")
 
+    def ensure_paths_through(self, target_timestep: int, agent_ids: List[int]=None) -> None:
+        if agent_ids is None:
+            agent_ids = list(range(self.team_size))
+        target_timestep = min(target_timestep, self.end_tstep)
+        if target_timestep < self.start_tstep:
+            return
+
+        is_mapf, _, wait_code = self.get_motion_config()
+        is_tick = (self.time_unit == "tick")
+
+        exec_agent_ids = []
+        exec_start_indices = []
+        exec_step_counts = []
+        exec_start_states = []
+        for ag_id in agent_ids:
+            if ag_id not in self.actual_path_codes:
+                continue
+            current_exec_end = self.start_tstep + len(self.exec_paths[ag_id]) - 1
+            exec_limit = min(target_timestep, len(self.actual_path_codes[ag_id]))
+            step_count = max(0, exec_limit - current_exec_end)
+            if step_count <= 0:
+                continue
+            exec_agent_ids.append(ag_id)
+            exec_start_indices.append(current_exec_end)
+            exec_step_counts.append(step_count)
+            exec_start_states.append(self.exec_paths[ag_id][-1])
+
+        if exec_agent_ids:
+            exec_motion_batch = self.build_motion_batch(
+                self.actual_path_codes, exec_agent_ids, exec_start_indices, exec_step_counts, wait_code
+            )
+            exec_results = np.zeros(
+                (len(exec_agent_ids), max(exec_step_counts, default=0) + 1, 3),
+                dtype=np.float64
+            )
+            exec_starts_batch = np.zeros((len(exec_start_states), 3), dtype=np.float64)
+            for row_idx, state in enumerate(exec_start_states):
+                exec_starts_batch[row_idx, 0] = float(state[0])
+                exec_starts_batch[row_idx, 1] = float(state[1])
+                exec_starts_batch[row_idx, 2] = float(state[2])
+            compute_exec_paths(
+                exec_motion_batch,
+                exec_starts_batch,
+                exec_results,
+                np.asarray(exec_step_counts, dtype=np.int32),
+                is_mapf,
+                is_tick,
+                self.ticks_per_timestep
+            )
+            for row_idx, ag_id in enumerate(exec_agent_ids):
+                exec_path_suffix = exec_results[row_idx, 1:exec_step_counts[row_idx] + 1]
+                if is_tick:
+                    exec_path_suffix = np.round(exec_path_suffix, 6)
+                else:
+                    exec_path_suffix = np.rint(exec_path_suffix).astype(np.int32)
+                self.exec_paths[ag_id] = np.concatenate(
+                    (self.exec_paths[ag_id], exec_path_suffix),
+                    axis=0
+                )
+                if ag_id in self.agents:
+                    agent = self.agents[ag_id]
+                    using_exec_path = (agent.path is agent.exec_path)
+                    agent.exec_path = self.exec_paths[ag_id]
+                    if using_exec_path:
+                        agent.path = agent.exec_path
+
+        plan_agent_ids = []
+        plan_start_indices = []
+        plan_step_counts = []
+        for ag_id in agent_ids:
+            if ag_id not in self.plan_path_codes:
+                continue
+            current_plan_end = self.start_tstep + len(self.plan_paths[ag_id]) - 1
+            plan_limit = min(target_timestep, len(self.plan_path_codes[ag_id]))
+            step_count = max(0, plan_limit - current_plan_end)
+            if step_count <= 0:
+                continue
+            plan_agent_ids.append(ag_id)
+            plan_start_indices.append(current_plan_end)
+            plan_step_counts.append(step_count)
+
+        if plan_agent_ids:
+            plan_motion_batch = self.build_motion_batch(
+                self.plan_path_codes, plan_agent_ids, plan_start_indices, plan_step_counts, wait_code
+            )
+            plan_start_states = [self.plan_paths[ag_id][-1] for ag_id in plan_agent_ids]
+            plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
+            for row_idx, state in enumerate(plan_start_states):
+                plan_starts_batch[row_idx, 0] = float(state[0])
+                plan_starts_batch[row_idx, 1] = float(state[1])
+                plan_starts_batch[row_idx, 2] = float(state[2])
+            plan_base_states = self.build_plan_base_state_batch(
+                plan_agent_ids, plan_start_indices, plan_step_counts
+            )
+            plan_results = np.zeros(
+                (len(plan_agent_ids), max(plan_step_counts, default=0) + 1, 3),
+                dtype=np.float64
+            )
+            compute_plan_next_states(
+                plan_motion_batch,
+                plan_starts_batch,
+                plan_base_states,
+                plan_results,
+                np.asarray(plan_step_counts, dtype=np.int32),
+                is_mapf,
+                is_tick,
+                self.ticks_per_timestep
+            )
+            for row_idx, ag_id in enumerate(plan_agent_ids):
+                plan_path_suffix = plan_results[row_idx, 1:plan_step_counts[row_idx] + 1]
+                if is_tick:
+                    plan_path_suffix = np.round(plan_path_suffix, 6)
+                else:
+                    plan_path_suffix = np.rint(plan_path_suffix).astype(np.int32)
+                self.plan_paths[ag_id] = np.concatenate(
+                    (self.plan_paths[ag_id], plan_path_suffix),
+                    axis=0
+                )
+                if ag_id in self.agents:
+                    agent = self.agents[ag_id]
+                    using_plan_path = (agent.path is agent.plan_path)
+                    agent.plan_path = self.plan_paths[ag_id]
+                    if using_plan_path:
+                        agent.path = agent.plan_path
 
     def load_errors(self, data:Dict):
         print("Loading errors", end="... ")
-        if "errors" not in data:
+
+        errors = data.get("errors", [])
+        schedule_errors = data.get("scheduleErrors", [])
+
+        if not errors and not schedule_errors:
             print("No errors.")
             return
+
         task_id, agent1, agent2, tstep, description = -1, -1, -1, -1, -1
-        for err in data["errors"]:
+        for err in errors:
             if len(err) == 5:
                 task_id, agent1, agent2, tstep, description = err
             if len(err) == 4:
@@ -901,7 +1299,7 @@ class PlanConfig2024:
                 self.conflicts[tstep].append(err)
                 
         # [task_id, robot1, robot2, timestep, description] 
-        for err in data["scheduleErrors"]:
+        for err in schedule_errors:
             if len(err) == 5:
                 task_id, agent1, agent2, tstep, description = err
             if len(err) == 4:
@@ -991,16 +1389,29 @@ class PlanConfig2024:
             loc_num = len(task[2])//2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                tobj = self.render_obj(
-                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
-                )
-                if not (tloc in self.grid2task.keys()):
-                    self.grid2task[tobj.obj] = []
-                self.grid2task[tobj.obj].append(tid)
-                tasks.append(Task(tid, tloc, tobj))
+                tasks.append(Task(tid, tloc, None))
             self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
+
+    def lazy_render_task(self, task_id: int, seq_id: int) -> None:
+        task = self.seq_tasks[task_id].tasks[seq_id]
+        if task.task_obj is not None:
+            return
+
+        tid = task.idx
+        tloc = task.loc
+        tobj = self.render_obj(
+            tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
+        )
+        task.task_obj = tobj
+        if self.grids:
+            self.canvas.tag_lower(tobj.obj, self.grids[0])
+        self.canvas.itemconfig(tobj.text, state=tk.HIDDEN)
+        self.rendered_tasks.add((task_id, seq_id))
+        if tobj.obj not in self.grid2task:
+            self.grid2task[tobj.obj] = []
+        self.grid2task[tobj.obj].append(tid)
 
 
     def load_plan(self, plan_file):
@@ -1008,13 +1419,23 @@ class PlanConfig2024:
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
+        if self.time_unit == "tick":
+            self.ticks_per_timestep = self.get_ticks_per_timestep(data)
+            self.delay = max((self.delay / self.ticks_per_timestep) * 2.0, 0.001)
+        else:
+            self.animation_substeps = self.moves
+            self.ticks_per_timestep = 1
+
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
 
         if self.end_tstep == math.inf:
-            if "makespan" not in data.keys():
-                raise KeyError("Missing makespan!")
-            self.end_tstep = data["makespan"]
+            if self.time_unit == "tick" and "makespanTicks" in data:
+                self.end_tstep = data["makespanTicks"]
+            else:
+                if "makespan" not in data.keys():
+                    raise KeyError("Missing makespan!")
+                self.end_tstep = data["makespan"]
 
         if self.agent_model == "":
             if 'actionModel' not in data.keys():
@@ -1176,11 +1597,13 @@ class PlanConfig2024:
         print("Done!")
 
     def lazy_render_agent_path(self, ag_id: int) -> None:
-        if self.agents[ag_id].path_objs:
+        rendered_len = len(self.agents[ag_id].path_objs)
+        total_len = len(self.exec_paths[ag_id])
+        if rendered_len >= total_len:
             return
 
-        ag_path = [] # Render paths as purple rectangles
-        for _pid_ in range(len(self.exec_paths[ag_id])):
+        ag_path = self.agents[ag_id].path_objs
+        for _pid_ in range(rendered_len, total_len):
             p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
             p_obj = None
             if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
