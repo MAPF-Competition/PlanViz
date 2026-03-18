@@ -2191,7 +2191,6 @@ class PlanViz2024:
                 visible = (task.state == mode)
 
         self.set_task_visibility(task_id, seq_id, visible)
-        self.raise_agent_canvas_items()
 
 
     def hide_single_task(self, task_id, seq_id) -> None:
@@ -2314,6 +2313,7 @@ class PlanViz2024:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
+        self.raise_agent_canvas_items()
         
 
     def back_agents_per_timestep(self) -> None:
@@ -2419,6 +2419,7 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
+        self.raise_agent_canvas_items()
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
