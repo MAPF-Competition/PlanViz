@@ -8,6 +8,7 @@ import os
 import sys
 import logging
 import re
+from bisect import bisect_right
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
@@ -18,7 +19,7 @@ from matplotlib.colors import Normalize
 from matplotlib import cm
 from PIL import Image
 from util import (
-    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
+    TASK_COLORS, AGENT_COLORS, AgentStatus, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
     BaseObj, Agent, Task, SequentialTask, compute_exec_paths, compute_plan_next_states)
 
@@ -848,6 +849,10 @@ class PlanConfig2024:
         self.shown_path_agents:Set[int] = set()
         self.shown_tasks_seq:Set[int] = set()
         self.conflict_agents:Set[int] = set()
+        self.error_agents_by_timestep:Dict[int, Set[int]] = {}
+        self.finished_agents_by_timestep:Dict[int, Set[int]] = {}
+        self.delay_intervals:Dict[int, List[Tuple[int, int]]] = {}
+        self.delay_interval_starts:Dict[int, List[int]] = {}
 
         self.load_map(map_file)  # Load from the map file
         
@@ -1458,6 +1463,10 @@ class PlanConfig2024:
                 if tstep not in self.conflicts:  # Sort errors according to the tstep
                     self.conflicts[tstep] = []
                 self.conflicts[tstep].append(err)
+                if tstep not in self.error_agents_by_timestep:
+                    self.error_agents_by_timestep[tstep] = set()
+                    self.error_agents_by_timestep[tstep].add(agent1)
+                    self.error_agents_by_timestep[tstep].add(agent2)
                 
         # [task_id, robot1, robot2, timestep, description] 
         for err in schedule_errors:
@@ -1472,7 +1481,73 @@ class PlanConfig2024:
                 if tstep not in self.conflicts:  # Sort errors according to the tstep
                     self.conflicts[tstep] = []
                 self.conflicts[tstep].append(err)
+                if tstep not in self.error_agents_by_timestep:
+                    self.error_agents_by_timestep[tstep] = set()
+                    self.error_agents_by_timestep[tstep].add(agent1)
+                    self.error_agents_by_timestep[tstep].add(agent2)
         print("Done!")
+
+
+    def load_delay_intervals(self, data:Dict):
+        print("Loading delay intervals", end="... ")
+
+        delay_intervals = data.get("delayIntervals", [])
+        if not isinstance(delay_intervals, list) or len(delay_intervals) == 0:
+            print("No delay intervals.")
+            return
+
+        for ag_id in range(min(self.team_size, len(delay_intervals))):
+            raw_intervals = delay_intervals[ag_id]
+            if not isinstance(raw_intervals, list):
+                continue
+
+            parsed_intervals: List[Tuple[int, int]] = []
+            for interval in raw_intervals:
+                if not isinstance(interval, list) or len(interval) != 2:
+                    continue
+                start_t = int(interval[0])
+                end_t = int(interval[1])
+                if end_t < start_t:
+                    start_t, end_t = end_t, start_t
+                if end_t < self.start_tstep or start_t > self.end_tstep:
+                    continue
+                parsed_intervals.append((start_t, end_t))
+
+            if parsed_intervals:
+                parsed_intervals.sort()
+                self.delay_intervals[ag_id] = parsed_intervals
+                self.delay_interval_starts[ag_id] = [interval[0] for interval in parsed_intervals]
+
+        print(f"Done! agents={len(self.delay_intervals)}")
+
+
+    def agent_has_delay(self, ag_id:int, timestep:int) -> bool:
+        if ag_id not in self.delay_intervals:
+            return False
+
+        interval_starts = self.delay_interval_starts[ag_id]
+        interval_index = bisect_right(interval_starts, timestep) - 1
+        if interval_index < 0:
+            return False
+
+        interval = self.delay_intervals[ag_id][interval_index]
+        return interval[0] <= timestep <= interval[1]
+
+
+    def agent_has_error(self, ag_id:int, timestep:int) -> bool:
+        return ag_id in self.error_agents_by_timestep.get(timestep, set())
+
+
+    def agent_finished_errand(self, ag_id:int, timestep:int) -> bool:
+        return ag_id in self.finished_agents_by_timestep.get(timestep, set())
+
+
+    def get_agent_status(self, ag_id:int, timestep:int) -> AgentStatus:
+        if self.agent_finished_errand(ag_id, timestep):
+            return AgentStatus.ERRAND_FINISHED
+        if self.agent_has_delay(ag_id, timestep):
+            return AgentStatus.DELAYED
+        return AgentStatus.NORMAL
 
 
     def load_schedule(self, data:Dict):
@@ -1525,6 +1600,9 @@ class PlanConfig2024:
             if finish_tstep not in self.events["finished"]:
                 self.events["finished"][finish_tstep] = {}      
             self.events["finished"][finish_tstep][global_task_id] = ag_id
+            if finish_tstep not in self.finished_agents_by_timestep:
+                self.finished_agents_by_timestep[finish_tstep] = set()
+            self.finished_agents_by_timestep[finish_tstep].add(ag_id)
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["agent"] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["timestep"] = finish_tstep
         self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
@@ -1605,6 +1683,7 @@ class PlanConfig2024:
 
         self.load_paths(data)
         self.load_errors(data)
+        self.load_delay_intervals(data)
         self.load_sequential_tasks(data)
         self.load_schedule(data)
         self.load_events(data)

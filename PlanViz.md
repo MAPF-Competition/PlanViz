@@ -12,7 +12,7 @@ PlanViz provides a variety of visual markers to help users understand the result
 ![scenario](images/scenario_2.png)
 
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
-- An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading.
+- An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading. When `delayIntervals` are present in a `2026 LoRR` file, delayed agents are shown in yellow during the corresponding ticks.
 - All errands of tasks are represented by colored squares. Errands for a task are initially marked in yellow, turn orange when the task is assigned to an agent, and turn to white once the errand is completed and there is no further errand at this location.
 
 ![scenario](images/scenario_1.png)
