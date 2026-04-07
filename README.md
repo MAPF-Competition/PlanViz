@@ -6,7 +6,59 @@ However, PlanViz can also be used for a variety of similar problems which are ou
 
 PlanViz is implemented in python using the [`tkinter`](https://docs.python.org/3/library/tkinter.html), a Tcl/Tk GUI toolkit. An example of the application in action is shown in the following video.
 
-![plan_viz_gif](images/plan_viz.gif)
+![plan_viz_gif](images/plan_viz2026.gif)
+
+## Installation
+
+This project requires **Python 3.10 or higher**. Choose one of the following methods to install the required packages.
+
+### Option1: Using [venv](https://docs.python.org/3/library/venv.html)
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/MAPF-Competition/PlanViz.git
+    cd PlanViz
+    ```
+2.  **Verify your Python version:**
+
+    Before creating the environment, check your default `python3` version. If the output version is less than 3.10, you'll need to use a specific Python command for a newer version you have installed (e.g., `python3.10`, `python3.11`).
+    ```bash
+    python3 --version
+    ```
+
+3.  **Create and activate a virtual environment:**
+    * **macOS / Linux:**
+        ```bash
+        python3 -m venv venv
+        source venv/bin/activate
+        ```
+    * **Windows:**
+        ```bash
+        python -m venv venv
+        .\venv\Scripts\activate
+        ```
+
+4.  **Install the required packages:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Option 2: Using [Conda](https://docs.conda.io/en/latest/)
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/MAPF-Competition/PlanViz.git
+    cd PlanViz
+    ```
+
+2.  **Create and activate a conda environment:**
+    ```bash
+    conda create --name planviz python=3.10
+    conda activate planviz
+    ```
+
+3.  **Install the required packages:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Run
 
@@ -15,7 +67,7 @@ Please refer to the [PlanViz instruction manual](./PlanViz.md) for details about
 Open a terminal and type the following command:
 
 ```bash
-python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2024.json --grid --aid --tid
+python3 script/run.py --map example/warehouse_small.map --plan example/warehouse_small_2026.json
 ```
 
 ## Tracker Transfer

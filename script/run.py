@@ -8,27 +8,36 @@ import numpy as np
 import json
 from plan_config import PlanConfig2023, PlanConfig2024
 from plan_viz import PlanViz2023, PlanViz2024
-
+import math
 
 def main() -> None:
     """The main function of the visualizer.
     """
     parser = argparse.ArgumentParser(description="Plan visualizer for a MAPF instance")
     parser.add_argument("--map", type=str, help="Path to the map file")
-    parser.add_argument("--version", type=str, default=None, help="Plan file version, '2024 LoRR' or '2023 LoRR'")
+    parser.add_argument(
+        "--version",
+        type=str,
+        default=None,
+        help="Plan file version, '2024 LoRR', '2026 LoRR' or '2023 LoRR'",
+    )
     parser.add_argument("--plan", type=str, help="Path to the planned path file")
     parser.add_argument("--n", dest="team_size", type=int, default=np.inf,
                         help="Number of agents")
-    parser.add_argument("--start", type=int, default=0, help="Starting timestep")
-    parser.add_argument("--end", type=int, default=100, help="Ending timestep")
+    parser.add_argument("--start", type=int, default=0, help="Starting time")
+    parser.add_argument("--end", type=int, default=math.inf, help="Ending time")
+    parser.add_argument("--window", type=int, default=50000, help="Window size")
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
-    parser.add_argument("--delay", type=float, help="Wait time between timesteps")
-    parser.add_argument("--grid", dest="show_grid", action="store_true",
+    parser.add_argument("--delay", type=float, help="Wait time between animation updates")
+    parser.add_argument("--event-limit", dest="event_limit", type=int, default=10,
+                        help="Number of recent events to show in the event panel")
+    
+    parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
                         help="Show grid on the environment or not")
-    parser.add_argument("--aid", dest="show_ag_idx", action="store_true",
+    parser.add_argument("--aid", dest="show_ag_idx", type=bool, default=True,
                         help="Show agent indices or not")
-    parser.add_argument("--tid", dest="show_task_idx", action="store_true",
+    parser.add_argument("--tid", dest="show_task_idx", type=bool, default=False,
                         help="Show task indices or not")
     parser.add_argument("--static", dest="show_static", action="store_true",
                         help="Show start locations or not")
@@ -56,10 +65,10 @@ def main() -> None:
     
     if args.version != None:
         version = args.version
-
-    if version == "2024 LoRR":
-        plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end,
-                              args.ppm, args.moves, args.delay, args.pathalg, args.heatmap_max)
+    print(version)
+    if version in ["2024 LoRR", "2026 LoRR"]:
+        plan_config = PlanConfig2024(args.map, args.plan, args.team_size, args.start, args.end, args.window,
+                              args.ppm, args.moves, args.delay, args.pathalg, args.heatmap_max, version, event_limit=args.event_limit)
         PlanViz2024(plan_config, args.show_grid, args.show_ag_idx, args.show_task_idx,
                 args.show_static, args.show_conf_ag)
 

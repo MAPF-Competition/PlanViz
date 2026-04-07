@@ -7,6 +7,8 @@ All rights reserved.
 import os
 import sys
 import logging
+import re
+from bisect import bisect_right
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 import json
@@ -16,10 +18,70 @@ import pandas as pd
 import scipy.sparse
 from matplotlib.colors import Normalize
 from matplotlib import cm
+from PIL import Image
 from util import (
-    TASK_COLORS, AGENT_COLORS, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
+    TASK_COLORS, AGENT_COLORS, AgentStatus, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
-    BaseObj, Agent, Task, SequentialTask, get_rotation)
+    BaseObj, Agent, Task, SequentialTask, get_rotation,
+    compute_exec_paths, compute_plan_next_states,)
+
+MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
+MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
+SEGMENTED_RLE_CHUNK_PATTERN = re.compile(r"\[\(([^)]*)\):\(([^)]*)\)\]")
+
+
+COORD_LABEL_LIMIT = 1_000
+VIEWPORT_MIN_WIDTH = 640
+VIEWPORT_MIN_HEIGHT = 360
+VIEWPORT_TARGET_VISIBLE_COLS = 80
+VIEWPORT_TARGET_VISIBLE_ROWS = 45
+MINIMAP_WIDTH = 220
+MINIMAP_HEIGHT = 160
+
+
+def load_map_grid(map_file: str) -> Tuple[int, int, int, List[List[int]]]:
+    env_map: List[List[int]] = []
+
+    with open(file=map_file, mode="r", encoding="UTF-8") as fin:
+        fin.readline()  # ignore type
+        header_height = int(fin.readline().strip().split(" ")[1])
+        width = int(fin.readline().strip().split(" ")[1])
+        fin.readline()  # ignore 'map' line
+        for raw_line in fin.readlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            out_line: List[int] = []
+            for word in line:
+                if word in OBSTACLES:
+                    out_line.append(0)
+                elif word in [".", "S"]:
+                    out_line.append(1)
+                elif word == "E":
+                    out_line.append(2)
+
+            if len(out_line) != width:
+                raise ValueError(
+                    f"Invalid map row width in {map_file}: expected {width}, got {len(out_line)}."
+                )
+            env_map.append(out_line)
+
+    return header_height, width, len(env_map), env_map
+
+
+def build_base_env_image(env_map: List[List[int]]) -> Image.Image:
+    height = len(env_map)
+    width = len(env_map[0]) if env_map else 0
+    image = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    pixels = image.load()
+
+    for rid, cur_row in enumerate(env_map):
+        for cid, cur_ele in enumerate(cur_row):
+            if cur_ele == 0:
+                pixels[cid, rid] = (0, 0, 0, 255)
+    return image
+
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -99,7 +161,8 @@ class PlanConfig2023:
         self.canvas = tk.Canvas(self.window,
                                 width=(self.width+1) * self.tile_size,
                                 height=(self.height+1) * self.tile_size,
-                                bg="white")
+                                bg="white",
+                                takefocus=True)
         self.canvas.grid(row=0, column=0,sticky="nsew")
         self.canvas.configure(scrollregion = self.canvas.bbox("all"))
 
@@ -729,30 +792,51 @@ class PlanConfig2024:
 
     This is for LORR 2025, and I am like a clown (not even a joker).
     """
-
-    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep,
-                 ppm, moves, delay, pathalg, heatmap_max):
+    def __init__(self, map_file, plan_file, team_size, start_tstep, end_tstep, window_size,
+                 ppm, moves, delay, pathalg, heatmap_max, version=None, event_limit=10):
         print("===== Initialize PlanConfig2 =====")
 
         map_name = get_map_name(map_file)
-        self.team_size: int = team_size
-        self.start_tstep: int = start_tstep
-        self.end_tstep: int = end_tstep
+        self.team_size:int = team_size
+        self.start_tstep:int = start_tstep
+        self.end_tstep:int = end_tstep
+        self.window_size:int = window_size
+        self.event_limit:int = event_limit
         self.pathalg = pathalg
-        self.agent_model: str = ""
 
-        self.width: int = -1
-        self.height: int = -1
-        self.env_map: List[List[int]] = []
+        self.agent_model:str = ""
+        self.version = version
+
+        self.width:int = -1
+        self.height:int = -1
+        self.env_map:List[List[int]] = []
+        self.use_viewport_mode:bool = False
+        self.show_coord_labels:bool = True
+        self.base_env_image = None
+        self.screen_height:int = 0
+        self.panel_width_px:int = 0
+        self.viewport_width_px:int = 0
+        self.viewport_height_px:int = 0
+        self.world_width_px:int = 0
+        self.world_height_px:int = 0
+        self.minimap_width_px:int = MINIMAP_WIDTH
+        self.minimap_height_px:int = MINIMAP_HEIGHT
+        self.minimap_scale:float = 1.0
+        self.minimap_render_width_px:int = self.minimap_width_px
+        self.minimap_render_height_px:int = self.minimap_height_px
+        self.minimap_offset_x_px:int = 0
+        self.minimap_offset_y_px:int = 0
+        self.initial_focus_bbox:Tuple[int, int, int, int] | None = None
+        self.default_tile_size:int = 0
 
         self.max_seq_num = -1
-        self.seq_tasks: Dict[int, SequentialTask] = {}
-        self.events: Dict[str, Dict[int, Dict[int, int]]] = {"assigned": {}, "finished": {}}
+        self.seq_tasks:Dict[int, SequentialTask] = {}
+        self.rendered_tasks: Set[Tuple[int, int]] = set()
+        self.events:Dict[str, Dict[int, Dict[int,int]]] = {"assigned": {}, "finished": {}}
         self.event_tracker = {"aTime": [], "aid": 0, "fTime": [], "fid": 0}
-        self.actual_schedule: Dict[int, List[Tuple[int]]] = {}  # timestep -> (task id, agent id)
-
+        self.actual_schedule: Dict[int, List[Tuple[int, int]]] = {}  # timestep -> (task id, agent id)
+        
         self.grids: List = []
-        self.heatmap = []
         self.wrong_direction_heatmap = []
         self.wait_action_heatmap = []
         self.bad_turn_heatmap = []
@@ -767,6 +851,8 @@ class PlanConfig2024:
         self.start_loc = {}
         self.plan_paths = {}
         self.exec_paths = {}
+        self.actual_path_codes = {}
+        self.plan_path_codes = {}
         self.conflicts = {}
         self.agent_assigned_task = {}
         self.agent_shown_task_arrow = {}
@@ -776,7 +862,12 @@ class PlanConfig2024:
         self.shown_path_agents: Set[int] = set()
         self.shown_tasks_seq: Set[int] = set()
         self.conflict_agents: Set[int] = set()
-        self.supop_types = {"wrong_direction": 0,"waited":0, "bad_turn":0, }
+        self.error_agents_by_timestep: Dict[int, Set[int]] = {}
+        self.finished_agents_by_timestep: Dict[int, Set[int]] = {}
+        self.delay_intervals: Dict[int, List[Tuple[int, int]]] = {}
+        self.delay_interval_starts: Dict[int, List[int]] = {}
+        self.supop_types = {"wrong_direction": 0, "waited": 0, "bad_turn": 0}
+
         self.load_map(map_file)  # Load from the map file
         assert self.pathalg in ["Auto", "Landmark", "Manhattan", "True"], "Invalid path algorithm name"
         if self.pathalg == "Auto":
@@ -799,6 +890,7 @@ class PlanConfig2024:
         self.agent_performance = []
 
         self.screen_width = self.window.winfo_screenwidth()
+        self.screen_height = self.window.winfo_screenheight()
 
         pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
 
@@ -814,113 +906,679 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
-                self.ppm = pixel_per_grid // self.moves
+                self.ppm = max(1, pixel_per_grid // self.moves)
 
         self.delay: int = delay
         if self.delay is None:
             if map_name in MAP_CONFIG:
                 self.delay = MAP_CONFIG[map_name]["delay"]
             else:
-                self.delay = 0
-        self.tile_size: int = self.ppm * self.moves
+                self.delay = 0.06
+        if self.version == "2026 LoRR":
+            self.time_unit:str = "tick"
+            self.animation_substeps:int = 1
+        else:
+            self.time_unit:str = "timestep"
+            self.animation_substeps:int = self.moves
+        self.ticks_per_timestep:int = 1
+        self.tile_size:int = self.ppm * self.moves
+        self.use_viewport_mode = True
+        self.tile_size = max(self.tile_size, self.compute_default_tile_size())
+        self.default_tile_size = self.tile_size
+        self.update_viewport_metrics()
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
-                                width=(self.width + 1) * self.tile_size,
-                                height=(self.height + 1) * self.tile_size,
-                                bg="white")
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+                                width=self.viewport_width_px,
+                                height=self.viewport_height_px,
+                                bg="white",
+                                takefocus=True)
+        self.canvas.grid(row=0, column=0,sticky="nsew")
+        self.update_canvas_scrollregion()
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        self.compute_initial_focus_bbox()
         # self.load_errors()
 
         # Render instance on canvas
         self.render_env()
         self.render_agents()
+        self.update_canvas_scrollregion()
+
+    def get_ticks_per_timestep(self, data:Dict) -> int:
+        """Get ticks per timestep from 2026-compatible fields."""
+        ticks_per_timestep = 10
+        if "agentMaxCounter" in data:
+            ticks_per_timestep = int(data["agentMaxCounter"])
+        if ticks_per_timestep <= 0:
+            raise ValueError("ticksPerTimestep must be > 0.")
+        return ticks_per_timestep
+
+
+    def transition_state(self, cur_state, motion:str, ticks_per_timestep:int):
+        """Compute one-tick fractional transition state."""
+        row = float(cur_state[0])
+        col = float(cur_state[1])
+        ori = float(cur_state[2])
+        frac = 1.0 / float(ticks_per_timestep)
+
+        if self.agent_model == "MAPF":
+            if motion == "U":  # south (down)
+                row += frac
+            elif motion == "D":  # north (up)
+                row -= frac
+            elif motion == "L":  # west (left)
+                col -= frac
+            elif motion == "R":  # east (right)
+                col += frac
+            elif motion in ["W", "T"]:
+                pass  # Wait or task action, no movement
+            return (round(row, 6), round(col, 6), round(ori, 6))
+
+        # MAPF_T / default
+        if motion == "F":  # Forward
+            angle = ori * (math.pi / 2.0)
+            row -= math.sin(angle) * frac
+            col += math.cos(angle) * frac
+        elif motion == "R":  # Clockwise
+            ori = (ori - frac) % 4.0
+        elif motion == "C":  # Counter-clockwise
+            ori = (ori + frac) % 4.0
+        elif motion in ["W", "T"]:
+            pass  # Wait or task action, no movement
+
+        return (round(row, 6), round(col, 6), round(ori, 6))
+
+
+    def decode_segmented_rle_codes(self, path_str:str, path_label:str,
+                                   char_to_code: np.ndarray, wait_code: int) -> np.ndarray:
+        """Decode segmented-rle-v1 path string:
+        [(startTick,x,y,dir,counter):(A 10,W 20)]...
+        """
+        if path_str.strip() == "":
+            return np.empty(0, dtype=np.int32)
+
+        cur_tick = 0
+        match_count = 0
+        cursor = 0
+        run_codes: List[int] = []
+        run_lengths: List[int] = []
+        for chunk_idx, match in enumerate(SEGMENTED_RLE_CHUNK_PATTERN.finditer(path_str)):
+            if path_str[cursor:match.start()].strip() != "":
+                raise ValueError(f"{path_label} has invalid text between chunks.")
+
+            state_payload = match.group(1)
+            actions_payload = match.group(2)
+            state_parts = [part.strip() for part in state_payload.split(",")]
+            if len(state_parts) != 5:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} state must have 5 fields "
+                    "(startTick,x,y,direction,counter)."
+                )
+
+            start_tick = int(state_parts[0])
+            if start_tick != cur_tick:
+                raise ValueError(
+                    f"{path_label} chunk {chunk_idx} must be contiguous and ordered: "
+                    f"expected startTick {cur_tick}, got {start_tick}."
+                )
+
+            segment_ticks = 0
+            run_tokens = [token.strip() for token in actions_payload.split(",") if token.strip()]
+            for run_idx, run_token in enumerate(run_tokens):
+                run_parts = run_token.split()
+                if len(run_parts) != 2:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} must be '<action> <ticks>'."
+                    )
+                action = run_parts[0]
+                run_ticks = int(run_parts[1])
+                if run_ticks < 0:
+                    raise ValueError(
+                        f"{path_label} chunk {chunk_idx} run {run_idx} has negative ticks."
+                    )
+                if run_ticks == 0:
+                    continue
+                if len(action) == 1 and ord(action) < len(char_to_code):
+                    run_codes.append(int(char_to_code[ord(action)]))
+                else:
+                    run_codes.append(wait_code)
+                run_lengths.append(run_ticks)
+                segment_ticks += run_ticks
+
+            cur_tick = start_tick + segment_ticks
+            cursor = match.end()
+            match_count += 1
+
+        if path_str[cursor:].strip() != "":
+            raise ValueError(f"{path_label} has trailing invalid text.")
+        if match_count == 0:
+            raise ValueError(
+                f"{path_label} looks like segmented RLE path but no chunks were parsed."
+            )
+        codes = np.empty(cur_tick, dtype=np.int32)
+        offset = 0
+        for run_idx, run_ticks in enumerate(run_lengths):
+            next_offset = offset + run_ticks
+            codes[offset:next_offset] = run_codes[run_idx]
+            offset = next_offset
+        return codes
+
+
+    def extract_agent_codes(self, data:Dict, path_field:str, team_size:int,
+                            char_to_code: np.ndarray, wait_code: int):
+        """Extract per-agent motion code arrays from actualPaths/plannerPaths.
+        Supports:
+        - segmented-rle-v1 string chunks in the path field (tick mode), and
+        - legacy comma-separated motions.
+        """
+        if path_field not in data:
+            raise KeyError(f"Missing {path_field}.")
+
+        legacy_paths = data[path_field]
+        if not isinstance(legacy_paths, list):
+            raise ValueError(f"{path_field} must be a list.")
+        if len(legacy_paths) < team_size:
+            raise ValueError(f"{path_field} must contain at least {team_size} entries.")
+
+        codes_by_agent = []
+        for ag_id in range(team_size):
+            path_str = legacy_paths[ag_id]
+            if not isinstance(path_str, str):
+                raise ValueError(f"{path_field}[{ag_id}] must be a string.")
+
+            if self.time_unit == "tick":
+                codes_by_agent.append(
+                    self.decode_segmented_rle_codes(
+                        path_str, f"{path_field}[{ag_id}]", char_to_code, wait_code
+                    )
+                )
+            else:
+                action_str = "".join(part.strip() for part in path_str.split(",") if part.strip())
+                if action_str:
+                    action_bytes = np.frombuffer(action_str.encode("ascii"), dtype=np.uint8)
+                    codes_by_agent.append(char_to_code[action_bytes])
+                else:
+                    codes_by_agent.append(np.empty(0, dtype=np.int32))
+        return codes_by_agent
+
+
+    def get_motion_config(self):
+        is_mapf = (self.agent_model == "MAPF")
+        motion_map = MOTION_CODE_MAPF if is_mapf else MOTION_CODE
+        wait_code = 4 if is_mapf else 3
+        return is_mapf, motion_map, wait_code
+
+
+    def build_motion_batch(self, code_store: Dict[int, np.ndarray], agent_ids: List[int],
+                           start_indices: List[int], step_counts: List[int], wait_code: int):
+        max_steps = max(step_counts, default=0)
+        motion_batch = np.full((len(agent_ids), max_steps), wait_code, dtype=np.int32)
+        for row_idx, ag_id in enumerate(agent_ids):
+            cur_count = step_counts[row_idx]
+            if cur_count <= 0:
+                continue
+            start_idx = start_indices[row_idx]
+            motion_batch[row_idx, :cur_count] = code_store[ag_id][start_idx:start_idx + cur_count]
+        return motion_batch
+
+
+    def build_plan_base_state_batch(self, agent_ids: List[int], start_timesteps: List[int],
+                                    step_counts: List[int]) -> np.ndarray:
+        max_steps = max(step_counts, default=0)
+        base_states = np.zeros((len(agent_ids), max_steps, 3), dtype=np.float64)
+        for row_idx, ag_id in enumerate(agent_ids):
+            cur_count = step_counts[row_idx]
+            if cur_count <= 0:
+                continue
+            exec_path = self.exec_paths[ag_id]
+            start_idx = max(start_timesteps[row_idx] - self.start_tstep, 0)
+            end_idx = min(start_idx + cur_count, len(exec_path))
+            copied_count = max(0, end_idx - start_idx)
+            if copied_count > 0:
+                base_states[row_idx, :copied_count] = exec_path[start_idx:end_idx]
+            if copied_count < cur_count:
+                base_states[row_idx, copied_count:cur_count] = exec_path[-1]
+        return base_states
 
     def load_map(self, map_file: str) -> None:
         print("Loading map from " + map_file, end='... ')
 
-        with open(file=map_file, mode="r", encoding="UTF-8") as fin:
-            fin.readline()  # ignore type
-            self.height = int(fin.readline().strip().split(' ')[1])
-            self.width = int(fin.readline().strip().split(' ')[1])
-            fin.readline()  # ignore 'map' line
-            for line in fin.readlines():
-                out_line: List[bool] = []
-                for word in list(line.strip()):
-                    if word in OBSTACLES:
-                        out_line.append(0)
-                    elif word in [".", "S"]:
-                        out_line.append(1)
-                    elif word == "E":
-                        out_line.append(2)
-
-                assert len(out_line) == self.width
-                self.env_map.append(out_line)
-        assert len(self.env_map) == self.height
+        header_height, self.width, actual_height, self.env_map = load_map_grid(map_file)
+        self.height = actual_height
+        self.show_coord_labels = (self.width + self.height) <= COORD_LABEL_LIMIT
+        self.base_env_image = build_base_env_image(self.env_map)
+        if header_height != actual_height:
+            print(
+                f"header height {header_height} does not match actual rows {actual_height}; "
+                "using actual rows.",
+                end=" ",
+            )
         print("Done!")
 
-    def load_paths(self, data: Dict):
+
+    def update_world_view_metrics(self) -> None:
+        coord_padding = self.tile_size if self.show_coord_labels else 0
+        self.world_width_px = max(1, int(round(self.width * self.tile_size + coord_padding)))
+        self.world_height_px = max(1, int(round(self.height * self.tile_size + coord_padding)))
+        self.minimap_scale = min(
+            self.minimap_width_px / self.world_width_px,
+            self.minimap_height_px / self.world_height_px,
+        )
+        self.minimap_render_width_px = max(
+            1, int(round(self.world_width_px * self.minimap_scale))
+        )
+        self.minimap_render_height_px = max(
+            1, int(round(self.world_height_px * self.minimap_scale))
+        )
+        self.minimap_offset_x_px = (self.minimap_width_px - self.minimap_render_width_px) // 2
+        self.minimap_offset_y_px = (self.minimap_height_px - self.minimap_render_height_px) // 2
+
+
+    def update_viewport_metrics(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.viewport_width_px = max(
+                1,
+                min(
+                    self.world_width_px,
+                    max(
+                        VIEWPORT_MIN_WIDTH,
+                        self.screen_width - self.panel_width_px,
+                    ),
+                ),
+            )
+            self.viewport_height_px = max(
+                1,
+                min(
+                    self.world_height_px,
+                    max(
+                        VIEWPORT_MIN_HEIGHT,
+                        self.screen_height,
+                    ),
+                ),
+            )
+        else:
+            self.viewport_width_px = (self.width + 1) * self.tile_size
+            self.viewport_height_px = (self.height + 1) * self.tile_size
+
+
+    def compute_default_tile_size(self) -> int:
+        available_width = max(
+            VIEWPORT_MIN_WIDTH,
+            self.screen_width - self.panel_width_px,
+        )
+        available_height = max(
+            VIEWPORT_MIN_HEIGHT,
+            self.screen_height,
+        )
+        width_target = max(1, available_width // VIEWPORT_TARGET_VISIBLE_COLS)
+        height_target = max(1, available_height // VIEWPORT_TARGET_VISIBLE_ROWS)
+        return max(1, min(width_target, height_target))
+
+
+    def update_canvas_scrollregion(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.canvas.configure(scrollregion=(0, 0, self.world_width_px, self.world_height_px))
+        else:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+    def compute_initial_focus_bbox(self) -> None:
+        agent_points = [(loc[0], loc[1]) for loc in self.start_loc.values()]
+        task_points = [task.loc for seq_task in self.seq_tasks.values() for task in seq_task.tasks]
+
+        if agent_points and task_points:
+            focus_points = agent_points + task_points
+        elif agent_points:
+            focus_points = agent_points
+        elif task_points:
+            focus_points = task_points
+        else:
+            self.initial_focus_bbox = (0, max(0, self.height - 1), 0, max(0, self.width - 1))
+            return
+
+        min_row = min(row for row, _ in focus_points)
+        max_row = max(row for row, _ in focus_points)
+        min_col = min(col for _, col in focus_points)
+        max_col = max(col for _, col in focus_points)
+        self.initial_focus_bbox = (min_row, max_row, min_col, max_col)
+
+
+    def load_paths(self, data:Dict):
         print("Loading paths", end="... ")
+        is_mapf, motion_map, wait_code = self.get_motion_config()
+        char_to_code = np.full(256, wait_code, dtype=np.int32)
+        for action, code in motion_map.items():
+            char_to_code[ord(action)] = code
+        is_tick = (self.time_unit == "tick")
+        agent_ids = list(range(self.team_size))
 
-        state_trans = state_transition
-        if self.agent_model == "MAPF":
-            state_trans = state_transition_mapf
+        actual_codes_by_agent = self.extract_agent_codes(
+            data, "actualPaths", self.team_size, char_to_code, wait_code
+        )
+        planner_codes_by_agent = self.extract_agent_codes(
+            data, "plannerPaths", self.team_size, char_to_code, wait_code
+        )
+        if self.window_size is not None:
+            current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
+        else:
+            current_window_end = self.end_tstep
+
+        start_states = []
+        exec_step_counts = []
         for ag_id in range(self.team_size):
-            start = data["start"][ag_id]  # Get start location
-            start = (int(start[0]), int(start[1]), DIRECTION[start[2]])
-            self.start_loc[ag_id] = start
+            start = data["start"][ag_id]
+            start_state = (int(start[0]), int(start[1]), DIRECTION[start[2]])
+            self.start_loc[ag_id] = start_state
+            start_states.append(start_state)
 
-            self.exec_paths[ag_id] = []  # Get actual path
-            self.exec_paths[ag_id].append(start)
-            if "actualPaths" in data:
-                tmp_str = data["actualPaths"][ag_id].split(",")
-                for motion in tmp_str:
-                    next_ = state_trans(self.exec_paths[ag_id][-1], motion)
-                    self.exec_paths[ag_id].append(next_)
-                if self.makespan < max(len(self.exec_paths[ag_id]) - 1, 0):
-                    self.makespan = max(len(self.exec_paths[ag_id]) - 1, 0)
+            actual_codes = actual_codes_by_agent[ag_id]
+            planner_codes = planner_codes_by_agent[ag_id]
+            self.actual_path_codes[ag_id] = actual_codes
+            self.plan_path_codes[ag_id] = planner_codes
+
+            actual_limit = min(current_window_end, len(actual_codes))
+            if self.makespan < len(actual_codes):
+                self.makespan = len(actual_codes)
+            exec_step_counts.append(actual_limit)
+
+        starts_batch = np.zeros((len(start_states), 3), dtype=np.float64)
+        for row_idx, state in enumerate(start_states):
+            starts_batch[row_idx, 0] = float(state[0])
+            starts_batch[row_idx, 1] = float(state[1])
+            starts_batch[row_idx, 2] = float(state[2])
+        exec_counts_arr = np.asarray(exec_step_counts, dtype=np.int32)
+        exec_motion_batch = self.build_motion_batch(
+            self.actual_path_codes, agent_ids, [0] * self.team_size, exec_step_counts, wait_code
+        )
+        exec_results = np.zeros((self.team_size, max(exec_step_counts, default=0) + 1, 3), dtype=np.float64)
+        compute_exec_paths(
+            exec_motion_batch, starts_batch, exec_results, exec_counts_arr,
+            is_mapf, is_tick, self.ticks_per_timestep
+        )
+
+        for row_idx, ag_id in enumerate(agent_ids):
+            end_idx = exec_step_counts[row_idx] + 1
+            start_idx = min(self.start_tstep, end_idx - 1)
+            exec_path_block = exec_results[row_idx, start_idx:end_idx]
+            if is_tick:
+                self.exec_paths[ag_id] = np.round(exec_path_block, 6)
             else:
-                print("No actual paths.", end=" ")
+                self.exec_paths[ag_id] = np.rint(exec_path_block).astype(np.int32)
 
-            self.plan_paths[ag_id] = []  # Get planned path
-            self.plan_paths[ag_id].append(start)
-            if "plannerPaths" in data:
-                tmp_str = data["plannerPaths"][ag_id].split(",")
-                for tstep, motion in enumerate(tmp_str):
-                    next_ = state_trans(self.exec_paths[ag_id][tstep], motion)
-                    self.plan_paths[ag_id].append(next_)
+        plan_step_counts = []
+        for ag_id in agent_ids:
+            plan_limit = min(current_window_end, len(self.plan_path_codes[ag_id]))
+            plan_step_counts.append(max(0, plan_limit - self.start_tstep))
+
+        plan_motion_batch = self.build_motion_batch(
+            self.plan_path_codes, agent_ids, [self.start_tstep] * self.team_size, plan_step_counts, wait_code
+        )
+        plan_start_states = [self.exec_paths[ag_id][0] for ag_id in agent_ids]
+        plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
+        for row_idx, state in enumerate(plan_start_states):
+            plan_starts_batch[row_idx, 0] = float(state[0])
+            plan_starts_batch[row_idx, 1] = float(state[1])
+            plan_starts_batch[row_idx, 2] = float(state[2])
+        plan_base_states = self.build_plan_base_state_batch(
+            agent_ids, [self.start_tstep] * self.team_size, plan_step_counts
+        )
+        plan_results = np.zeros((self.team_size, max(plan_step_counts, default=0) + 1, 3), dtype=np.float64)
+        compute_plan_next_states(
+            plan_motion_batch, plan_starts_batch, plan_base_states, plan_results,
+            np.asarray(plan_step_counts, dtype=np.int32),
+            is_mapf, is_tick, self.ticks_per_timestep
+        )
+
+        for row_idx, ag_id in enumerate(agent_ids):
+            plan_path_block = plan_results[row_idx, :plan_step_counts[row_idx] + 1]
+            if is_tick:
+                self.plan_paths[ag_id] = np.round(plan_path_block, 6)
             else:
-                print("No planner paths.", end=" ")
-
-        # Slice the paths according to the start and end timestep
-        for ag_id in range(self.team_size):
-            self.exec_paths[ag_id] = self.exec_paths[ag_id][self.start_tstep:self.end_tstep + 1]
-            self.plan_paths[ag_id] = self.plan_paths[ag_id][self.start_tstep:self.end_tstep + 1]
+                self.plan_paths[ag_id] = np.rint(plan_path_block).astype(np.int32)
 
         print("Done!")
 
-    def load_errors(self, data: Dict):
+    def ensure_paths_through(self, target_timestep: int, agent_ids: List[int]=None) -> None:
+        if agent_ids is None:
+            agent_ids = list(range(self.team_size))
+        target_timestep = min(target_timestep, self.end_tstep)
+        if target_timestep < self.start_tstep:
+            return
+
+        is_mapf, _, wait_code = self.get_motion_config()
+        is_tick = (self.time_unit == "tick")
+
+        exec_agent_ids = []
+        exec_start_indices = []
+        exec_step_counts = []
+        exec_start_states = []
+        for ag_id in agent_ids:
+            if ag_id not in self.actual_path_codes:
+                continue
+            current_exec_end = self.start_tstep + len(self.exec_paths[ag_id]) - 1
+            exec_limit = min(target_timestep, len(self.actual_path_codes[ag_id]))
+            step_count = max(0, exec_limit - current_exec_end)
+            if step_count <= 0:
+                continue
+            exec_agent_ids.append(ag_id)
+            exec_start_indices.append(current_exec_end)
+            exec_step_counts.append(step_count)
+            exec_start_states.append(self.exec_paths[ag_id][-1])
+
+        if exec_agent_ids:
+            exec_motion_batch = self.build_motion_batch(
+                self.actual_path_codes, exec_agent_ids, exec_start_indices, exec_step_counts, wait_code
+            )
+            exec_results = np.zeros(
+                (len(exec_agent_ids), max(exec_step_counts, default=0) + 1, 3),
+                dtype=np.float64
+            )
+            exec_starts_batch = np.zeros((len(exec_start_states), 3), dtype=np.float64)
+            for row_idx, state in enumerate(exec_start_states):
+                exec_starts_batch[row_idx, 0] = float(state[0])
+                exec_starts_batch[row_idx, 1] = float(state[1])
+                exec_starts_batch[row_idx, 2] = float(state[2])
+            compute_exec_paths(
+                exec_motion_batch,
+                exec_starts_batch,
+                exec_results,
+                np.asarray(exec_step_counts, dtype=np.int32),
+                is_mapf,
+                is_tick,
+                self.ticks_per_timestep
+            )
+            for row_idx, ag_id in enumerate(exec_agent_ids):
+                exec_path_suffix = exec_results[row_idx, 1:exec_step_counts[row_idx] + 1]
+                if is_tick:
+                    exec_path_suffix = np.round(exec_path_suffix, 6)
+                else:
+                    exec_path_suffix = np.rint(exec_path_suffix).astype(np.int32)
+                self.exec_paths[ag_id] = np.concatenate(
+                    (self.exec_paths[ag_id], exec_path_suffix),
+                    axis=0
+                )
+                if ag_id in self.agents:
+                    agent = self.agents[ag_id]
+                    using_exec_path = (agent.path is agent.exec_path)
+                    agent.exec_path = self.exec_paths[ag_id]
+                    if using_exec_path:
+                        agent.path = agent.exec_path
+
+        plan_agent_ids = []
+        plan_start_indices = []
+        plan_step_counts = []
+        for ag_id in agent_ids:
+            if ag_id not in self.plan_path_codes:
+                continue
+            current_plan_end = self.start_tstep + len(self.plan_paths[ag_id]) - 1
+            plan_limit = min(target_timestep, len(self.plan_path_codes[ag_id]))
+            step_count = max(0, plan_limit - current_plan_end)
+            if step_count <= 0:
+                continue
+            plan_agent_ids.append(ag_id)
+            plan_start_indices.append(current_plan_end)
+            plan_step_counts.append(step_count)
+
+        if plan_agent_ids:
+            plan_motion_batch = self.build_motion_batch(
+                self.plan_path_codes, plan_agent_ids, plan_start_indices, plan_step_counts, wait_code
+            )
+            plan_start_states = [self.plan_paths[ag_id][-1] for ag_id in plan_agent_ids]
+            plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
+            for row_idx, state in enumerate(plan_start_states):
+                plan_starts_batch[row_idx, 0] = float(state[0])
+                plan_starts_batch[row_idx, 1] = float(state[1])
+                plan_starts_batch[row_idx, 2] = float(state[2])
+            plan_base_states = self.build_plan_base_state_batch(
+                plan_agent_ids, plan_start_indices, plan_step_counts
+            )
+            plan_results = np.zeros(
+                (len(plan_agent_ids), max(plan_step_counts, default=0) + 1, 3),
+                dtype=np.float64
+            )
+            compute_plan_next_states(
+                plan_motion_batch,
+                plan_starts_batch,
+                plan_base_states,
+                plan_results,
+                np.asarray(plan_step_counts, dtype=np.int32),
+                is_mapf,
+                is_tick,
+                self.ticks_per_timestep
+            )
+            for row_idx, ag_id in enumerate(plan_agent_ids):
+                plan_path_suffix = plan_results[row_idx, 1:plan_step_counts[row_idx] + 1]
+                if is_tick:
+                    plan_path_suffix = np.round(plan_path_suffix, 6)
+                else:
+                    plan_path_suffix = np.rint(plan_path_suffix).astype(np.int32)
+                self.plan_paths[ag_id] = np.concatenate(
+                    (self.plan_paths[ag_id], plan_path_suffix),
+                    axis=0
+                )
+                if ag_id in self.agents:
+                    agent = self.agents[ag_id]
+                    using_plan_path = (agent.path is agent.plan_path)
+                    agent.plan_path = self.plan_paths[ag_id]
+                    if using_plan_path:
+                        agent.path = agent.plan_path
+
+    def load_errors(self, data:Dict):
         print("Loading errors", end="... ")
-        if "errors" not in data:
+
+        errors = data.get("errors", [])
+        schedule_errors = data.get("scheduleErrors", [])
+
+        if not errors and not schedule_errors:
             print("No errors.")
             return
 
-        for err in data["errors"]:
-            tstep = err[2]
+        task_id, agent1, agent2, tstep, description = -1, -1, -1, -1, -1
+        for err in errors:
+            if len(err) == 5:
+                task_id, agent1, agent2, tstep, description = err
+            if len(err) == 4:
+                agent1, agent2, tstep, description = err
+                
             if self.start_tstep <= tstep <= self.end_tstep:
-                self.conflict_agents.add(err[0])
-                self.conflict_agents.add(err[1])
+                self.conflict_agents.add(agent1)
+                self.conflict_agents.add(agent2)
                 if tstep not in self.conflicts:  # Sort errors according to the tstep
                     self.conflicts[tstep] = []
                 self.conflicts[tstep].append(err)
+                if tstep not in self.error_agents_by_timestep:
+                    self.error_agents_by_timestep[tstep] = set()
+                    self.error_agents_by_timestep[tstep].add(agent1)
+                    self.error_agents_by_timestep[tstep].add(agent2)
+                
+        # [task_id, robot1, robot2, timestep, description] 
+        for err in schedule_errors:
+            if len(err) == 5:
+                task_id, agent1, agent2, tstep, description = err
+            if len(err) == 4:
+                agent1, agent2, tstep, description = err
+                
+            if self.start_tstep <= tstep <= self.end_tstep:
+                self.conflict_agents.add(agent1)
+                self.conflict_agents.add(agent2)
+                if tstep not in self.conflicts:  # Sort errors according to the tstep
+                    self.conflicts[tstep] = []
+                self.conflicts[tstep].append(err)
+                if tstep not in self.error_agents_by_timestep:
+                    self.error_agents_by_timestep[tstep] = set()
+                    self.error_agents_by_timestep[tstep].add(agent1)
+                    self.error_agents_by_timestep[tstep].add(agent2)
         print("Done!")
 
-    def load_schedule(self, data: Dict):
+
+    def load_delay_intervals(self, data:Dict):
+        print("Loading delay intervals", end="... ")
+
+        delay_intervals = data.get("delayIntervals", [])
+        if not isinstance(delay_intervals, list) or len(delay_intervals) == 0:
+            print("No delay intervals.")
+            return
+
+        for ag_id in range(min(self.team_size, len(delay_intervals))):
+            raw_intervals = delay_intervals[ag_id]
+            if not isinstance(raw_intervals, list):
+                continue
+
+            parsed_intervals: List[Tuple[int, int]] = []
+            for interval in raw_intervals:
+                if not isinstance(interval, list) or len(interval) != 2:
+                    continue
+                start_t = int(interval[0])
+                end_t = int(interval[1])
+                if end_t < start_t:
+                    start_t, end_t = end_t, start_t
+                if end_t < self.start_tstep or start_t > self.end_tstep:
+                    continue
+                parsed_intervals.append((start_t, end_t))
+
+            if parsed_intervals:
+                parsed_intervals.sort()
+                self.delay_intervals[ag_id] = parsed_intervals
+                self.delay_interval_starts[ag_id] = [interval[0] for interval in parsed_intervals]
+
+        print(f"Done! agents={len(self.delay_intervals)}")
+
+
+    def agent_has_delay(self, ag_id:int, timestep:int) -> bool:
+        if ag_id not in self.delay_intervals:
+            return False
+
+        interval_starts = self.delay_interval_starts[ag_id]
+        interval_index = bisect_right(interval_starts, timestep) - 1
+        if interval_index < 0:
+            return False
+
+        interval = self.delay_intervals[ag_id][interval_index]
+        return interval[0] <= timestep <= interval[1]
+
+
+    def agent_has_error(self, ag_id:int, timestep:int) -> bool:
+        return ag_id in self.error_agents_by_timestep.get(timestep, set())
+
+
+    def agent_finished_errand(self, ag_id:int, timestep:int) -> bool:
+        return ag_id in self.finished_agents_by_timestep.get(timestep, set())
+
+
+    def get_agent_status(self, ag_id:int, timestep:int) -> AgentStatus:
+        if self.agent_finished_errand(ag_id, timestep):
+            return AgentStatus.ERRAND_FINISHED
+        if self.agent_has_delay(ag_id, timestep):
+            return AgentStatus.DELAYED
+        return AgentStatus.NORMAL
+
+
+    def load_schedule(self, data:Dict):
         print("Loading schedule", end="...")
 
         if "actualSchedule" not in data:
@@ -969,6 +1627,9 @@ class PlanConfig2024:
             if finish_tstep not in self.events["finished"]:
                 self.events["finished"][finish_tstep] = {}
             self.events["finished"][finish_tstep][global_task_id] = ag_id
+            if finish_tstep not in self.finished_agents_by_timestep:
+                self.finished_agents_by_timestep[finish_tstep] = set()
+            self.finished_agents_by_timestep[finish_tstep].add(ag_id)
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["agent"] = ag_id
             self.seq_tasks[task_id].tasks[seq_id].events["finished"]["timestep"] = finish_tstep
         self.event_tracker["fTime"] = list(sorted(self.events["finished"].keys()))
@@ -977,6 +1638,7 @@ class PlanConfig2024:
     def load_sequential_tasks(self, data: Dict):
         print("Loading tasks", end="...")
         self.grid2task = {}
+        
         if "tasks" not in data:
             print("No tasks.")
             return
@@ -991,13 +1653,7 @@ class PlanConfig2024:
             loc_num = len(task[2]) // 2  # Number of locations (x-y pairs)
             for loc_id in range(loc_num):
                 tloc = (task[2][loc_id * 2], task[2][loc_id * 2 + 1])
-                tobj = self.render_obj(
-                    tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
-                )
-                if not (tloc in self.grid2task.keys()):
-                    self.grid2task[tobj.obj] = []
-                self.grid2task[tobj.obj].append(tid)
-                tasks.append(Task(tid, tloc, tobj))
+                tasks.append(Task(tid, tloc, None))
             self.seq_tasks[tid] = SequentialTask(tid, tasks, release_tstep)
             self.max_seq_num = max(self.max_seq_num, len(tasks))
         print("Done!")
@@ -1054,7 +1710,7 @@ class PlanConfig2024:
 
         for row in range(height):
             for col in range(width):
-                if grid[row, col] == "@":
+                if grid[row, col] in OBSTACLES:
                     continue
                 node = to_node(row, col)
                 for dr, dc in cardinal:
@@ -1062,10 +1718,11 @@ class PlanConfig2024:
                     if (
                             0 <= nr < height
                             and 0 <= nc < width
-                            and grid[nr, nc] != "@"
+                            and grid[nr, nc] not in OBSTACLES
                     ):
                         graph[node, to_node(nr, nc)] = 1  # undirected edge
         return graph.tocsr()
+      
     def precompute_distance_matrix(self, map_file):
         """
         Compute true shortest paths using scipy shortest_path
@@ -1382,19 +2039,48 @@ class PlanConfig2024:
             stats["Std/agent"] = float(np.std(self.agent_performance))
 
         return stats
+    def lazy_render_task(self, task_id: int, seq_id: int) -> None:
+        task = self.seq_tasks[task_id].tasks[seq_id]
+        if task.task_obj is not None:
+            return
+
+        tid = task.idx
+        tloc = task.loc
+        tobj = self.render_obj(
+            tid, tloc, "rectangle", TASK_COLORS["unassigned"], tk.DISABLED, 0, str(tid)
+        )
+        task.task_obj = tobj
+        if self.grids:
+            self.canvas.tag_lower(tobj.obj, self.grids[0])
+        self.canvas.itemconfig(tobj.text, state=tk.HIDDEN)
+        self.rendered_tasks.add((task_id, seq_id))
+        if tobj.obj not in self.grid2task:
+            self.grid2task[tobj.obj] = []
+        self.grid2task[tobj.obj].append(tid)
+
 
     def load_plan(self, plan_file):
         data = {}
         with open(file=plan_file, mode="r", encoding="UTF-8") as fin:
             data = json.load(fin)
 
+        if self.time_unit == "tick":
+            self.ticks_per_timestep = self.get_ticks_per_timestep(data)
+            self.delay = max((self.delay / self.ticks_per_timestep) * 2.0, 0.001)
+        else:
+            self.animation_substeps = self.moves
+            self.ticks_per_timestep = 1
+
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
         self.agent_performance = [0 for _ in range(self.team_size)]
         if self.end_tstep == math.inf:
-            if "makespan" not in data.keys():
-                raise KeyError("Missing makespan!")
-            self.end_tstep = data["makespan"]
+            if self.time_unit == "tick" and "makespanTicks" in data:
+                self.end_tstep = data["makespanTicks"]
+            else:
+                if "makespan" not in data.keys():
+                    raise KeyError("Missing makespan!")
+                self.end_tstep = data["makespan"]
 
         if self.agent_model == "":
             if 'actionModel' not in data.keys():
@@ -1403,6 +2089,7 @@ class PlanConfig2024:
 
         self.load_paths(data)
         self.load_errors(data)
+        self.load_delay_intervals(data)
         self.load_sequential_tasks(data)
         self.load_schedule(data)
         self.load_events(data)
@@ -1497,23 +2184,24 @@ class PlanConfig2024:
                     start = None  # reset for next run
 
 
-        # Render coordinates
-        for cid in range(self.width):
-            self.canvas.create_text((cid + 0.5) * self.tile_size,
-                                    (self.height + 0.5) * self.tile_size,
-                                    text=str(cid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size // 2))
-        for rid in range(self.height):
-            self.canvas.create_text((self.width + 0.5) * self.tile_size,
-                                    (rid + 0.5) * self.tile_size,
-                                    text=str(rid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size // 2))
+        if self.show_coord_labels:
+            for cid in range(self.width):
+                self.canvas.create_text((cid+0.5) * self.tile_size,
+                                        (self.height+0.5) * self.tile_size,
+                                        text=str(cid),
+                                        fill="black",
+                                        tag="text",
+                                        state=tk.DISABLED,
+                                        font=("Arial", int(self.tile_size // 2)))
+            for rid in range(self.height):
+                self.canvas.create_text((self.width+0.5) * self.tile_size,
+                                        (rid+0.5) * self.tile_size,
+                                        text=str(rid),
+                                        fill="black",
+                                        tag="text",
+                                        state=tk.DISABLED,
+                                        font=("Arial", int(self.tile_size // 2)))
+
         self.canvas.create_line(self.width * self.tile_size,
                                 0,
                                 self.width * self.tile_size,
@@ -1530,49 +2218,70 @@ class PlanConfig2024:
 
     def render_agents(self):
         print("Rendering the agents... ", end="")
-        # Separate the render of static locations and agents so that agents can overlap
         start_objs = []
-        path_objs = []
 
         for ag_id in range(self.team_size):
             start = self.render_obj(ag_id, self.start_loc[ag_id], "oval", "grey", tk.DISABLED)
             start_objs.append(start)
 
-            ag_path = []  # Render paths as purple rectangles
-            for _pid_ in range(len(self.exec_paths[ag_id])):
-                p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
-                p_obj = None
-                if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_ - 1][0],
-                                           self.exec_paths[ag_id][_pid_ - 1][1]):
-                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
-                else:  # non-wait action, smaller rectangle
-                    p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
-                if p_obj is not None:
-                    self.canvas.tag_lower(p_obj.obj)
-                    self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
-                    self.canvas.delete(p_obj.text)
-                    ag_path.append(p_obj)
-            path_objs.append(ag_path)
-
         if self.team_size != len(self.exec_paths):
             raise ValueError("Missing actual paths!")
 
-        for ag_id in range(self.team_size):  # Render the actual agents
-            agent_obj = self.render_obj(ag_id, self.exec_paths[ag_id][0], "oval",
-                                        AGENT_COLORS["assigned"], tk.DISABLED, 0.05, str(ag_id))
+        for ag_id in range(self.team_size):
+            agent_obj = self.render_obj(
+                ag_id,
+                self.exec_paths[ag_id][0],
+                "oval",
+                AGENT_COLORS["assigned"],
+                tk.DISABLED,
+                0.05,
+                str(ag_id),
+            )
             dir_obj = None
             if self.agent_model == "MAPF_T":
                 dir_loc = get_dir_loc(self.exec_paths[ag_id][0])
-                dir_obj = self.canvas.create_oval(dir_loc[0] * self.tile_size,
-                                                  dir_loc[1] * self.tile_size,
-                                                  dir_loc[2] * self.tile_size,
-                                                  dir_loc[3] * self.tile_size,
-                                                  fill="navy",
-                                                  tag="dir",
-                                                  state=tk.DISABLED,
-                                                  outline="")
+                dir_obj = self.canvas.create_oval(
+                    dir_loc[0] * self.tile_size,
+                    dir_loc[1] * self.tile_size,
+                    dir_loc[2] * self.tile_size,
+                    dir_loc[3] * self.tile_size,
+                    fill="navy",
+                    tag="dir",
+                    state=tk.DISABLED,
+                    outline="",
+                )
 
-            agent = Agent(ag_id, agent_obj, start_objs[ag_id], self.plan_paths[ag_id],
-                          path_objs[ag_id], self.exec_paths[ag_id], dir_obj)
+            agent = Agent(
+                ag_id,
+                agent_obj,
+                start_objs[ag_id],
+                self.plan_paths[ag_id],
+                [],
+                self.exec_paths[ag_id],
+                dir_obj,
+            )
             self.agents[ag_id] = agent
         print("Done!")
+
+    def lazy_render_agent_path(self, ag_id: int) -> None:
+        rendered_len = len(self.agents[ag_id].path_objs)
+        total_len = len(self.exec_paths[ag_id])
+        if rendered_len >= total_len:
+            return
+
+        ag_path = self.agents[ag_id].path_objs
+        for _pid_ in range(rendered_len, total_len):
+            p_loc = (self.exec_paths[ag_id][_pid_][0], self.exec_paths[ag_id][_pid_][1])
+            p_obj = None
+            if _pid_ > 0 and p_loc == (self.exec_paths[ag_id][_pid_-1][0],
+                                       self.exec_paths[ag_id][_pid_-1][1]):
+                p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.25)
+            else:  # non-wait action, smaller rectangle
+                p_obj = self.render_obj(ag_id, p_loc, "rectangle", "purple", tk.DISABLED, 0.4)
+            if p_obj is not None:
+                self.canvas.tag_lower(p_obj.obj)
+                self.canvas.itemconfigure(p_obj.obj, state=tk.HIDDEN)
+                self.canvas.delete(p_obj.text)
+                ag_path.append(p_obj)
+
+        self.agents[ag_id].path_objs = ag_path
