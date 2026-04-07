@@ -11,8 +11,8 @@ import tkinter as tk
 from tkinter import ttk,font
 import time
 import platform
-from util import (AGENT_COLORS, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
-                  get_dir_loc, get_rotation)
+from util import (AGENT_COLORS, AgentStatus, DIR_OFFSET,
+                  TASK_COLORS, TEXT_SIZE, get_angle, get_dir_loc, get_rotation)
 from plan_config import PlanConfig2023, PlanConfig2024
 
 
@@ -1030,6 +1030,7 @@ class PlanViz2024:
         self.is_heat_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
+        self.listbox_monospace_font = font.Font(family="Courier", size=TEXT_SIZE)
 
         gui_window = self.pcf.window
         self.gui_column = 1
@@ -1068,6 +1069,33 @@ class PlanViz2024:
     def set_time_labels(self, timeline_value:int) -> None:
         """Update the displayed time based on the current timeline value."""
         self.time_label.config(text=f"Time: {int(timeline_value):03d}")
+
+
+    def agent_has_selected_conflict(self, ag_idx:int) -> bool:
+        for conf in self.shown_conflicts.values():
+            if not conf[1]:
+                continue
+            if len(conf[0]) == 5:
+                _, agent1, agent2, _, _ = conf[0]
+            else:
+                agent1, agent2, _, _ = conf[0]
+            if ag_idx == agent1 or ag_idx == agent2:
+                return True
+        return False
+
+
+    def update_agent_colors(self) -> None:
+        for ag_idx, agent in self.pcf.agents.items():
+            shown_color = AGENT_COLORS[self.pcf.get_agent_status(ag_idx, self.pcf.cur_tstep).color_key]
+            if self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents:
+                shown_color = AGENT_COLORS["collide"]
+            elif self.agent_has_selected_conflict(ag_idx):
+                shown_color = AGENT_COLORS["collide"]
+
+            if agent.agent_obj.color == shown_color:
+                continue
+            self.pcf.canvas.itemconfig(agent.agent_obj.obj, fill=shown_color)
+            agent.agent_obj.color = shown_color
 
 
     def init_pcf(self, plan_config):
@@ -1236,8 +1264,10 @@ class PlanViz2024:
         self.update_button.grid(row=self.row_idx, column=2, sticky="w")
         self.row_idx += 1
 
+        self.init_color_legend()
+
         # ---------- Show the list of errors ----------------------- #
-        err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
+        err_label = tk.Label(self.frame, text="Most recent of errors", font=("Arial",TEXT_SIZE))
         err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
@@ -1304,20 +1334,66 @@ class PlanViz2024:
         self.pcf.window.geometry(wd_width + "x" + wd_height)
         self.pcf.window.title("PlanViz")
 
+    def init_color_legend(self) -> None:
+        legend_label = tk.Label(self.frame, text="Agent colors", font=("Arial", TEXT_SIZE))
+        legend_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        legend_frame = tk.Frame(self.frame)
+        legend_frame.grid(row=self.row_idx, column=0, columnspan=6, sticky="w")
+        legend_items = [
+            ("Normal", AGENT_COLORS[AgentStatus.NORMAL.color_key]),
+            ("Delayed", AGENT_COLORS[AgentStatus.DELAYED.color_key]),
+            ("Errand reached", AGENT_COLORS[AgentStatus.ERRAND_FINISHED.color_key]),
+            ("Error", AGENT_COLORS["collide"]),
+        ]
+        for item_idx, (label_text, color) in enumerate(legend_items):
+            item_frame = tk.Frame(legend_frame)
+            item_frame.grid(row=0, column=item_idx, sticky="w", padx=(0, 12))
+            color_box = tk.Label(
+                item_frame,
+                width=2,
+                bg=color,
+                relief=tk.SOLID,
+                borderwidth=1
+            )
+            color_box.pack(side=tk.LEFT, padx=(2, 6), pady=1)
+            color_label = tk.Label(item_frame, text=label_text, font=("Arial", TEXT_SIZE))
+            color_label.pack(side=tk.LEFT, pady=1)
+        self.row_idx += 1
+
+    def set_error_listbox_height(self, error_count: int) -> None:
+        min_rows = 2
+        max_visible_errors = 12
+        max_rows = max(min_rows, max_visible_errors + 2)
+        total_rows = max(min_rows, min(error_count + 2, max_rows))
+        self.conflict_listbox.config(height=total_rows)
+
     def update_error_list(self, error_listbox):
         if error_listbox == None:
             return
+        end_tstep = self.pcf.cur_tstep
         conf_id = 0
+        shown_conflict_count = 0
         error_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        error_listbox.config(font=monospace_font)
+        selected_conflicts = {
+            conf_str for conf_str, conf in self.shown_conflicts.items() if conf[1]
+        }
+        self.shown_conflicts = {}
+        error_listbox.config(font=self.listbox_monospace_font)
         header = f"{'Time':<6}{'a1':<5}{'a2':<5}{'Event':<12}"
         error_listbox.insert(conf_id, header)
         conf_id += 1
         error_listbox.insert(conf_id, "-" * 34)  # Separator line
         conf_id += 1
+        if self.pcf.event_limit == 0:
+            self.set_error_listbox_height(0)
+            return
         # [task_id, robot1, robot2, timestep, description]
-        for tstep in sorted(self.pcf.conflicts.keys()):
+        for tstep in sorted(
+            (cur_tstep for cur_tstep in self.pcf.conflicts.keys() if cur_tstep <= end_tstep),
+            reverse=True
+        ):
             if tstep < self.pcf.start_tstep:
                 continue
             if tstep > self.pcf.end_tstep:
@@ -1350,14 +1426,21 @@ class PlanViz2024:
                 else:
                     conf_str += description
                 self.conflict_listbox.insert(conf_id, conf_str)
-                self.shown_conflicts[conf_str] = [conf, False]
+                if tstep == self.pcf.cur_tstep:
+                    self.conflict_listbox.itemconfigure(conf_id, background='yellow')
+                self.shown_conflicts[conf_str] = [conf, conf_str in selected_conflicts]
                 conf_id += 1
+                shown_conflict_count += 1
+                if shown_conflict_count >= self.pcf.event_limit:
+                    self.set_error_listbox_height(shown_conflict_count)
+                    return
+        self.set_error_listbox_height(shown_conflict_count)
 
     def set_event_listbox_height(self, event_listbox, event_count: int) -> None:
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
 
-        min_rows = 4
+        min_rows = 2
         max_visible_events = 20
         max_rows = max(min_rows, max_visible_events + 2)
         total_rows = max(min_rows, min(event_count + 2, max_rows))
@@ -1374,8 +1457,7 @@ class PlanViz2024:
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.eve_id = 0
         event_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        event_listbox.config(font=monospace_font)
+        event_listbox.config(font=self.listbox_monospace_font)
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
         event_listbox.insert(self.eve_id, header)
         self.eve_id += 1
@@ -1446,8 +1528,7 @@ class PlanViz2024:
         
         # Clear and refill the location event listbox
         event_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        event_listbox.config(font=monospace_font)
+        event_listbox.config(font=self.listbox_monospace_font)
         
         # Add header in the same format as update_event_list
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
@@ -1482,23 +1563,6 @@ class PlanViz2024:
                         shown_event_count += 1
         self.set_event_listbox_height(event_listbox, shown_event_count)
 
-    def change_ag_color(self, ag_idx:int, color:str) -> None:
-        """ Change the color of the agent if collisions are not shown
-
-        Args:
-            ag_idx (int): the index of the agent
-            color (str): the color to be changed
-        """
-        ag_color = color
-        if (self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents) or \
-            self.pcf.canvas.itemcget(self.pcf.agents[ag_idx].agent_obj.obj, "fill") \
-                == AGENT_COLORS["collide"]:
-            ag_color = AGENT_COLORS["collide"]
-        if ag_color != AGENT_COLORS["collide"]:
-            self.pcf.agents[ag_idx].agent_obj.color = ag_color
-        self.pcf.canvas.itemconfig(self.pcf.agents[ag_idx].agent_obj.obj, fill=ag_color)
-
-
     def change_task_color(self, task_id:int, seq_id:int, color:str) -> None:
         """ Change the color of the task
 
@@ -1520,28 +1584,14 @@ class PlanViz2024:
 
         for conf in self.shown_conflicts.values():  # Reset all the conflicts to non-selected
             conf[1] = False
-            if len(conf[0]) == 5:
-                task_id, agent1, agent2, tstep_std, description = conf[0]
-            if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
-            if agent1 != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[agent1].agent_obj.obj,
-                                           fill=self.pcf.agents[agent1].agent_obj.color)
-            if agent2 != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[agent2].agent_obj.obj,
-                                           fill=self.pcf.agents[agent2].agent_obj.color)
 
         for _sid_ in selected_indices:  # Mark the selected conflicting agents to red
-            self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-            conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-            if len(conf[0]) == 5:
-                task_id, agent1, agent2, tstep_std, description = conf[0]
-            if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
-            if agent1 != -1:
-                self.change_ag_color(agent1, AGENT_COLORS["collide"])
-            if agent2 != -1:
-                self.change_ag_color(agent2, AGENT_COLORS["collide"])
+            conf_str = self.conflict_listbox.get(_sid_)
+            if conf_str not in self.shown_conflicts:
+                continue
+            self.shown_conflicts[conf_str][1] = True
+
+        self.update_agent_colors()
 
 
     def restart_timestep(self):
@@ -1598,10 +1648,6 @@ class PlanViz2024:
             task_id, agent1, agent2, tstep_std, description = conf[0]
         if len(conf[0]) == 4:
             agent1, agent2, tstep_std, description = conf[0]    
-        if agent1 != -1 and agent1 < self.pcf.team_size:
-            self.change_ag_color(agent1, AGENT_COLORS["collide"])
-        if agent2 != -1 and agent2 < self.pcf.team_size:
-            self.change_ag_color(agent2, AGENT_COLORS["collide"])
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
         self.new_time.set(int(tstep_std)-1)
         self.update_curtime()
@@ -1951,22 +1997,8 @@ class PlanViz2024:
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
         for conf in self.shown_conflicts.values():
-            if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
-                if self.show_all_conf_ag.get():
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
-                                               fill=AGENT_COLORS["collide"])
-                else:
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
-                                               fill=self.pcf.agents[conf[0][0]].agent_obj.color)
-
-            if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
-                if self.show_all_conf_ag.get():
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
-                                               fill=AGENT_COLORS["collide"])
-                else:
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
-                                               fill=self.pcf.agents[conf[0][1]].agent_obj.color)
             conf[1] = False
+        self.update_agent_colors()
 
 
     def off_agent_path(self):
@@ -2288,6 +2320,7 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
+        self.update_error_list(self.conflict_listbox)
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
             for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
@@ -2295,7 +2328,6 @@ class PlanViz2024:
                 seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] += 1
@@ -2313,6 +2345,7 @@ class PlanViz2024:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
+        self.update_agent_colors()
         self.raise_agent_canvas_items()
         
 
@@ -2349,7 +2382,6 @@ class PlanViz2024:
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "assigned"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "unassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] = prev_aid
@@ -2419,6 +2451,8 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
+        self.update_error_list(self.conflict_listbox)
+        self.update_agent_colors()
         self.raise_agent_canvas_items()
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
@@ -2499,7 +2533,6 @@ class PlanViz2024:
                     seq_id = global_task_id % self.pcf.max_seq_num
                     self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                     self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
                     if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                         self.show_single_task(task_id, seq_id)
             else:  # a_time > self.pcf.cur_tstep
@@ -2523,18 +2556,12 @@ class PlanViz2024:
                 break
 
         for (ag_id, agent_) in self.pcf.agents.items():
-            # Check colliding agents
-            show_collide = False
-            if (self.show_all_conf_ag.get() and agent_ in self.pcf.conflict_agents) or \
-                self.pcf.canvas.itemcget(agent_.agent_obj.obj, "fill") == AGENT_COLORS["collide"]:
-                show_collide = True
-
             # Re-generate agent objects
             tstep = min(self.pcf.cur_tstep - self.pcf.start_tstep, len(agent_.path)-1)
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
-                                                   agent_.agent_obj.color,
+                                                   AGENT_COLORS[AgentStatus.NORMAL.color_key],
                                                    tk.NORMAL, 0.05, str(ag_id))
             
             if self.pcf.agent_model == "MAPF_T":
@@ -2549,9 +2576,6 @@ class PlanViz2024:
                                                              state=tk.DISABLED,
                                                              outline="")
             self._tag_agent_dynamic_canvas_items(agent_)
-            # Check colliding agents
-            if show_collide:
-                self.change_ag_color(ag_id, AGENT_COLORS["collide"])
         self.show_tasks()
         self.show_agent_index()
         
@@ -2569,4 +2593,5 @@ class PlanViz2024:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
+        self.update_agent_colors()
         self.pcf.canvas.update()
