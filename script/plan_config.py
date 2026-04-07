@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import Normalize
 from matplotlib import cm
+from PIL import Image
 from util import (
     TASK_COLORS, AGENT_COLORS, AgentStatus, DIRECTION, OBSTACLES, MAP_CONFIG, INT_MAX, DBL_MAX,
     get_map_name, get_dir_loc, state_transition, state_transition_mapf,
@@ -25,6 +26,60 @@ from util import (
 MOTION_CODE = {"F": 0, "R": 1, "C": 2, "W": 3, "T": 3}
 MOTION_CODE_MAPF = {"U": 0, "L": 1, "R": 2, "D": 3, "W": 4, "T": 4}
 SEGMENTED_RLE_CHUNK_PATTERN = re.compile(r"\[\(([^)]*)\):\(([^)]*)\)\]")
+
+
+COORD_LABEL_LIMIT = 1_000
+VIEWPORT_MIN_WIDTH = 640
+VIEWPORT_MIN_HEIGHT = 360
+VIEWPORT_TARGET_VISIBLE_COLS = 80
+VIEWPORT_TARGET_VISIBLE_ROWS = 45
+MINIMAP_WIDTH = 220
+MINIMAP_HEIGHT = 160
+
+
+def load_map_grid(map_file: str) -> Tuple[int, int, int, List[List[int]]]:
+    env_map: List[List[int]] = []
+
+    with open(file=map_file, mode="r", encoding="UTF-8") as fin:
+        fin.readline()  # ignore type
+        header_height = int(fin.readline().strip().split(" ")[1])
+        width = int(fin.readline().strip().split(" ")[1])
+        fin.readline()  # ignore 'map' line
+        for raw_line in fin.readlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            out_line: List[int] = []
+            for word in line:
+                if word in OBSTACLES:
+                    out_line.append(0)
+                elif word in [".", "S"]:
+                    out_line.append(1)
+                elif word == "E":
+                    out_line.append(2)
+
+            if len(out_line) != width:
+                raise ValueError(
+                    f"Invalid map row width in {map_file}: expected {width}, got {len(out_line)}."
+                )
+            env_map.append(out_line)
+
+    return header_height, width, len(env_map), env_map
+
+
+def build_base_env_image(env_map: List[List[int]]) -> Image.Image:
+    height = len(env_map)
+    width = len(env_map[0]) if env_map else 0
+    image = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    pixels = image.load()
+
+    for rid, cur_row in enumerate(env_map):
+        for cid, cur_ele in enumerate(cur_row):
+            if cur_ele == 0:
+                pixels[cid, rid] = (0, 0, 0, 255)
+    return image
+
 
 class PlanConfig2023:
     """ Plan configuration for loading and rendering functions.
@@ -753,6 +808,24 @@ class PlanConfig2024:
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
+        self.use_viewport_mode:bool = False
+        self.show_coord_labels:bool = True
+        self.base_env_image = None
+        self.screen_height:int = 0
+        self.panel_width_px:int = 0
+        self.viewport_width_px:int = 0
+        self.viewport_height_px:int = 0
+        self.world_width_px:int = 0
+        self.world_height_px:int = 0
+        self.minimap_width_px:int = MINIMAP_WIDTH
+        self.minimap_height_px:int = MINIMAP_HEIGHT
+        self.minimap_scale:float = 1.0
+        self.minimap_render_width_px:int = self.minimap_width_px
+        self.minimap_render_height_px:int = self.minimap_height_px
+        self.minimap_offset_x_px:int = 0
+        self.minimap_offset_y_px:int = 0
+        self.initial_focus_bbox:Tuple[int, int, int, int] | None = None
+        self.default_tile_size:int = 0
 
         self.max_seq_num = -1
         self.seq_tasks:Dict[int, SequentialTask] = {}
@@ -787,6 +860,7 @@ class PlanConfig2024:
         self.window = tk.Tk()
 
         self.screen_width = self.window.winfo_screenwidth()
+        self.screen_height = self.window.winfo_screenheight()
 
         pixel_per_grid = (self.screen_width - 25) // (self.width + 1)
 
@@ -803,7 +877,7 @@ class PlanConfig2024:
             if map_name in MAP_CONFIG:
                 self.ppm = MAP_CONFIG[map_name]["pixel_per_move"]
             else:
-                self.ppm = pixel_per_grid // self.moves
+                self.ppm = max(1, pixel_per_grid // self.moves)
 
         self.delay:int = delay
         if self.delay is None:
@@ -819,24 +893,30 @@ class PlanConfig2024:
             self.animation_substeps:int = self.moves
         self.ticks_per_timestep:int = 1
         self.tile_size:int = self.ppm * self.moves
+        self.use_viewport_mode = True
+        self.tile_size = max(self.tile_size, self.compute_default_tile_size())
+        self.default_tile_size = self.tile_size
+        self.update_viewport_metrics()
 
         # Show MAPF instance
         # Use width and height for scaling
         self.canvas = tk.Canvas(self.window,
-                                width=(self.width+1) * self.tile_size,
-                                height=(self.height+1) * self.tile_size,
+                                width=self.viewport_width_px,
+                                height=self.viewport_height_px,
                                 bg="white",
                                 takefocus=True)
         self.canvas.grid(row=0, column=0,sticky="nsew")
-        self.canvas.configure(scrollregion = self.canvas.bbox("all"))
+        self.update_canvas_scrollregion()
 
         # Render instance on canvas
         self.load_plan(plan_file)  # Load the results
+        self.compute_initial_focus_bbox()
         # self.load_errors()
 
         # Render instance on canvas
         self.render_env()
         self.render_agents()
+        self.update_canvas_scrollregion()
 
     def get_ticks_per_timestep(self, data:Dict) -> int:
         """Get ticks per timestep from 2026-compatible fields."""
@@ -1038,25 +1118,106 @@ class PlanConfig2024:
     def load_map(self, map_file:str) -> None:
         print("Loading map from " + map_file, end = '... ')
 
-        with open(file=map_file, mode="r", encoding="UTF-8") as fin:
-            fin.readline()  # ignore type
-            self.height = int(fin.readline().strip().split(' ')[1])
-            self.width  = int(fin.readline().strip().split(' ')[1])
-            fin.readline()  # ignore 'map' line
-            for line in fin.readlines():
-                out_line: List[bool] = []
-                for word in list(line.strip()):
-                    if word in OBSTACLES:
-                        out_line.append(0)
-                    elif word in [".", "S"]:
-                        out_line.append(1)
-                    elif word == "E":
-                        out_line.append(2)
-
-                assert len(out_line) == self.width
-                self.env_map.append(out_line)
-        assert len(self.env_map) == self.height
+        header_height, self.width, actual_height, self.env_map = load_map_grid(map_file)
+        self.height = actual_height
+        self.show_coord_labels = (self.width + self.height) <= COORD_LABEL_LIMIT
+        self.base_env_image = build_base_env_image(self.env_map)
+        if header_height != actual_height:
+            print(
+                f"header height {header_height} does not match actual rows {actual_height}; "
+                "using actual rows.",
+                end=" ",
+            )
         print("Done!")
+
+
+    def update_world_view_metrics(self) -> None:
+        coord_padding = self.tile_size if self.show_coord_labels else 0
+        self.world_width_px = max(1, int(round(self.width * self.tile_size + coord_padding)))
+        self.world_height_px = max(1, int(round(self.height * self.tile_size + coord_padding)))
+        self.minimap_scale = min(
+            self.minimap_width_px / self.world_width_px,
+            self.minimap_height_px / self.world_height_px,
+        )
+        self.minimap_render_width_px = max(
+            1, int(round(self.world_width_px * self.minimap_scale))
+        )
+        self.minimap_render_height_px = max(
+            1, int(round(self.world_height_px * self.minimap_scale))
+        )
+        self.minimap_offset_x_px = (self.minimap_width_px - self.minimap_render_width_px) // 2
+        self.minimap_offset_y_px = (self.minimap_height_px - self.minimap_render_height_px) // 2
+
+
+    def update_viewport_metrics(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.viewport_width_px = max(
+                1,
+                min(
+                    self.world_width_px,
+                    max(
+                        VIEWPORT_MIN_WIDTH,
+                        self.screen_width - self.panel_width_px,
+                    ),
+                ),
+            )
+            self.viewport_height_px = max(
+                1,
+                min(
+                    self.world_height_px,
+                    max(
+                        VIEWPORT_MIN_HEIGHT,
+                        self.screen_height,
+                    ),
+                ),
+            )
+        else:
+            self.viewport_width_px = (self.width + 1) * self.tile_size
+            self.viewport_height_px = (self.height + 1) * self.tile_size
+
+
+    def compute_default_tile_size(self) -> int:
+        available_width = max(
+            VIEWPORT_MIN_WIDTH,
+            self.screen_width - self.panel_width_px,
+        )
+        available_height = max(
+            VIEWPORT_MIN_HEIGHT,
+            self.screen_height,
+        )
+        width_target = max(1, available_width // VIEWPORT_TARGET_VISIBLE_COLS)
+        height_target = max(1, available_height // VIEWPORT_TARGET_VISIBLE_ROWS)
+        return max(1, min(width_target, height_target))
+
+
+    def update_canvas_scrollregion(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.canvas.configure(scrollregion=(0, 0, self.world_width_px, self.world_height_px))
+        else:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+    def compute_initial_focus_bbox(self) -> None:
+        agent_points = [(loc[0], loc[1]) for loc in self.start_loc.values()]
+        task_points = [task.loc for seq_task in self.seq_tasks.values() for task in seq_task.tasks]
+
+        if agent_points and task_points:
+            focus_points = agent_points + task_points
+        elif agent_points:
+            focus_points = agent_points
+        elif task_points:
+            focus_points = task_points
+        else:
+            self.initial_focus_bbox = (0, max(0, self.height - 1), 0, max(0, self.width - 1))
+            return
+
+        min_row = min(row for row, _ in focus_points)
+        max_row = max(row for row, _ in focus_points)
+        min_col = min(col for _, col in focus_points)
+        max_col = max(col for _, col in focus_points)
+        self.initial_focus_bbox = (min_row, max_row, min_col, max_col)
 
 
     def load_paths(self, data:Dict):
@@ -1611,23 +1772,24 @@ class PlanConfig2024:
                                                  outline="",
                                                  fill="black")
 
-        # Render coordinates
-        for cid in range(self.width):
-            self.canvas.create_text((cid+0.5)*self.tile_size,
-                                    (self.height+0.5)*self.tile_size,
-                                    text=str(cid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
-        for rid in range(self.height):
-            self.canvas.create_text((self.width+0.5)*self.tile_size,
-                                    (rid+0.5)*self.tile_size,
-                                    text=str(rid),
-                                    fill="black",
-                                    tag="text",
-                                    state=tk.DISABLED,
-                                    font=("Arial", self.tile_size//2))
+        if self.show_coord_labels:
+            for cid in range(self.width):
+                self.canvas.create_text((cid+0.5) * self.tile_size,
+                                        (self.height+0.5) * self.tile_size,
+                                        text=str(cid),
+                                        fill="black",
+                                        tag="text",
+                                        state=tk.DISABLED,
+                                        font=("Arial", int(self.tile_size // 2)))
+            for rid in range(self.height):
+                self.canvas.create_text((self.width+0.5) * self.tile_size,
+                                        (rid+0.5) * self.tile_size,
+                                        text=str(rid),
+                                        fill="black",
+                                        tag="text",
+                                        state=tk.DISABLED,
+                                        font=("Arial", int(self.tile_size // 2)))
+
         self.canvas.create_line(self.width * self.tile_size,
                                 0,
                                 self.width * self.tile_size,
