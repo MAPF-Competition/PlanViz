@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk,font
 import time
 import platform
+from PIL import Image, ImageTk
 from util import (AGENT_COLORS, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
                   get_dir_loc, get_rotation)
 from plan_config import PlanConfig2023, PlanConfig2024
@@ -1033,7 +1034,8 @@ class PlanViz2024:
 
         gui_window = self.pcf.window
         self.gui_column = 1
-        if (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
+        if (not self.pcf.use_viewport_mode) and \
+            (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
             gui_window = tk.Toplevel()
             gui_window.transient(self.pcf.window)
             gui_window.lift()
@@ -1046,6 +1048,11 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.minimap_canvas = None
+        self.minimap_photo = None
+        self.minimap_image_obj = None
+        self.minimap_view_obj = None
+        self.minimap_dragging = False
         
         self.time_label = tk.Label(self.frame,
                                    text=f"Time: {self.pcf.cur_tstep:03d}",
@@ -1058,6 +1065,7 @@ class PlanViz2024:
                                        font=("Arial", TEXT_SIZE + 10))
         self.mouse_loc_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
         self.row_idx += 1
+        self.init_minimap()
 
         self.init_button()
         self.init_label()
@@ -1094,6 +1102,8 @@ class PlanViz2024:
         self.right_click_status = "left"
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
         self.pcf.canvas.bind("<Motion>", self.on_hover)
+        if self.pcf.use_viewport_mode:
+            self.pcf.canvas.bind("<Configure>", self.on_canvas_configure)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
@@ -1123,6 +1133,53 @@ class PlanViz2024:
         for _, agent_ in self.pcf.agents.items():
             self._tag_agent_dynamic_canvas_items(agent_)
             self._tag_agent_static_canvas_items(agent_)
+
+    def init_minimap(self):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        minimap_label = tk.Label(self.frame, text="Minimap", font=("Arial", TEXT_SIZE))
+        minimap_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        self.minimap_canvas = tk.Canvas(self.frame,
+                                        width=self.pcf.minimap_width_px,
+                                        height=self.pcf.minimap_height_px,
+                                        bg="white",
+                                        highlightthickness=1,
+                                        highlightbackground="#666666")
+        self.minimap_canvas.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.minimap_canvas.bind("<ButtonPress-1>", self.on_minimap_press)
+        self.minimap_canvas.bind("<B1-Motion>", self.on_minimap_drag)
+        self.minimap_canvas.bind("<ButtonRelease-1>", self.on_minimap_release)
+
+        if self.pcf.base_env_image is not None:
+            source_image = self.pcf.base_env_image
+            if self.pcf.show_coord_labels:
+                padded_image = Image.new(
+                    "RGBA",
+                    (self.pcf.width + 1, self.pcf.height + 1),
+                    (255, 255, 255, 0),
+                )
+                padded_image.paste(self.pcf.base_env_image, (0, 0))
+                source_image = padded_image
+
+            scaled = source_image.resize(
+                (self.pcf.minimap_render_width_px, self.pcf.minimap_render_height_px),
+                Image.Resampling.NEAREST,
+            )
+            self.minimap_photo = ImageTk.PhotoImage(scaled)
+            self.minimap_image_obj = self.minimap_canvas.create_image(
+                self.pcf.minimap_offset_x_px,
+                self.pcf.minimap_offset_y_px,
+                anchor="nw",
+                image=self.minimap_photo,
+            )
+
+        self.minimap_view_obj = self.minimap_canvas.create_rectangle(
+            0, 0, 1, 1, outline="#cf2b24", width=2
+        )
+        self.row_idx += 1
 
 
     def init_button(self):
@@ -1285,24 +1342,134 @@ class PlanViz2024:
         self.show_static_loc()
         self.show_tasks()
         self.mark_conf_agents()
-        self.resume_zoom()
 
         self.new_time.set(self.pcf.start_tstep)
         self.max_event_t = 0
         self.update_curtime()
 
+        self.sync_viewport_with_panel_width()
+        self.resume_zoom()
+
         self.frame.update()  # Adjust window size
-        # Use width and height for scaling
-        wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
-                        self.pcf.window.winfo_screenwidth())
-        wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
-        if self.gui_column == 1:
-            wd_width += self.frame.winfo_width() + 3
-            wd_height = max(wd_height, self.frame.winfo_height()) + 5
-        wd_width = str(wd_width)
-        wd_height = str(wd_height)
-        self.pcf.window.geometry(wd_width + "x" + wd_height)
+        if self.pcf.use_viewport_mode:
+            wd_width = self.pcf.viewport_width_px + self.frame.winfo_width() + 6
+            wd_height = max(self.pcf.viewport_height_px, self.frame.winfo_height()) + 5
+        else:
+            # Use width and height for scaling
+            wd_width = min((self.pcf.width+1) * self.pcf.tile_size + 2,
+                           self.pcf.window.winfo_screenwidth())
+            wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
+            if self.gui_column == 1:
+                wd_width += self.frame.winfo_width() + 3
+                wd_height = max(wd_height, self.frame.winfo_height()) + 5
+        self.pcf.window.geometry(f"{wd_width}x{wd_height}")
         self.pcf.window.title("PlanViz")
+        if self.pcf.use_viewport_mode:
+            self.pcf.window.update_idletasks()
+            self.center_view_on_initial_focus()
+            self.update_minimap_viewport()
+
+
+    def on_canvas_configure(self, _):
+        self.update_minimap_viewport()
+
+
+    def sync_viewport_with_panel_width(self) -> None:
+        if not self.pcf.use_viewport_mode:
+            return
+
+        self.frame.update_idletasks()
+        measured_panel_width = max(self.frame.winfo_width(), 0)
+        if measured_panel_width <= 0:
+            return
+
+        self.pcf.panel_width_px = measured_panel_width
+        self.pcf.default_tile_size = max(
+            self.pcf.ppm * self.pcf.moves,
+            self.pcf.compute_default_tile_size(),
+        )
+
+
+    def get_visible_world_bbox(self) -> Tuple[float, float, float, float]:
+        x0, x1 = self.pcf.canvas.xview()
+        y0, y1 = self.pcf.canvas.yview()
+        left = x0 * self.pcf.world_width_px
+        right = x1 * self.pcf.world_width_px
+        top = y0 * self.pcf.world_height_px
+        bottom = y1 * self.pcf.world_height_px
+        return (left, top, right, bottom)
+
+
+    def update_minimap_viewport(self):
+        if not self.pcf.use_viewport_mode or self.minimap_canvas is None or \
+            self.minimap_view_obj is None:
+            return
+
+        self.pcf.update_world_view_metrics()
+        left, top, right, bottom = self.get_visible_world_bbox()
+        self.minimap_canvas.coords(self.minimap_view_obj,
+                                   self.pcf.minimap_offset_x_px + left * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + top * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_x_px + right * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + bottom * self.pcf.minimap_scale)
+
+
+    def center_view_on_world(self, center_x:float, center_y:float):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        self.pcf.update_world_view_metrics()
+        x0, x1 = self.pcf.canvas.xview()
+        y0, y1 = self.pcf.canvas.yview()
+        visible_width = max((x1 - x0) * self.pcf.world_width_px, 1.0)
+        visible_height = max((y1 - y0) * self.pcf.world_height_px, 1.0)
+
+        left = max(0.0, min(center_x - visible_width / 2.0,
+                            self.pcf.world_width_px - visible_width))
+        top = max(0.0, min(center_y - visible_height / 2.0,
+                           self.pcf.world_height_px - visible_height))
+
+        self.pcf.canvas.xview_moveto(left / self.pcf.world_width_px)
+        self.pcf.canvas.yview_moveto(top / self.pcf.world_height_px)
+        self.update_minimap_viewport()
+
+
+    def center_view_on_initial_focus(self):
+        if not self.pcf.use_viewport_mode or self.pcf.initial_focus_bbox is None:
+            return
+
+        min_row, max_row, min_col, max_col = self.pcf.initial_focus_bbox
+        center_x = ((min_col + max_col + 1) / 2.0) * self.pcf.tile_size
+        center_y = ((min_row + max_row + 1) / 2.0) * self.pcf.tile_size
+        self.center_view_on_world(center_x, center_y)
+
+
+    def move_view_from_minimap_event(self, event):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        local_x = event.x - self.pcf.minimap_offset_x_px
+        local_y = event.y - self.pcf.minimap_offset_y_px
+        world_x = min(max(local_x / self.pcf.minimap_scale, 0), self.pcf.world_width_px)
+        world_y = min(max(local_y / self.pcf.minimap_scale, 0), self.pcf.world_height_px)
+        self.center_view_on_world(world_x, world_y)
+
+
+    def on_minimap_press(self, event):
+        self.minimap_dragging = True
+        self.move_view_from_minimap_event(event)
+
+
+    def on_minimap_drag(self, event):
+        if not self.minimap_dragging:
+            return
+        self.move_view_from_minimap_event(event)
+
+
+    def on_minimap_release(self, event):
+        if self.minimap_dragging:
+            self.move_view_from_minimap_event(event)
+        self.minimap_dragging = False
 
     def update_error_list(self, error_listbox):
         if error_listbox == None:
@@ -1681,6 +1848,7 @@ class PlanViz2024:
 
         if self.dragging:
             self.pcf.canvas.scan_dragto(event.x, event.y, gain=1)
+            self.update_minimap_viewport()
 
     def on_button_release(self, event):
         # If you haven't dragged when you release it, and it doesn't trigger a double click, it will be treated as a single click.
@@ -1708,20 +1876,28 @@ class PlanViz2024:
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        self.pcf.update_canvas_scrollregion()
+        self.update_minimap_viewport()
 
 
     def resume_zoom(self):
-        __scale = self.pcf.ppm * self.pcf.moves / self.pcf.tile_size
+        base_tile_size = self.pcf.default_tile_size
+        if base_tile_size < 1:
+            base_tile_size = self.pcf.ppm * self.pcf.moves
+        __scale = base_tile_size / self.pcf.tile_size
         self.pcf.canvas.scale("all", 0, 0, __scale, __scale)
-        self.pcf.tile_size = self.pcf.ppm * self.pcf.moves
+        self.pcf.tile_size = base_tile_size
+        self.pcf.update_viewport_metrics()
+        self.pcf.canvas.configure(width=self.pcf.viewport_width_px,
+                                  height=self.pcf.viewport_height_px)
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        self.pcf.update_canvas_scrollregion()
+        self.update_minimap_viewport()
         self.pcf.canvas.update()
 
     def clear_agent_selection(self, moving=False):
