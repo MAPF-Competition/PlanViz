@@ -4,6 +4,7 @@
 
 import sys
 import math
+from enum import Enum
 from typing import List, Tuple, Dict
 from numba import njit, prange
 
@@ -17,8 +18,22 @@ TASK_COLORS: Dict[int, str] = {
 AGENT_COLORS: Dict[str, str] = {
     "newlyassigned": "yellowgreen",
     "assigned": "deepskyblue",
+    "errand_finished": "limegreen",
+    "delayed": "yellow",
     "collide": "red"
 }
+
+
+class AgentStatus(str, Enum):
+    NORMAL = "normal"
+    DELAYED = "delayed"
+    ERRAND_FINISHED = "errand_finished"
+
+    @property
+    def color_key(self) -> str:
+        if self == AgentStatus.NORMAL:
+            return "assigned"
+        return self.value
 
 DIRECTION: Dict[str,int] = {"E":0, "N":1, "W":2, "S":3, "N/A":-1}
 
