@@ -1989,10 +1989,22 @@ class PlanViz2024:
         if len(conf[0]) == 5:
             task_id, agent1, agent2, tstep_std, description = conf[0]
         if len(conf[0]) == 4:
-            agent1, agent2, tstep_std, description = conf[0]    
+            agent1, agent2, tstep_std, description = conf[0]
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-        self.new_time.set(int(tstep_std)-1)
+        primary_ag_idx = -1
+        if 0 <= agent1 < self.pcf.team_size:
+            primary_ag_idx = agent1
+        elif 0 <= agent2 < self.pcf.team_size:
+            primary_ag_idx = agent2
+
+        self.clear_agent_selection()
+        self.new_time.set(int(tstep_std))
         self.update_curtime()
+        if primary_ag_idx != -1:
+            self.center_view_on_agent(primary_ag_idx)
+            first_errand_t = self.show_colorful_errands(primary_ag_idx)
+            if first_errand_t != -1:
+                self.show_ag_plan(primary_ag_idx, first_errand_t)
 
 
     def move_to_event(self, event):
