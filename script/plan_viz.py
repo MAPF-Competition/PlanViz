@@ -7,7 +7,7 @@ All rights reserved.
 import math
 import re
 from bisect import bisect_right
-from typing import List, Tuple, Dict, Set
+from typing import List, Tuple, Dict, Set, Optional
 import tkinter as tk
 from tkinter import ttk,font
 import time
@@ -1997,14 +1997,13 @@ class PlanViz2024:
         elif 0 <= agent2 < self.pcf.team_size:
             primary_ag_idx = agent2
 
-        self.clear_agent_selection()
+        self.clear_agent_selection(refresh=False)
+        if primary_ag_idx != -1:
+            self.pcf.shown_path_agents.add(primary_ag_idx)
         self.new_time.set(int(tstep_std))
         self.update_curtime()
         if primary_ag_idx != -1:
             self.center_view_on_agent(primary_ag_idx)
-            first_errand_t = self.show_colorful_errands(primary_ag_idx)
-            if first_errand_t != -1:
-                self.show_ag_plan(primary_ag_idx, first_errand_t)
 
 
     def move_to_event(self, event):
@@ -2031,13 +2030,12 @@ class PlanViz2024:
                 try:
                     tstep = int(parts[0])
                     ag_idx = int(parts[1])
-                    self.clear_agent_selection()
+                    self.clear_agent_selection(refresh=False)
+                    if 0 <= ag_idx < self.pcf.team_size:
+                        self.pcf.shown_path_agents.add(ag_idx)
                     self.new_time.set(tstep)
                     self.update_curtime()
                     self.center_view_on_agent(ag_idx)
-                    first_errand_t = self.show_colorful_errands(ag_idx)
-                    if first_errand_t != -1:
-                        self.show_ag_plan(ag_idx, first_errand_t)
                     return
                 except (ValueError, IndexError):
                     return
@@ -2056,14 +2054,13 @@ class PlanViz2024:
             
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
-        self.clear_agent_selection()
+        self.clear_agent_selection(refresh=False)
+        ag_idx = cur_eve[1]
+        if 0 <= ag_idx < self.pcf.team_size:
+            self.pcf.shown_path_agents.add(ag_idx)
         self.new_time.set(new_t)
         self.update_curtime()
-        ag_idx = cur_eve[1]
         self.center_view_on_agent(ag_idx)
-        first_errand_t = self.show_colorful_errands(ag_idx)
-        if first_errand_t != -1:
-            self.show_ag_plan(ag_idx, first_errand_t)
         
     def check_left_click(self, event):
         self.last_click_pos = (event.x, event.y)
@@ -2135,21 +2132,14 @@ class PlanViz2024:
         self.update_minimap_viewport()
         self.pcf.canvas.update()
 
-    def clear_agent_selection(self, moving=False):
-        for ag_idx in self.pcf.shown_path_agents:
-            for task_idx in self.pcf.shown_tasks_seq:
-                for arrow_id in self.pcf.agent_shown_task_arrow[ag_idx]:
-                    self.pcf.canvas.delete(arrow_id)
-                for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
-                    self.hide_single_task(task_idx, idx)
-            for _p_ in self.pcf.agents[ag_idx].path_objs:
-                self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
-                self.pcf.canvas.tag_lower(_p_.obj)
+    def clear_agent_selection(self, moving:bool=False, refresh:bool=True):
+        self.clear_selected_agent_visuals(clear_task_visibility=True)
         if not moving:
             self.pcf.shown_tasks_seq.clear()
             self.pcf.shown_path_agents.clear()
-            self.new_time.set(self.pcf.cur_tstep)
-            self.update_curtime()
+            if refresh:
+                self.new_time.set(self.pcf.cur_tstep)
+                self.update_curtime()
 
     def left_click(self, event):
         self.right_click_status = "left"
@@ -2187,9 +2177,12 @@ class PlanViz2024:
         if ag_idx == -1 and self.run_button['state'] == tk.NORMAL:
             self.clear_agent_selection()
         if ag_idx != -1:
-            first_errand_t = self.show_colorful_errands(ag_idx)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t)
+            if ag_idx in self.pcf.shown_path_agents:
+                self.pcf.shown_path_agents.remove(ag_idx)
+            elif self.get_agent_focus_context(ag_idx) is not None:
+                self.pcf.shown_path_agents.add(ag_idx)
+            self.new_time.set(self.pcf.cur_tstep)
+            self.update_curtime()
 
             
 
@@ -2313,6 +2306,130 @@ class PlanViz2024:
         return ag_idx
 
 
+    def get_agent_focus_context(self, ag_idx:int,
+                                cur_tstep:Optional[int]=None) -> Optional[Tuple[int, int, int]]:
+        if ag_idx not in self.pcf.agent_assigned_task:
+            return None
+
+        if cur_tstep is None:
+            cur_tstep = self.pcf.cur_tstep
+
+        current_task_idx = -1
+        for assign_t, task_idx in sorted(self.pcf.agent_assigned_task[ag_idx]):
+            if cur_tstep >= assign_t - 1:
+                current_task_idx = task_idx
+
+        if current_task_idx == -1:
+            return None
+
+        first_errand = -1
+        first_errand_t = -1
+        for seq_id, task in enumerate(self.pcf.seq_tasks[current_task_idx].tasks):
+            task_t = task.events["finished"]["timestep"]
+            if task_t == float("inf"):
+                task_t = 1e9
+            if cur_tstep < task_t:
+                first_errand = seq_id
+                first_errand_t = int(task_t)
+                break
+
+        return (current_task_idx, first_errand, first_errand_t)
+
+
+    def clear_selected_agent_visuals(self, clear_task_visibility:bool=True) -> None:
+        for ag_idx in self.pcf.agents:
+            for arrow_id in self.pcf.agent_shown_task_arrow.get(ag_idx, []):
+                self.pcf.canvas.delete(arrow_id)
+            self.pcf.agent_shown_task_arrow[ag_idx] = []
+            for path_obj in self.pcf.agents[ag_idx].path_objs:
+                self.pcf.canvas.itemconfigure(path_obj.obj, state=tk.HIDDEN)
+                self.pcf.canvas.tag_lower(path_obj.obj)
+
+        if clear_task_visibility:
+            for task_idx in list(self.pcf.shown_tasks_seq):
+                for seq_id in range(len(self.pcf.seq_tasks[task_idx].tasks)):
+                    self.hide_single_task(task_idx, seq_id)
+
+
+    def render_task_sequence(self, agent_idx:int, task_idx:int, first_errand:int) -> List[int]:
+        def get_center_coords(canvas, item_id):
+            coords = canvas.coords(item_id)
+            x_center = (coords[0] + coords[2]) / 2
+            y_center = (coords[1] + coords[3]) / 2
+            return x_center, y_center
+
+        arrows = []
+        last_obj = self.pcf.agents[agent_idx].agent_obj.obj
+        for seq_id, seq_task in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+            task_t = seq_task.events["finished"]["timestep"]
+            if self.pcf.cur_tstep >= task_t:
+                self.change_task_color(task_idx, seq_id, TASK_COLORS["finished"])
+                continue
+
+            self.change_task_color(task_idx, seq_id, "pink")
+            if seq_id == first_errand:
+                self.change_task_color(task_idx, seq_id, "orange")
+
+            self.set_task_visibility(task_idx, seq_id, True)
+            x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
+            last_obj = seq_task.task_obj.obj
+            x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
+            arrow_id = self.pcf.canvas.create_line(x1, y1, x2, y2,
+                                                   arrow=tk.LAST,
+                                                   width=2,
+                                                   fill="#4eb1a6")
+            arrows.append(arrow_id)
+
+        return arrows
+
+
+    def render_selected_agent_context(self) -> None:
+        self.clear_selected_agent_visuals(clear_task_visibility=False)
+        selected_contexts:List[Tuple[int, int, int, int]] = []
+        selected_task_ids:Set[int] = set()
+
+        for ag_idx in sorted(self.pcf.shown_path_agents):
+            focus_context = self.get_agent_focus_context(ag_idx)
+            if focus_context is None:
+                continue
+            task_idx, first_errand, first_errand_t = focus_context
+            selected_contexts.append((ag_idx, task_idx, first_errand, first_errand_t))
+            selected_task_ids.add(task_idx)
+
+        self.pcf.shown_tasks_seq = selected_task_ids
+        if len(selected_contexts) == 0:
+            return
+
+        for ag_idx, task_idx, first_errand, _ in selected_contexts:
+            self.pcf.agent_shown_task_arrow[ag_idx] = self.render_task_sequence(
+                ag_idx, task_idx, first_errand
+            )
+
+        for task_id, seq_task in self.pcf.seq_tasks.items():
+            if task_id in self.pcf.shown_tasks_seq:
+                for seq_id, task in enumerate(seq_task.tasks):
+                    task_t = task.events["finished"]["timestep"]
+                    if self.pcf.cur_tstep >= task_t:
+                        continue
+                    self.show_single_task(task_id, seq_id, ignore=1)
+            else:
+                for seq_id in range(len(seq_task.tasks)):
+                    self.hide_single_task(task_id, seq_id)
+
+        if self.show_agent_path.get():
+            for ag_idx, _, _, first_errand_t in selected_contexts:
+                if first_errand_t == -1:
+                    continue
+                self.pcf.lazy_render_agent_path(ag_idx)
+                max_path_id = min(first_errand_t + 1, len(self.pcf.agents[ag_idx].path_objs))
+                for path_id in range(self.pcf.cur_tstep + 1, max_path_id):
+                    self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[path_id].obj,
+                                                  state=tk.DISABLED)
+                    self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[path_id].obj)
+
+        self.raise_agent_canvas_items()
+
+
     def show_colorful_errands(self, ag_idx, moving=False):
         agent_tasks = self.pcf.agent_assigned_task[ag_idx]
         agent_tasks = sorted(agent_tasks)
@@ -2367,11 +2484,8 @@ class PlanViz2024:
 
 
     def off_agent_path(self):
-        self.clear_agent_selection(moving=True)
-        for ag_idx in self.pcf.shown_path_agents:
-            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+        self.new_time.set(self.pcf.cur_tstep)
+        self.update_curtime()
 
     def show_task_seq(self, agent_idx, task_idx, first_errand, moving=False):
         def get_center_coords(canvas, item_id):
@@ -2556,7 +2670,8 @@ class PlanViz2024:
 
 
     def show_tasks_by_click(self, _) -> None:
-        self.show_tasks()
+        self.new_time.set(self.pcf.cur_tstep)
+        self.update_curtime()
 
 
     def show_single_task(self, task_id:int, seq_id:int=0, ignore:int=0) -> None:
@@ -2651,12 +2766,7 @@ class PlanViz2024:
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
                     
-            
-            self.clear_agent_selection(moving=True)
-            for ag_idx in self.pcf.shown_path_agents:
-                first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-                if first_errand_t != -1:
-                    self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+            self.render_selected_agent_context()
                     
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
@@ -2710,6 +2820,7 @@ class PlanViz2024:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
+        self.render_selected_agent_context()
         self.update_agent_colors()
         self.raise_agent_canvas_items()
         
@@ -2791,18 +2902,14 @@ class PlanViz2024:
                 if self.pcf.agent_model == "MAPF_T":
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_*_cos, _rad_*_sin)
+            self.render_selected_agent_context()
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
         for (ag_id, agent) in self.pcf.agents.items():
             agent.agent_obj.loc = prev_loc[ag_id]
 
         self.pcf.cur_tstep = prev_timestep
-        
-        self.clear_agent_selection(moving=True)
-        for ag_idx in self.pcf.shown_path_agents:
-            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+        self.render_selected_agent_context()
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
@@ -2943,6 +3050,7 @@ class PlanViz2024:
             self._tag_agent_dynamic_canvas_items(agent_)
         self.show_tasks()
         self.show_agent_index()
+        self.render_selected_agent_context()
         
         
         self.update_event_list(self.event_listbox, 0)
