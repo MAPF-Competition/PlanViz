@@ -1527,6 +1527,16 @@ class PlanViz2024:
         self.center_view_on_world(center_x, center_y)
 
 
+    def center_view_on_agent(self, ag_idx:int) -> None:
+        if not self.pcf.use_viewport_mode or ag_idx not in self.pcf.agents:
+            return
+
+        ag_loc = self.pcf.agents[ag_idx].agent_obj.loc
+        center_x = (ag_loc[1] + 0.5) * self.pcf.tile_size
+        center_y = (ag_loc[0] + 0.5) * self.pcf.tile_size
+        self.center_view_on_world(center_x, center_y)
+
+
     def move_view_from_minimap_event(self, event):
         if not self.pcf.use_viewport_mode:
             return
@@ -2004,6 +2014,7 @@ class PlanViz2024:
                     self.clear_agent_selection()
                     self.new_time.set(tstep)
                     self.update_curtime()
+                    self.center_view_on_agent(ag_idx)
                     first_errand_t = self.show_colorful_errands(ag_idx)
                     if first_errand_t != -1:
                         self.show_ag_plan(ag_idx, first_errand_t)
@@ -2029,6 +2040,7 @@ class PlanViz2024:
         self.new_time.set(new_t)
         self.update_curtime()
         ag_idx = cur_eve[1]
+        self.center_view_on_agent(ag_idx)
         first_errand_t = self.show_colorful_errands(ag_idx)
         if first_errand_t != -1:
             self.show_ag_plan(ag_idx, first_errand_t)
