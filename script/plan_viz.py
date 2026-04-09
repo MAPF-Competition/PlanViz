@@ -1693,7 +1693,7 @@ class PlanViz2024:
 
     def set_error_listbox_height(self, error_count: int) -> None:
         min_rows = 2
-        max_visible_errors = 12
+        max_visible_errors = 15
         max_rows = max(min_rows, max_visible_errors + 2)
         total_rows = max(min_rows, min(error_count + 2, max_rows))
         self.conflict_listbox.config(height=total_rows)
@@ -1770,7 +1770,7 @@ class PlanViz2024:
             return
 
         min_rows = 2
-        max_visible_events = 20
+        max_visible_events = 15
         max_rows = max(min_rows, max_visible_events + 2)
         total_rows = max(min_rows, min(event_count + 2, max_rows))
         event_listbox.config(height=total_rows)
