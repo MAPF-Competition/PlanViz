@@ -1570,17 +1570,38 @@ class PlanViz2024:
         for item_idx, (label_text, color) in enumerate(legend_items):
             item_frame = tk.Frame(legend_frame)
             item_frame.grid(row=0, column=item_idx, sticky="w", padx=(0, 12))
-            color_box = tk.Label(
-                item_frame,
-                width=2,
-                bg=color,
-                relief=tk.SOLID,
-                borderwidth=1
-            )
+            color_box = self.create_agent_legend_icon(item_frame, color)
             color_box.pack(side=tk.LEFT, padx=(2, 6), pady=1)
             color_label = tk.Label(item_frame, text=label_text, font=("Arial", TEXT_SIZE))
             color_label.pack(side=tk.LEFT, pady=1)
         self.row_idx += 1
+
+    def create_agent_legend_icon(self, parent:tk.Widget, color:str) -> tk.Canvas:
+        marker_size = 28
+        marker_canvas = tk.Canvas(parent,
+                                  width=marker_size,
+                                  height=marker_size,
+                                  highlightthickness=0,
+                                  bd=0,
+                                  bg=parent.cget("bg"))
+
+        offset = 0.05
+        marker_canvas.create_oval(offset * marker_size,
+                                  offset * marker_size,
+                                  (1 - offset) * marker_size,
+                                  (1 - offset) * marker_size,
+                                  fill=color,
+                                  outline="")
+
+        if self.pcf.agent_model == "MAPF_T":
+            dir_loc = get_dir_loc((0, 0, 0))
+            marker_canvas.create_oval(dir_loc[0] * marker_size,
+                                      dir_loc[1] * marker_size,
+                                      dir_loc[2] * marker_size,
+                                      dir_loc[3] * marker_size,
+                                      fill="navy",
+                                      outline="")
+        return marker_canvas
 
     def init_event_count_tracker(self) -> None:
         self.event_count_times = []
