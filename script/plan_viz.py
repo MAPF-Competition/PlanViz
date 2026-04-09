@@ -6,6 +6,7 @@ All rights reserved.
 
 import math
 import re
+from bisect import bisect_right
 from typing import List, Tuple, Dict, Set
 import tkinter as tk
 from tkinter import ttk,font
@@ -1049,6 +1050,14 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.event_count_frame = None
+        self.event_count_value_labels:Dict[str, tk.Label] = {}
+        self.event_count_times:List[int] = []
+        self.event_count_prefix:Dict[str, List[int]] = {
+            "assigned": [],
+            "errand_finished": [],
+            "task_finished": [],
+        }
         self.minimap_canvas = None
         self.minimap_photo = None
         self.minimap_image_obj = None
@@ -1366,6 +1375,50 @@ class PlanViz2024:
         scrollbar.config(command=self.event_listbox.yview)
         scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
+
+        self.event_count_frame = tk.Frame(self.frame,
+                                          bd=0,
+                                          relief=tk.FLAT,
+                                          padx=8,
+                                          pady=6)
+        self.event_count_frame.grid(row=self.row_idx, column=0, columnspan=5,
+                                    sticky="ew", pady=(4, 0))
+        self.event_count_frame.grid_columnconfigure(0, weight=1)
+        summary_label = tk.Label(self.event_count_frame,
+                                 text="Event summary",
+                                 font=("Arial", TEXT_SIZE, "bold"),
+                                 anchor="w",
+                                 fg="#444444")
+        summary_label.grid(row=0, column=0, sticky="w", pady=(0, 6))
+        event_count_rows = [
+            ("Assigned", "assigned"),
+            ("E-Finished", "errand_finished"),
+            ("T-Finished", "task_finished"),
+        ]
+        for row_idx, (label_text, event_type) in enumerate(event_count_rows, start=1):
+            row_frame = tk.Frame(self.event_count_frame)
+            row_frame.grid(row=row_idx, column=0, sticky="ew",
+                           pady=(0, 2 if row_idx < len(event_count_rows) else 0))
+            row_frame.grid_columnconfigure(1, weight=1)
+
+            count_label = tk.Label(row_frame,
+                                   text=f"{label_text}:",
+                                   font=("Arial", TEXT_SIZE),
+                                   anchor="w",
+                                   fg="#2b2f36")
+            count_label.grid(row=0, column=0, sticky="w")
+
+            count_value = tk.Label(row_frame,
+                                   text="0",
+                                   font=("Arial", TEXT_SIZE + 1, "bold"),
+                                   anchor="e",
+                                   width=6,
+                                   fg="#222222")
+            count_value.grid(row=0, column=1, sticky="e", padx=(12, 0))
+            self.event_count_value_labels[event_type] = count_value
+        self.row_idx += 1
+
+        self.init_event_count_tracker()
         print("Done!")
 
         self.show_grid()
@@ -1529,6 +1582,84 @@ class PlanViz2024:
             color_label.pack(side=tk.LEFT, pady=1)
         self.row_idx += 1
 
+    def init_event_count_tracker(self) -> None:
+        self.event_count_times = []
+        self.event_count_prefix = {
+            "assigned": [],
+            "errand_finished": [],
+            "task_finished": [],
+        }
+        if self.pcf.max_seq_num <= 0:
+            return
+
+        event_count_by_time:Dict[int, Dict[str, int]] = {}
+
+        def add_event_count(tstep:int, event_type:str) -> None:
+            if tstep not in event_count_by_time:
+                event_count_by_time[tstep] = {
+                    "assigned": 0,
+                    "errand_finished": 0,
+                    "task_finished": 0,
+                }
+            event_count_by_time[tstep][event_type] += 1
+
+        for tstep, cur_events in self.pcf.events["assigned"].items():
+            for global_task_id in cur_events:
+                if global_task_id % self.pcf.max_seq_num == 0:
+                    add_event_count(tstep, "assigned")
+
+        for tstep, cur_events in self.pcf.events["finished"].items():
+            for global_task_id in cur_events:
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
+                if seq_id == last_seq_id:
+                    add_event_count(tstep, "task_finished")
+                else:
+                    add_event_count(tstep, "errand_finished")
+
+        running_total = {
+            "assigned": 0,
+            "errand_finished": 0,
+            "task_finished": 0,
+        }
+        for tstep in sorted(event_count_by_time.keys()):
+            for event_type in running_total:
+                running_total[event_type] += event_count_by_time[tstep][event_type]
+            self.event_count_times.append(tstep)
+            for event_type in running_total:
+                self.event_count_prefix[event_type].append(running_total[event_type])
+
+    def get_event_count_breakdown(self, end_tstep:int) -> Dict[str, int]:
+        zero_breakdown = {
+            "assigned": 0,
+            "errand_finished": 0,
+            "task_finished": 0,
+        }
+        if not self.event_count_times:
+            return zero_breakdown
+
+        event_idx = bisect_right(self.event_count_times, end_tstep) - 1
+        if event_idx < 0:
+            return zero_breakdown
+
+        return {
+            "assigned": self.event_count_prefix["assigned"][event_idx],
+            "errand_finished": self.event_count_prefix["errand_finished"][event_idx],
+            "task_finished": self.event_count_prefix["task_finished"][event_idx],
+        }
+
+    def update_event_count_label(self, end_tstep:int, is_main_event_list:bool) -> None:
+        if not is_main_event_list or self.event_count_frame is None or \
+            (not self.event_count_frame.winfo_exists()):
+            return
+
+        event_breakdown = self.get_event_count_breakdown(end_tstep)
+        for event_type, count_value in event_breakdown.items():
+            if event_type not in self.event_count_value_labels:
+                continue
+            self.event_count_value_labels[event_type].config(text=str(count_value))
+
     def set_error_listbox_height(self, error_count: int) -> None:
         min_rows = 2
         max_visible_errors = 12
@@ -1620,6 +1751,7 @@ class PlanViz2024:
             return
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.pcf.cur_tstep
+        is_main_event_list = event_listbox == self.event_listbox
 
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.eve_id = 0
@@ -1636,6 +1768,7 @@ class PlanViz2024:
         time_list = sorted((tstep for tstep in time_list if tstep <= end_tstep), reverse=True)
         if self.pcf.event_limit == 0:
             self.set_event_listbox_height(event_listbox, 0)
+            self.update_event_count_label(end_tstep, is_main_event_list)
             return
         for tstep in time_list:
             if tstep in self.pcf.events["assigned"]:
@@ -1658,6 +1791,7 @@ class PlanViz2024:
                         shown_event_count += 1
                         if shown_event_count >= self.pcf.event_limit:
                             self.set_event_listbox_height(event_listbox, shown_event_count)
+                            self.update_event_count_label(end_tstep, is_main_event_list)
                             return
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
@@ -1681,8 +1815,10 @@ class PlanViz2024:
                     shown_event_count += 1
                     if shown_event_count >= self.pcf.event_limit:
                         self.set_event_listbox_height(event_listbox, shown_event_count)
+                        self.update_event_count_label(end_tstep, is_main_event_list)
                         return
         self.set_event_listbox_height(event_listbox, shown_event_count)
+        self.update_event_count_label(end_tstep, is_main_event_list)
             
 
     def update_location_event_list(self, event_listbox):
