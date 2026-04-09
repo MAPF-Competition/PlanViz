@@ -2430,6 +2430,14 @@ class PlanViz2024:
         self.raise_agent_canvas_items()
 
 
+    def refresh_selected_agent_display(self) -> None:
+        self.show_tasks()
+        self.show_agent_index()
+        self.render_selected_agent_context()
+        self.update_agent_colors()
+        self.pcf.canvas.update_idletasks()
+
+
     def show_colorful_errands(self, ag_idx, moving=False):
         agent_tasks = self.pcf.agent_assigned_task[ag_idx]
         agent_tasks = sorted(agent_tasks)
@@ -2484,8 +2492,7 @@ class PlanViz2024:
 
 
     def off_agent_path(self):
-        self.new_time.set(self.pcf.cur_tstep)
-        self.update_curtime()
+        self.refresh_selected_agent_display()
 
     def show_task_seq(self, agent_idx, task_idx, first_errand, moving=False):
         def get_center_coords(canvas, item_id):
