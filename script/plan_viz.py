@@ -1102,16 +1102,24 @@ class PlanViz2024:
 
 
     def update_agent_colors(self) -> None:
+        current_error_agents = self.pcf.error_agents_by_timestep.get(self.pcf.cur_tstep, set())
         for ag_idx, agent in self.pcf.agents.items():
             shown_color = AGENT_COLORS[self.pcf.get_agent_status(ag_idx, self.pcf.cur_tstep).color_key]
+            outline_color = ""
+            outline_width = 1
+
             if self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents:
+                outline_color = AGENT_COLORS["collide"]
+                outline_width = 2
+            if self.show_all_conf_ag.get() and ag_idx in current_error_agents:
                 shown_color = AGENT_COLORS["collide"]
             elif self.agent_has_selected_conflict(ag_idx):
                 shown_color = AGENT_COLORS["collide"]
 
-            if agent.agent_obj.color == shown_color:
-                continue
             self.pcf.canvas.itemconfig(agent.agent_obj.obj, fill=shown_color)
+            self.pcf.canvas.itemconfig(agent.agent_obj.obj,
+                                       outline=outline_color,
+                                       width=outline_width)
             agent.agent_obj.color = shown_color
 
 
