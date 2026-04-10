@@ -6,12 +6,14 @@ All rights reserved.
 
 import math
 import re
-from typing import List, Tuple, Dict, Set
+from bisect import bisect_right
+from typing import List, Tuple, Dict, Set, Optional
 import tkinter as tk
 from tkinter import ttk,font
 import time
 import platform
-from util import (AGENT_COLORS, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
+from PIL import Image, ImageTk
+from util import (AGENT_COLORS, AgentStatus, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
                   get_dir_loc, get_rotation)
 from plan_config import PlanConfig2023, PlanConfig2024
 
@@ -1030,10 +1032,12 @@ class PlanViz2024:
         self.is_heat_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
+        self.listbox_monospace_font = font.Font(family="Courier", size=TEXT_SIZE)
 
         gui_window = self.pcf.window
         self.gui_column = 1
-        if (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
+        if (not self.pcf.use_viewport_mode) and \
+            (self.pcf.width+1) * self.pcf.tile_size > 0.5 * self.pcf.window.winfo_screenwidth():
             gui_window = tk.Toplevel()
             gui_window.transient(self.pcf.window)
             gui_window.lift()
@@ -1046,6 +1050,19 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.event_count_frame = None
+        self.event_count_value_labels:Dict[str, tk.Label] = {}
+        self.event_count_times:List[int] = []
+        self.event_count_prefix:Dict[str, List[int]] = {
+            "assigned": [],
+            "errand_finished": [],
+            "task_finished": [],
+        }
+        self.minimap_canvas = None
+        self.minimap_photo = None
+        self.minimap_image_obj = None
+        self.minimap_view_obj = None
+        self.minimap_dragging = False
         
         self.time_label = tk.Label(self.frame,
                                    text=f"Time: {self.pcf.cur_tstep:03d}",
@@ -1058,6 +1075,7 @@ class PlanViz2024:
                                        font=("Arial", TEXT_SIZE + 10))
         self.mouse_loc_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
         self.row_idx += 1
+        self.init_minimap()
 
         self.init_button()
         self.init_label()
@@ -1068,6 +1086,41 @@ class PlanViz2024:
     def set_time_labels(self, timeline_value:int) -> None:
         """Update the displayed time based on the current timeline value."""
         self.time_label.config(text=f"Time: {int(timeline_value):03d}")
+
+
+    def agent_has_selected_conflict(self, ag_idx:int) -> bool:
+        for conf in self.shown_conflicts.values():
+            if not conf[1]:
+                continue
+            if len(conf[0]) == 5:
+                _, agent1, agent2, _, _ = conf[0]
+            else:
+                agent1, agent2, _, _ = conf[0]
+            if ag_idx == agent1 or ag_idx == agent2:
+                return True
+        return False
+
+
+    def update_agent_colors(self) -> None:
+        current_error_agents = self.pcf.error_agents_by_timestep.get(self.pcf.cur_tstep, set())
+        for ag_idx, agent in self.pcf.agents.items():
+            shown_color = AGENT_COLORS[self.pcf.get_agent_status(ag_idx, self.pcf.cur_tstep).color_key]
+            outline_color = ""
+            outline_width = 1
+
+            if self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents:
+                outline_color = AGENT_COLORS["collide"]
+                outline_width = 2
+            if self.show_all_conf_ag.get() and ag_idx in current_error_agents:
+                shown_color = AGENT_COLORS["collide"]
+            elif self.agent_has_selected_conflict(ag_idx):
+                shown_color = AGENT_COLORS["collide"]
+
+            self.pcf.canvas.itemconfig(agent.agent_obj.obj, fill=shown_color)
+            self.pcf.canvas.itemconfig(agent.agent_obj.obj,
+                                       outline=outline_color,
+                                       width=outline_width)
+            agent.agent_obj.color = shown_color
 
 
     def init_pcf(self, plan_config):
@@ -1094,6 +1147,8 @@ class PlanViz2024:
         self.right_click_status = "left"
         self.pcf.canvas.bind("<<RightClick>>", self.right_click)
         self.pcf.canvas.bind("<Motion>", self.on_hover)
+        if self.pcf.use_viewport_mode:
+            self.pcf.canvas.bind("<Configure>", self.on_canvas_configure)
 
         # This is what enables using the mouse:
         self.pcf.canvas.bind("<ButtonPress-1>", self.check_left_click)
@@ -1123,6 +1178,53 @@ class PlanViz2024:
         for _, agent_ in self.pcf.agents.items():
             self._tag_agent_dynamic_canvas_items(agent_)
             self._tag_agent_static_canvas_items(agent_)
+
+    def init_minimap(self):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        minimap_label = tk.Label(self.frame, text="Minimap", font=("Arial", TEXT_SIZE))
+        minimap_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        self.minimap_canvas = tk.Canvas(self.frame,
+                                        width=self.pcf.minimap_width_px,
+                                        height=self.pcf.minimap_height_px,
+                                        bg="white",
+                                        highlightthickness=1,
+                                        highlightbackground="#666666")
+        self.minimap_canvas.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.minimap_canvas.bind("<ButtonPress-1>", self.on_minimap_press)
+        self.minimap_canvas.bind("<B1-Motion>", self.on_minimap_drag)
+        self.minimap_canvas.bind("<ButtonRelease-1>", self.on_minimap_release)
+
+        if self.pcf.base_env_image is not None:
+            source_image = self.pcf.base_env_image
+            if self.pcf.show_coord_labels:
+                padded_image = Image.new(
+                    "RGBA",
+                    (self.pcf.width + 1, self.pcf.height + 1),
+                    (255, 255, 255, 0),
+                )
+                padded_image.paste(self.pcf.base_env_image, (0, 0))
+                source_image = padded_image
+
+            scaled = source_image.resize(
+                (self.pcf.minimap_render_width_px, self.pcf.minimap_render_height_px),
+                Image.Resampling.NEAREST,
+            )
+            self.minimap_photo = ImageTk.PhotoImage(scaled)
+            self.minimap_image_obj = self.minimap_canvas.create_image(
+                self.pcf.minimap_offset_x_px,
+                self.pcf.minimap_offset_y_px,
+                anchor="nw",
+                image=self.minimap_photo,
+            )
+
+        self.minimap_view_obj = self.minimap_canvas.create_rectangle(
+            0, 0, 1, 1, outline="#cf2b24", width=2
+        )
+        self.row_idx += 1
 
 
     def init_button(self):
@@ -1236,8 +1338,10 @@ class PlanViz2024:
         self.update_button.grid(row=self.row_idx, column=2, sticky="w")
         self.row_idx += 1
 
+        self.init_color_legend()
+
         # ---------- Show the list of errors ----------------------- #
-        err_label = tk.Label(self.frame, text="List of errors", font=("Arial",TEXT_SIZE))
+        err_label = tk.Label(self.frame, text="Most recent of errors", font=("Arial",TEXT_SIZE))
         err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
@@ -1279,45 +1383,354 @@ class PlanViz2024:
         scrollbar.config(command=self.event_listbox.yview)
         scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
+
+        self.event_count_frame = tk.Frame(self.frame,
+                                          bd=0,
+                                          relief=tk.FLAT,
+                                          padx=8,
+                                          pady=6)
+        self.event_count_frame.grid(row=self.row_idx, column=0, columnspan=5,
+                                    sticky="ew", pady=(4, 0))
+        self.event_count_frame.grid_columnconfigure(0, weight=1)
+        summary_label = tk.Label(self.event_count_frame,
+                                 text="Event summary",
+                                 font=("Arial", TEXT_SIZE, "bold"),
+                                 anchor="w",
+                                 fg="#444444")
+        summary_label.grid(row=0, column=0, sticky="w", pady=(0, 6))
+        event_count_rows = [
+            ("Assigned", "assigned"),
+            ("E-Finished", "errand_finished"),
+            ("T-Finished", "task_finished"),
+        ]
+        for row_idx, (label_text, event_type) in enumerate(event_count_rows, start=1):
+            row_frame = tk.Frame(self.event_count_frame)
+            row_frame.grid(row=row_idx, column=0, sticky="ew",
+                           pady=(0, 2 if row_idx < len(event_count_rows) else 0))
+            row_frame.grid_columnconfigure(1, weight=1)
+
+            count_label = tk.Label(row_frame,
+                                   text=f"{label_text}:",
+                                   font=("Arial", TEXT_SIZE),
+                                   anchor="w",
+                                   fg="#2b2f36")
+            count_label.grid(row=0, column=0, sticky="w")
+
+            count_value = tk.Label(row_frame,
+                                   text="0",
+                                   font=("Arial", TEXT_SIZE + 1, "bold"),
+                                   anchor="e",
+                                   width=6,
+                                   fg="#222222")
+            count_value.grid(row=0, column=1, sticky="e", padx=(12, 0))
+            self.event_count_value_labels[event_type] = count_value
+        self.row_idx += 1
+
+        self.init_event_count_tracker()
         print("Done!")
 
         self.show_grid()
         self.show_static_loc()
         self.show_tasks()
         self.mark_conf_agents()
-        self.resume_zoom()
 
         self.new_time.set(self.pcf.start_tstep)
         self.max_event_t = 0
         self.update_curtime()
 
+        self.sync_viewport_with_panel_width()
+        self.resume_zoom()
+
         self.frame.update()  # Adjust window size
-        # Use width and height for scaling
-        wd_width  = min((self.pcf.width+1) * self.pcf.tile_size + 2,
-                        self.pcf.window.winfo_screenwidth())
-        wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
-        if self.gui_column == 1:
-            wd_width += self.frame.winfo_width() + 3
-            wd_height = max(wd_height, self.frame.winfo_height()) + 5
-        wd_width = str(wd_width)
-        wd_height = str(wd_height)
-        self.pcf.window.geometry(wd_width + "x" + wd_height)
+        if self.pcf.use_viewport_mode:
+            wd_width = self.pcf.viewport_width_px + self.frame.winfo_width() + 6
+            wd_height = max(self.pcf.viewport_height_px, self.frame.winfo_height()) + 5
+        else:
+            # Use width and height for scaling
+            wd_width = min((self.pcf.width+1) * self.pcf.tile_size + 2,
+                           self.pcf.window.winfo_screenwidth())
+            wd_height = (self.pcf.height+1) * self.pcf.tile_size + 1
+            if self.gui_column == 1:
+                wd_width += self.frame.winfo_width() + 3
+                wd_height = max(wd_height, self.frame.winfo_height()) + 5
+        self.pcf.window.geometry(f"{wd_width}x{wd_height}")
         self.pcf.window.title("PlanViz")
+        if self.pcf.use_viewport_mode:
+            self.pcf.window.update_idletasks()
+            self.center_view_on_initial_focus()
+            self.update_minimap_viewport()
+
+
+    def on_canvas_configure(self, _):
+        self.update_minimap_viewport()
+
+
+    def sync_viewport_with_panel_width(self) -> None:
+        if not self.pcf.use_viewport_mode:
+            return
+
+        self.frame.update_idletasks()
+        measured_panel_width = max(self.frame.winfo_width(), 0)
+        if measured_panel_width <= 0:
+            return
+
+        self.pcf.panel_width_px = measured_panel_width
+        self.pcf.default_tile_size = max(
+            self.pcf.ppm * self.pcf.moves,
+            self.pcf.compute_default_tile_size(),
+        )
+
+
+    def get_visible_world_bbox(self) -> Tuple[float, float, float, float]:
+        x0, x1 = self.pcf.canvas.xview()
+        y0, y1 = self.pcf.canvas.yview()
+        left = x0 * self.pcf.world_width_px
+        right = x1 * self.pcf.world_width_px
+        top = y0 * self.pcf.world_height_px
+        bottom = y1 * self.pcf.world_height_px
+        return (left, top, right, bottom)
+
+
+    def update_minimap_viewport(self):
+        if not self.pcf.use_viewport_mode or self.minimap_canvas is None or \
+            self.minimap_view_obj is None:
+            return
+
+        self.pcf.update_world_view_metrics()
+        left, top, right, bottom = self.get_visible_world_bbox()
+        self.minimap_canvas.coords(self.minimap_view_obj,
+                                   self.pcf.minimap_offset_x_px + left * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + top * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_x_px + right * self.pcf.minimap_scale,
+                                   self.pcf.minimap_offset_y_px + bottom * self.pcf.minimap_scale)
+
+
+    def center_view_on_world(self, center_x:float, center_y:float):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        self.pcf.update_world_view_metrics()
+        x0, x1 = self.pcf.canvas.xview()
+        y0, y1 = self.pcf.canvas.yview()
+        visible_width = max((x1 - x0) * self.pcf.world_width_px, 1.0)
+        visible_height = max((y1 - y0) * self.pcf.world_height_px, 1.0)
+
+        left = max(0.0, min(center_x - visible_width / 2.0,
+                            self.pcf.world_width_px - visible_width))
+        top = max(0.0, min(center_y - visible_height / 2.0,
+                           self.pcf.world_height_px - visible_height))
+
+        self.pcf.canvas.xview_moveto(left / self.pcf.world_width_px)
+        self.pcf.canvas.yview_moveto(top / self.pcf.world_height_px)
+        self.update_minimap_viewport()
+
+
+    def center_view_on_initial_focus(self):
+        if not self.pcf.use_viewport_mode or self.pcf.initial_focus_bbox is None:
+            return
+
+        min_row, max_row, min_col, max_col = self.pcf.initial_focus_bbox
+        center_x = ((min_col + max_col + 1) / 2.0) * self.pcf.tile_size
+        center_y = ((min_row + max_row + 1) / 2.0) * self.pcf.tile_size
+        self.center_view_on_world(center_x, center_y)
+
+
+    def center_view_on_agent(self, ag_idx:int) -> None:
+        if not self.pcf.use_viewport_mode or ag_idx not in self.pcf.agents:
+            return
+
+        ag_loc = self.pcf.agents[ag_idx].agent_obj.loc
+        center_x = (ag_loc[1] + 0.5) * self.pcf.tile_size
+        center_y = (ag_loc[0] + 0.5) * self.pcf.tile_size
+        self.center_view_on_world(center_x, center_y)
+
+
+    def move_view_from_minimap_event(self, event):
+        if not self.pcf.use_viewport_mode:
+            return
+
+        local_x = event.x - self.pcf.minimap_offset_x_px
+        local_y = event.y - self.pcf.minimap_offset_y_px
+        world_x = min(max(local_x / self.pcf.minimap_scale, 0), self.pcf.world_width_px)
+        world_y = min(max(local_y / self.pcf.minimap_scale, 0), self.pcf.world_height_px)
+        self.center_view_on_world(world_x, world_y)
+
+
+    def on_minimap_press(self, event):
+        self.minimap_dragging = True
+        self.move_view_from_minimap_event(event)
+
+
+    def on_minimap_drag(self, event):
+        if not self.minimap_dragging:
+            return
+        self.move_view_from_minimap_event(event)
+
+
+    def on_minimap_release(self, event):
+        if self.minimap_dragging:
+            self.move_view_from_minimap_event(event)
+        self.minimap_dragging = False
+
+    def init_color_legend(self) -> None:
+        legend_label = tk.Label(self.frame, text="Agent colors", font=("Arial", TEXT_SIZE))
+        legend_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
+        self.row_idx += 1
+
+        legend_frame = tk.Frame(self.frame)
+        legend_frame.grid(row=self.row_idx, column=0, columnspan=6, sticky="w")
+        legend_items = [
+            ("Normal", AGENT_COLORS[AgentStatus.NORMAL.color_key]),
+            ("Delayed", AGENT_COLORS[AgentStatus.DELAYED.color_key]),
+            ("Errand reached", AGENT_COLORS[AgentStatus.ERRAND_FINISHED.color_key]),
+            ("Error", AGENT_COLORS["collide"]),
+        ]
+        for item_idx, (label_text, color) in enumerate(legend_items):
+            item_frame = tk.Frame(legend_frame)
+            item_frame.grid(row=0, column=item_idx, sticky="w", padx=(0, 12))
+            color_box = self.create_agent_legend_icon(item_frame, color)
+            color_box.pack(side=tk.LEFT, padx=(2, 6), pady=1)
+            color_label = tk.Label(item_frame, text=label_text, font=("Arial", TEXT_SIZE))
+            color_label.pack(side=tk.LEFT, pady=1)
+        self.row_idx += 1
+
+    def create_agent_legend_icon(self, parent:tk.Widget, color:str) -> tk.Canvas:
+        marker_size = 28
+        marker_canvas = tk.Canvas(parent,
+                                  width=marker_size,
+                                  height=marker_size,
+                                  highlightthickness=0,
+                                  bd=0,
+                                  bg=parent.cget("bg"))
+
+        offset = 0.05
+        marker_canvas.create_oval(offset * marker_size,
+                                  offset * marker_size,
+                                  (1 - offset) * marker_size,
+                                  (1 - offset) * marker_size,
+                                  fill=color,
+                                  outline="")
+
+        if self.pcf.agent_model == "MAPF_T":
+            dir_loc = get_dir_loc((0, 0, 0))
+            marker_canvas.create_oval(dir_loc[0] * marker_size,
+                                      dir_loc[1] * marker_size,
+                                      dir_loc[2] * marker_size,
+                                      dir_loc[3] * marker_size,
+                                      fill="navy",
+                                      outline="")
+        return marker_canvas
+
+    def init_event_count_tracker(self) -> None:
+        self.event_count_times = []
+        self.event_count_prefix = {
+            "assigned": [],
+            "errand_finished": [],
+            "task_finished": [],
+        }
+        if self.pcf.max_seq_num <= 0:
+            return
+
+        event_count_by_time:Dict[int, Dict[str, int]] = {}
+
+        def add_event_count(tstep:int, event_type:str) -> None:
+            if tstep not in event_count_by_time:
+                event_count_by_time[tstep] = {
+                    "assigned": 0,
+                    "errand_finished": 0,
+                    "task_finished": 0,
+                }
+            event_count_by_time[tstep][event_type] += 1
+
+        for tstep, cur_events in self.pcf.events["assigned"].items():
+            for global_task_id in cur_events:
+                if global_task_id % self.pcf.max_seq_num == 0:
+                    add_event_count(tstep, "assigned")
+
+        for tstep, cur_events in self.pcf.events["finished"].items():
+            for global_task_id in cur_events:
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
+                if seq_id == last_seq_id:
+                    add_event_count(tstep, "task_finished")
+                else:
+                    add_event_count(tstep, "errand_finished")
+
+        running_total = {
+            "assigned": 0,
+            "errand_finished": 0,
+            "task_finished": 0,
+        }
+        for tstep in sorted(event_count_by_time.keys()):
+            for event_type in running_total:
+                running_total[event_type] += event_count_by_time[tstep][event_type]
+            self.event_count_times.append(tstep)
+            for event_type in running_total:
+                self.event_count_prefix[event_type].append(running_total[event_type])
+
+    def get_event_count_breakdown(self, end_tstep:int) -> Dict[str, int]:
+        zero_breakdown = {
+            "assigned": 0,
+            "errand_finished": 0,
+            "task_finished": 0,
+        }
+        if not self.event_count_times:
+            return zero_breakdown
+
+        event_idx = bisect_right(self.event_count_times, end_tstep) - 1
+        if event_idx < 0:
+            return zero_breakdown
+
+        return {
+            "assigned": self.event_count_prefix["assigned"][event_idx],
+            "errand_finished": self.event_count_prefix["errand_finished"][event_idx],
+            "task_finished": self.event_count_prefix["task_finished"][event_idx],
+        }
+
+    def update_event_count_label(self, end_tstep:int, is_main_event_list:bool) -> None:
+        if not is_main_event_list or self.event_count_frame is None or \
+            (not self.event_count_frame.winfo_exists()):
+            return
+
+        event_breakdown = self.get_event_count_breakdown(end_tstep)
+        for event_type, count_value in event_breakdown.items():
+            if event_type not in self.event_count_value_labels:
+                continue
+            self.event_count_value_labels[event_type].config(text=str(count_value))
+
+    def set_error_listbox_height(self, error_count: int) -> None:
+        min_rows = 2
+        max_visible_errors = 15
+        max_rows = max(min_rows, max_visible_errors + 2)
+        total_rows = max(min_rows, min(error_count + 2, max_rows))
+        self.conflict_listbox.config(height=total_rows)
 
     def update_error_list(self, error_listbox):
         if error_listbox == None:
             return
+        end_tstep = self.pcf.cur_tstep
         conf_id = 0
+        shown_conflict_count = 0
         error_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        error_listbox.config(font=monospace_font)
+        selected_conflicts = {
+            conf_str for conf_str, conf in self.shown_conflicts.items() if conf[1]
+        }
+        self.shown_conflicts = {}
+        error_listbox.config(font=self.listbox_monospace_font)
         header = f"{'Time':<6}{'a1':<5}{'a2':<5}{'Event':<12}"
         error_listbox.insert(conf_id, header)
         conf_id += 1
         error_listbox.insert(conf_id, "-" * 34)  # Separator line
         conf_id += 1
+        if self.pcf.event_limit == 0:
+            self.set_error_listbox_height(0)
+            return
         # [task_id, robot1, robot2, timestep, description]
-        for tstep in sorted(self.pcf.conflicts.keys()):
+        for tstep in sorted(
+            (cur_tstep for cur_tstep in self.pcf.conflicts.keys() if cur_tstep <= end_tstep),
+            reverse=True
+        ):
             if tstep < self.pcf.start_tstep:
                 continue
             if tstep > self.pcf.end_tstep:
@@ -1350,15 +1763,22 @@ class PlanViz2024:
                 else:
                     conf_str += description
                 self.conflict_listbox.insert(conf_id, conf_str)
-                self.shown_conflicts[conf_str] = [conf, False]
+                if tstep == self.pcf.cur_tstep:
+                    self.conflict_listbox.itemconfigure(conf_id, background='yellow')
+                self.shown_conflicts[conf_str] = [conf, conf_str in selected_conflicts]
                 conf_id += 1
+                shown_conflict_count += 1
+                if shown_conflict_count >= self.pcf.event_limit:
+                    self.set_error_listbox_height(shown_conflict_count)
+                    return
+        self.set_error_listbox_height(shown_conflict_count)
 
     def set_event_listbox_height(self, event_listbox, event_count: int) -> None:
         if event_listbox == None or (not event_listbox.winfo_exists()):
             return
 
-        min_rows = 4
-        max_visible_events = 20
+        min_rows = 2
+        max_visible_events = 15
         max_rows = max(min_rows, max_visible_events + 2)
         total_rows = max(min_rows, min(event_count + 2, max_rows))
         event_listbox.config(height=total_rows)
@@ -1370,12 +1790,12 @@ class PlanViz2024:
             return
         self.max_event_t = max(self.pcf.cur_tstep, self.max_event_t)
         end_tstep = self.pcf.cur_tstep
+        is_main_event_list = event_listbox == self.event_listbox
 
         self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
         self.eve_id = 0
         event_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        event_listbox.config(font=monospace_font)
+        event_listbox.config(font=self.listbox_monospace_font)
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
         event_listbox.insert(self.eve_id, header)
         self.eve_id += 1
@@ -1387,6 +1807,7 @@ class PlanViz2024:
         time_list = sorted((tstep for tstep in time_list if tstep <= end_tstep), reverse=True)
         if self.pcf.event_limit == 0:
             self.set_event_listbox_height(event_listbox, 0)
+            self.update_event_count_label(end_tstep, is_main_event_list)
             return
         for tstep in time_list:
             if tstep in self.pcf.events["assigned"]:
@@ -1409,6 +1830,7 @@ class PlanViz2024:
                         shown_event_count += 1
                         if shown_event_count >= self.pcf.event_limit:
                             self.set_event_listbox_height(event_listbox, shown_event_count)
+                            self.update_event_count_label(end_tstep, is_main_event_list)
                             return
             if tstep in self.pcf.events["finished"]:
                 cur_events = self.pcf.events["finished"][tstep]
@@ -1432,8 +1854,10 @@ class PlanViz2024:
                     shown_event_count += 1
                     if shown_event_count >= self.pcf.event_limit:
                         self.set_event_listbox_height(event_listbox, shown_event_count)
+                        self.update_event_count_label(end_tstep, is_main_event_list)
                         return
         self.set_event_listbox_height(event_listbox, shown_event_count)
+        self.update_event_count_label(end_tstep, is_main_event_list)
             
 
     def update_location_event_list(self, event_listbox):
@@ -1446,8 +1870,7 @@ class PlanViz2024:
         
         # Clear and refill the location event listbox
         event_listbox.delete(0, tk.END)
-        monospace_font = font.Font(family='Courier')
-        event_listbox.config(font=monospace_font)
+        event_listbox.config(font=self.listbox_monospace_font)
         
         # Add header in the same format as update_event_list
         header = f"{'Time':<6}{'Agent':<8}{'Event':<12}{'Task ID':<8}"
@@ -1482,23 +1905,6 @@ class PlanViz2024:
                         shown_event_count += 1
         self.set_event_listbox_height(event_listbox, shown_event_count)
 
-    def change_ag_color(self, ag_idx:int, color:str) -> None:
-        """ Change the color of the agent if collisions are not shown
-
-        Args:
-            ag_idx (int): the index of the agent
-            color (str): the color to be changed
-        """
-        ag_color = color
-        if (self.show_all_conf_ag.get() and ag_idx in self.pcf.conflict_agents) or \
-            self.pcf.canvas.itemcget(self.pcf.agents[ag_idx].agent_obj.obj, "fill") \
-                == AGENT_COLORS["collide"]:
-            ag_color = AGENT_COLORS["collide"]
-        if ag_color != AGENT_COLORS["collide"]:
-            self.pcf.agents[ag_idx].agent_obj.color = ag_color
-        self.pcf.canvas.itemconfig(self.pcf.agents[ag_idx].agent_obj.obj, fill=ag_color)
-
-
     def change_task_color(self, task_id:int, seq_id:int, color:str) -> None:
         """ Change the color of the task
 
@@ -1520,28 +1926,14 @@ class PlanViz2024:
 
         for conf in self.shown_conflicts.values():  # Reset all the conflicts to non-selected
             conf[1] = False
-            if len(conf[0]) == 5:
-                task_id, agent1, agent2, tstep_std, description = conf[0]
-            if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
-            if agent1 != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[agent1].agent_obj.obj,
-                                           fill=self.pcf.agents[agent1].agent_obj.color)
-            if agent2 != -1:
-                self.pcf.canvas.itemconfig(self.pcf.agents[agent2].agent_obj.obj,
-                                           fill=self.pcf.agents[agent2].agent_obj.color)
 
         for _sid_ in selected_indices:  # Mark the selected conflicting agents to red
-            self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-            conf = self.shown_conflicts[self.conflict_listbox.get(_sid_)]
-            if len(conf[0]) == 5:
-                task_id, agent1, agent2, tstep_std, description = conf[0]
-            if len(conf[0]) == 4:
-                agent1, agent2, tstep_std, description = conf[0] 
-            if agent1 != -1:
-                self.change_ag_color(agent1, AGENT_COLORS["collide"])
-            if agent2 != -1:
-                self.change_ag_color(agent2, AGENT_COLORS["collide"])
+            conf_str = self.conflict_listbox.get(_sid_)
+            if conf_str not in self.shown_conflicts:
+                continue
+            self.shown_conflicts[conf_str][1] = True
+
+        self.update_agent_colors()
 
 
     def restart_timestep(self):
@@ -1597,14 +1989,21 @@ class PlanViz2024:
         if len(conf[0]) == 5:
             task_id, agent1, agent2, tstep_std, description = conf[0]
         if len(conf[0]) == 4:
-            agent1, agent2, tstep_std, description = conf[0]    
-        if agent1 != -1 and agent1 < self.pcf.team_size:
-            self.change_ag_color(agent1, AGENT_COLORS["collide"])
-        if agent2 != -1 and agent2 < self.pcf.team_size:
-            self.change_ag_color(agent2, AGENT_COLORS["collide"])
+            agent1, agent2, tstep_std, description = conf[0]
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
-        self.new_time.set(int(tstep_std)-1)
+        primary_ag_idx = -1
+        if 0 <= agent1 < self.pcf.team_size:
+            primary_ag_idx = agent1
+        elif 0 <= agent2 < self.pcf.team_size:
+            primary_ag_idx = agent2
+
+        self.clear_agent_selection(refresh=False)
+        if primary_ag_idx != -1:
+            self.pcf.shown_path_agents.add(primary_ag_idx)
+        self.new_time.set(int(tstep_std))
         self.update_curtime()
+        if primary_ag_idx != -1:
+            self.center_view_on_agent(primary_ag_idx)
 
 
     def move_to_event(self, event):
@@ -1631,12 +2030,12 @@ class PlanViz2024:
                 try:
                     tstep = int(parts[0])
                     ag_idx = int(parts[1])
-                    self.clear_agent_selection()
+                    self.clear_agent_selection(refresh=False)
+                    if 0 <= ag_idx < self.pcf.team_size:
+                        self.pcf.shown_path_agents.add(ag_idx)
                     self.new_time.set(tstep)
                     self.update_curtime()
-                    first_errand_t = self.show_colorful_errands(ag_idx)
-                    if first_errand_t != -1:
-                        self.show_ag_plan(ag_idx, first_errand_t)
+                    self.center_view_on_agent(ag_idx)
                     return
                 except (ValueError, IndexError):
                     return
@@ -1655,13 +2054,13 @@ class PlanViz2024:
             
         cur_eve:Tuple[int,int,int,int,str] = self.shown_events[eve_str] #  (tstep, ag_id, task_id, seq_id, status)
         new_t = max(cur_eve[0], 0)  # move to one timestep ahead the event
-        self.clear_agent_selection()
+        self.clear_agent_selection(refresh=False)
+        ag_idx = cur_eve[1]
+        if 0 <= ag_idx < self.pcf.team_size:
+            self.pcf.shown_path_agents.add(ag_idx)
         self.new_time.set(new_t)
         self.update_curtime()
-        ag_idx = cur_eve[1]
-        first_errand_t = self.show_colorful_errands(ag_idx)
-        if first_errand_t != -1:
-            self.show_ag_plan(ag_idx, first_errand_t)
+        self.center_view_on_agent(ag_idx)
         
     def check_left_click(self, event):
         self.last_click_pos = (event.x, event.y)
@@ -1681,6 +2080,7 @@ class PlanViz2024:
 
         if self.dragging:
             self.pcf.canvas.scan_dragto(event.x, event.y, gain=1)
+            self.update_minimap_viewport()
 
     def on_button_release(self, event):
         # If you haven't dragged when you release it, and it doesn't trigger a double click, it will be treated as a single click.
@@ -1708,37 +2108,38 @@ class PlanViz2024:
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        self.pcf.update_canvas_scrollregion()
+        self.update_minimap_viewport()
 
 
     def resume_zoom(self):
-        __scale = self.pcf.ppm * self.pcf.moves / self.pcf.tile_size
+        base_tile_size = self.pcf.default_tile_size
+        if base_tile_size < 1:
+            base_tile_size = self.pcf.ppm * self.pcf.moves
+        __scale = base_tile_size / self.pcf.tile_size
         self.pcf.canvas.scale("all", 0, 0, __scale, __scale)
-        self.pcf.tile_size = self.pcf.ppm * self.pcf.moves
+        self.pcf.tile_size = base_tile_size
+        self.pcf.update_viewport_metrics()
+        self.pcf.canvas.configure(width=self.pcf.viewport_width_px,
+                                  height=self.pcf.viewport_height_px)
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
         for child_widget in self.pcf.canvas.find_withtag("hwy"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
-        self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        self.pcf.update_canvas_scrollregion()
+        self.update_minimap_viewport()
         self.pcf.canvas.update()
 
-    def clear_agent_selection(self, moving=False):
-        for ag_idx in self.pcf.shown_path_agents:
-            for task_idx in self.pcf.shown_tasks_seq:
-                for arrow_id in self.pcf.agent_shown_task_arrow[ag_idx]:
-                    self.pcf.canvas.delete(arrow_id)
-                for idx, tsk in enumerate(self.pcf.seq_tasks[task_idx].tasks):
-                    self.hide_single_task(task_idx, idx)
-            for _p_ in self.pcf.agents[ag_idx].path_objs:
-                self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
-                self.pcf.canvas.tag_lower(_p_.obj)
+    def clear_agent_selection(self, moving:bool=False, refresh:bool=True):
+        self.clear_selected_agent_visuals(clear_task_visibility=True)
         if not moving:
             self.pcf.shown_tasks_seq.clear()
             self.pcf.shown_path_agents.clear()
-            self.new_time.set(self.pcf.cur_tstep)
-            self.update_curtime()
+            if refresh:
+                self.new_time.set(self.pcf.cur_tstep)
+                self.update_curtime()
 
     def left_click(self, event):
         self.right_click_status = "left"
@@ -1776,9 +2177,12 @@ class PlanViz2024:
         if ag_idx == -1 and self.run_button['state'] == tk.NORMAL:
             self.clear_agent_selection()
         if ag_idx != -1:
-            first_errand_t = self.show_colorful_errands(ag_idx)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t)
+            if ag_idx in self.pcf.shown_path_agents:
+                self.pcf.shown_path_agents.remove(ag_idx)
+            elif self.get_agent_focus_context(ag_idx) is not None:
+                self.pcf.shown_path_agents.add(ag_idx)
+            self.new_time.set(self.pcf.cur_tstep)
+            self.update_curtime()
 
             
 
@@ -1902,6 +2306,138 @@ class PlanViz2024:
         return ag_idx
 
 
+    def get_agent_focus_context(self, ag_idx:int,
+                                cur_tstep:Optional[int]=None) -> Optional[Tuple[int, int, int]]:
+        if ag_idx not in self.pcf.agent_assigned_task:
+            return None
+
+        if cur_tstep is None:
+            cur_tstep = self.pcf.cur_tstep
+
+        current_task_idx = -1
+        for assign_t, task_idx in sorted(self.pcf.agent_assigned_task[ag_idx]):
+            if cur_tstep >= assign_t - 1:
+                current_task_idx = task_idx
+
+        if current_task_idx == -1:
+            return None
+
+        first_errand = -1
+        first_errand_t = -1
+        for seq_id, task in enumerate(self.pcf.seq_tasks[current_task_idx].tasks):
+            task_t = task.events["finished"]["timestep"]
+            if task_t == float("inf"):
+                task_t = 1e9
+            if cur_tstep < task_t:
+                first_errand = seq_id
+                first_errand_t = int(task_t)
+                break
+
+        return (current_task_idx, first_errand, first_errand_t)
+
+
+    def clear_selected_agent_visuals(self, clear_task_visibility:bool=True) -> None:
+        for ag_idx in self.pcf.agents:
+            for arrow_id in self.pcf.agent_shown_task_arrow.get(ag_idx, []):
+                self.pcf.canvas.delete(arrow_id)
+            self.pcf.agent_shown_task_arrow[ag_idx] = []
+            for path_obj in self.pcf.agents[ag_idx].path_objs:
+                self.pcf.canvas.itemconfigure(path_obj.obj, state=tk.HIDDEN)
+                self.pcf.canvas.tag_lower(path_obj.obj)
+
+        if clear_task_visibility:
+            for task_idx in list(self.pcf.shown_tasks_seq):
+                for seq_id in range(len(self.pcf.seq_tasks[task_idx].tasks)):
+                    self.hide_single_task(task_idx, seq_id)
+
+
+    def render_task_sequence(self, agent_idx:int, task_idx:int, first_errand:int) -> List[int]:
+        def get_center_coords(canvas, item_id):
+            coords = canvas.coords(item_id)
+            x_center = (coords[0] + coords[2]) / 2
+            y_center = (coords[1] + coords[3]) / 2
+            return x_center, y_center
+
+        arrows = []
+        last_obj = self.pcf.agents[agent_idx].agent_obj.obj
+        for seq_id, seq_task in enumerate(self.pcf.seq_tasks[task_idx].tasks):
+            task_t = seq_task.events["finished"]["timestep"]
+            if self.pcf.cur_tstep >= task_t:
+                self.change_task_color(task_idx, seq_id, TASK_COLORS["finished"])
+                continue
+
+            self.change_task_color(task_idx, seq_id, "pink")
+            if seq_id == first_errand:
+                self.change_task_color(task_idx, seq_id, "orange")
+
+            self.set_task_visibility(task_idx, seq_id, True)
+            x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
+            last_obj = seq_task.task_obj.obj
+            x2, y2 = get_center_coords(self.pcf.canvas, last_obj)
+            arrow_id = self.pcf.canvas.create_line(x1, y1, x2, y2,
+                                                   arrow=tk.LAST,
+                                                   width=2,
+                                                   fill="#4eb1a6")
+            arrows.append(arrow_id)
+
+        return arrows
+
+
+    def render_selected_agent_context(self) -> None:
+        self.clear_selected_agent_visuals(clear_task_visibility=False)
+        selected_contexts:List[Tuple[int, int, int, int]] = []
+        selected_task_ids:Set[int] = set()
+
+        for ag_idx in sorted(self.pcf.shown_path_agents):
+            focus_context = self.get_agent_focus_context(ag_idx)
+            if focus_context is None:
+                continue
+            task_idx, first_errand, first_errand_t = focus_context
+            selected_contexts.append((ag_idx, task_idx, first_errand, first_errand_t))
+            selected_task_ids.add(task_idx)
+
+        self.pcf.shown_tasks_seq = selected_task_ids
+        if len(selected_contexts) == 0:
+            return
+
+        for ag_idx, task_idx, first_errand, _ in selected_contexts:
+            self.pcf.agent_shown_task_arrow[ag_idx] = self.render_task_sequence(
+                ag_idx, task_idx, first_errand
+            )
+
+        for task_id, seq_task in self.pcf.seq_tasks.items():
+            if task_id in self.pcf.shown_tasks_seq:
+                for seq_id, task in enumerate(seq_task.tasks):
+                    task_t = task.events["finished"]["timestep"]
+                    if self.pcf.cur_tstep >= task_t:
+                        continue
+                    self.show_single_task(task_id, seq_id, ignore=1)
+            else:
+                for seq_id in range(len(seq_task.tasks)):
+                    self.hide_single_task(task_id, seq_id)
+
+        if self.show_agent_path.get():
+            for ag_idx, _, _, first_errand_t in selected_contexts:
+                if first_errand_t == -1:
+                    continue
+                self.pcf.lazy_render_agent_path(ag_idx)
+                max_path_id = min(first_errand_t + 1, len(self.pcf.agents[ag_idx].path_objs))
+                for path_id in range(self.pcf.cur_tstep + 1, max_path_id):
+                    self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[path_id].obj,
+                                                  state=tk.DISABLED)
+                    self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[path_id].obj)
+
+        self.raise_agent_canvas_items()
+
+
+    def refresh_selected_agent_display(self) -> None:
+        self.show_tasks()
+        self.show_agent_index()
+        self.render_selected_agent_context()
+        self.update_agent_colors()
+        self.pcf.canvas.update_idletasks()
+
+
     def show_colorful_errands(self, ag_idx, moving=False):
         agent_tasks = self.pcf.agent_assigned_task[ag_idx]
         agent_tasks = sorted(agent_tasks)
@@ -1951,30 +2487,12 @@ class PlanViz2024:
     def mark_conf_agents(self) -> None:
         self.conflict_listbox.select_clear(0, self.conflict_listbox.size())
         for conf in self.shown_conflicts.values():
-            if conf[0][0] != -1 and conf[0][0] < self.pcf.team_size:
-                if self.show_all_conf_ag.get():
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
-                                               fill=AGENT_COLORS["collide"])
-                else:
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][0]].agent_obj.obj,
-                                               fill=self.pcf.agents[conf[0][0]].agent_obj.color)
-
-            if conf[0][1] != -1 and conf[0][1] < self.pcf.team_size:
-                if self.show_all_conf_ag.get():
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
-                                               fill=AGENT_COLORS["collide"])
-                else:
-                    self.pcf.canvas.itemconfig(self.pcf.agents[conf[0][1]].agent_obj.obj,
-                                               fill=self.pcf.agents[conf[0][1]].agent_obj.color)
             conf[1] = False
+        self.update_agent_colors()
 
 
     def off_agent_path(self):
-        self.clear_agent_selection(moving=True)
-        for ag_idx in self.pcf.shown_path_agents:
-            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+        self.refresh_selected_agent_display()
 
     def show_task_seq(self, agent_idx, task_idx, first_errand, moving=False):
         def get_center_coords(canvas, item_id):
@@ -2159,7 +2677,8 @@ class PlanViz2024:
 
 
     def show_tasks_by_click(self, _) -> None:
-        self.show_tasks()
+        self.new_time.set(self.pcf.cur_tstep)
+        self.update_curtime()
 
 
     def show_single_task(self, task_id:int, seq_id:int=0, ignore:int=0) -> None:
@@ -2254,12 +2773,7 @@ class PlanViz2024:
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_ * _cos, _rad_ * _sin)
                     
-            
-            self.clear_agent_selection(moving=True)
-            for ag_idx in self.pcf.shown_path_agents:
-                first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-                if first_errand_t != -1:
-                    self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+            self.render_selected_agent_context()
                     
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
@@ -2288,6 +2802,7 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
+        self.update_error_list(self.conflict_listbox)
         if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
             # from unassigned to assigned
             for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
@@ -2295,7 +2810,6 @@ class PlanViz2024:
                 seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] += 1
@@ -2313,6 +2827,8 @@ class PlanViz2024:
                     if len(tsk)-1 > seq_id:
                         self.show_single_task(task_id, seq_id+1)
             self.pcf.event_tracker["fid"] += 1
+        self.render_selected_agent_context()
+        self.update_agent_colors()
         self.raise_agent_canvas_items()
         
 
@@ -2349,7 +2865,6 @@ class PlanViz2024:
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "assigned"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "unassigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["unassigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] = prev_aid
@@ -2394,18 +2909,14 @@ class PlanViz2024:
                 if self.pcf.agent_model == "MAPF_T":
                     self.pcf.canvas.move(agent.dir_obj, cur_move[0], cur_move[1])
                     self.pcf.canvas.move(agent.dir_obj, _rad_*_cos, _rad_*_sin)
+            self.render_selected_agent_context()
             self.pcf.canvas.update()
             time.sleep(self.pcf.delay)
         for (ag_id, agent) in self.pcf.agents.items():
             agent.agent_obj.loc = prev_loc[ag_id]
 
         self.pcf.cur_tstep = prev_timestep
-        
-        self.clear_agent_selection(moving=True)
-        for ag_idx in self.pcf.shown_path_agents:
-            first_errand_t = self.show_colorful_errands(ag_idx, moving=True)
-            if first_errand_t != -1:
-                self.show_ag_plan(ag_idx, first_errand_t, moving=True)
+        self.render_selected_agent_context()
         
         self.update_event_list(self.event_listbox, 0)
         self.update_event_list(self.pop_event_listbox, 1)
@@ -2419,6 +2930,8 @@ class PlanViz2024:
                 if match:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
+        self.update_error_list(self.conflict_listbox)
+        self.update_agent_colors()
         self.raise_agent_canvas_items()
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
@@ -2499,7 +3012,6 @@ class PlanViz2024:
                     seq_id = global_task_id % self.pcf.max_seq_num
                     self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                     self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
-                    self.pcf.agents[ag_id].agent_obj.color = AGENT_COLORS["assigned"]
                     if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                         self.show_single_task(task_id, seq_id)
             else:  # a_time > self.pcf.cur_tstep
@@ -2523,18 +3035,12 @@ class PlanViz2024:
                 break
 
         for (ag_id, agent_) in self.pcf.agents.items():
-            # Check colliding agents
-            show_collide = False
-            if (self.show_all_conf_ag.get() and agent_ in self.pcf.conflict_agents) or \
-                self.pcf.canvas.itemcget(agent_.agent_obj.obj, "fill") == AGENT_COLORS["collide"]:
-                show_collide = True
-
             # Re-generate agent objects
             tstep = min(self.pcf.cur_tstep - self.pcf.start_tstep, len(agent_.path)-1)
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",
-                                                   agent_.agent_obj.color,
+                                                   AGENT_COLORS[AgentStatus.NORMAL.color_key],
                                                    tk.NORMAL, 0.05, str(ag_id))
             
             if self.pcf.agent_model == "MAPF_T":
@@ -2549,11 +3055,9 @@ class PlanViz2024:
                                                              state=tk.DISABLED,
                                                              outline="")
             self._tag_agent_dynamic_canvas_items(agent_)
-            # Check colliding agents
-            if show_collide:
-                self.change_ag_color(ag_id, AGENT_COLORS["collide"])
         self.show_tasks()
         self.show_agent_index()
+        self.render_selected_agent_context()
         
         
         self.update_event_list(self.event_listbox, 0)
@@ -2569,4 +3073,5 @@ class PlanViz2024:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
+        self.update_agent_colors()
         self.pcf.canvas.update()

@@ -1,4 +1,22 @@
 # Changelog
+Version 3.1.0 - 2026-04-09
+---
+Added:
+- Added minimap for large map navigation with viewport mode, enabling click-and-drag panning.
+- Added delay visualization feature for large maps.
+- Added event frequency counter in the control panel showing cumulative counts for assigned, errand finished, and task finished events.
+- Added double-click on event/error entries to center the viewport on the corresponding agent.
+- Added collision highlighting: "Show colliding agents" toggle displays a red outline on agents that collided at any point, and fully red fill on agents colliding at the current timestep.
+- Added color legend with markers matching the actual agent rendering styles.
+
+Bug Fixes:
+- Fix event navigation flicker when selecting agents.
+
+Changes:
+- Set default event limit to 100 and max visible errors/events to 15.
+- Updated example command and documentation to use 2026 examples.
+
+# Changelog
 Version 3.0.0 - 2026-03-12
 ---
 Added:
