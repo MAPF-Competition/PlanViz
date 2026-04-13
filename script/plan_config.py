@@ -1232,9 +1232,13 @@ class PlanConfig2024:
         actual_codes_by_agent = self.extract_agent_codes(
             data, "actualPaths", self.team_size, char_to_code, wait_code
         )
-        planner_codes_by_agent = self.extract_agent_codes(
-            data, "plannerPaths", self.team_size, char_to_code, wait_code
-        )
+        has_planner_paths = "plannerPaths" in data
+        if has_planner_paths:
+            planner_codes_by_agent = self.extract_agent_codes(
+                data, "plannerPaths", self.team_size, char_to_code, wait_code
+            )
+        else:
+            planner_codes_by_agent = [np.empty(0, dtype=np.int32)] * self.team_size
         if self.window_size is not None:
             current_window_end = min(self.start_tstep + self.window_size, self.end_tstep)
         else:
@@ -1282,36 +1286,40 @@ class PlanConfig2024:
             else:
                 self.exec_paths[ag_id] = np.rint(exec_path_block).astype(np.int32)
 
-        plan_step_counts = []
-        for ag_id in agent_ids:
-            plan_limit = min(current_window_end, len(self.plan_path_codes[ag_id]))
-            plan_step_counts.append(max(0, plan_limit - self.start_tstep))
+        if has_planner_paths:
+            plan_step_counts = []
+            for ag_id in agent_ids:
+                plan_limit = min(current_window_end, len(self.plan_path_codes[ag_id]))
+                plan_step_counts.append(max(0, plan_limit - self.start_tstep))
 
-        plan_motion_batch = self.build_motion_batch(
-            self.plan_path_codes, agent_ids, [self.start_tstep] * self.team_size, plan_step_counts, wait_code
-        )
-        plan_start_states = [self.exec_paths[ag_id][0] for ag_id in agent_ids]
-        plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
-        for row_idx, state in enumerate(plan_start_states):
-            plan_starts_batch[row_idx, 0] = float(state[0])
-            plan_starts_batch[row_idx, 1] = float(state[1])
-            plan_starts_batch[row_idx, 2] = float(state[2])
-        plan_base_states = self.build_plan_base_state_batch(
-            agent_ids, [self.start_tstep] * self.team_size, plan_step_counts
-        )
-        plan_results = np.zeros((self.team_size, max(plan_step_counts, default=0) + 1, 3), dtype=np.float64)
-        compute_plan_next_states(
-            plan_motion_batch, plan_starts_batch, plan_base_states, plan_results,
-            np.asarray(plan_step_counts, dtype=np.int32),
-            is_mapf, is_tick, self.ticks_per_timestep
-        )
+            plan_motion_batch = self.build_motion_batch(
+                self.plan_path_codes, agent_ids, [self.start_tstep] * self.team_size, plan_step_counts, wait_code
+            )
+            plan_start_states = [self.exec_paths[ag_id][0] for ag_id in agent_ids]
+            plan_starts_batch = np.zeros((len(plan_start_states), 3), dtype=np.float64)
+            for row_idx, state in enumerate(plan_start_states):
+                plan_starts_batch[row_idx, 0] = float(state[0])
+                plan_starts_batch[row_idx, 1] = float(state[1])
+                plan_starts_batch[row_idx, 2] = float(state[2])
+            plan_base_states = self.build_plan_base_state_batch(
+                agent_ids, [self.start_tstep] * self.team_size, plan_step_counts
+            )
+            plan_results = np.zeros((self.team_size, max(plan_step_counts, default=0) + 1, 3), dtype=np.float64)
+            compute_plan_next_states(
+                plan_motion_batch, plan_starts_batch, plan_base_states, plan_results,
+                np.asarray(plan_step_counts, dtype=np.int32),
+                is_mapf, is_tick, self.ticks_per_timestep
+            )
 
-        for row_idx, ag_id in enumerate(agent_ids):
-            plan_path_block = plan_results[row_idx, :plan_step_counts[row_idx] + 1]
-            if is_tick:
-                self.plan_paths[ag_id] = np.round(plan_path_block, 6)
-            else:
-                self.plan_paths[ag_id] = np.rint(plan_path_block).astype(np.int32)
+            for row_idx, ag_id in enumerate(agent_ids):
+                plan_path_block = plan_results[row_idx, :plan_step_counts[row_idx] + 1]
+                if is_tick:
+                    self.plan_paths[ag_id] = np.round(plan_path_block, 6)
+                else:
+                    self.plan_paths[ag_id] = np.rint(plan_path_block).astype(np.int32)
+        else:
+            for ag_id in agent_ids:
+                self.plan_paths[ag_id] = self.exec_paths[ag_id].copy()
 
         print("Done!")
 
@@ -1385,7 +1393,15 @@ class PlanConfig2024:
         plan_start_indices = []
         plan_step_counts = []
         for ag_id in agent_ids:
-            if ag_id not in self.plan_path_codes:
+            if ag_id not in self.plan_path_codes or len(self.plan_path_codes[ag_id]) == 0:
+                # No planner data: keep plan_paths in sync with exec_paths
+                self.plan_paths[ag_id] = self.exec_paths[ag_id].copy()
+                if ag_id in self.agents:
+                    agent = self.agents[ag_id]
+                    using_plan_path = (agent.path is agent.plan_path)
+                    agent.plan_path = self.plan_paths[ag_id]
+                    if using_plan_path:
+                        agent.path = agent.plan_path
                 continue
             current_plan_end = self.start_tstep + len(self.plan_paths[ag_id]) - 1
             plan_limit = min(target_timestep, len(self.plan_path_codes[ag_id]))
@@ -1590,6 +1606,10 @@ class PlanConfig2024:
 
     def load_events(self, data:Dict):
         print("Loading event", end="...")
+
+        if "events" not in data or not data["events"]:
+            print("No events.")
+            return
 
         assert self.max_seq_num > -1
         for (finish_tstep, ag_id, task_id, nxt_errand_id) in data["events"]:
