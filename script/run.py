@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--ppm", dest="ppm", type=int, help="Number of pixels per move")
     parser.add_argument("--mv", dest="moves", type=int, help="Number of moves per action")
     parser.add_argument("--delay", type=float, help="Wait time between animation updates")
-    parser.add_argument("--event-limit", dest="event_limit", type=int, default=10,
+    parser.add_argument("--event-limit", dest="event_limit", type=int, default=100,
                         help="Number of recent events to show in the event panel")
     
     parser.add_argument("--grid", dest="show_grid", type=bool, default=True,
