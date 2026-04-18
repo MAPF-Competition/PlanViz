@@ -1246,6 +1246,106 @@ class PlanConfig2024:
         min_col = min(col for _, col in focus_points)
         max_col = max(col for _, col in focus_points)
         self.initial_focus_bbox = (min_row, max_row, min_col, max_col)
+        header_height, self.width, actual_height, self.env_map = load_map_grid(map_file)
+        self.height = actual_height
+        self.show_coord_labels = (self.width + self.height) <= COORD_LABEL_LIMIT
+        self.base_env_image = build_base_env_image(self.env_map)
+        if header_height != actual_height:
+            print(
+                f"header height {header_height} does not match actual rows {actual_height}; "
+                "using actual rows.",
+                end=" ",
+            )
+        print("Done!")
+
+
+    def update_world_view_metrics(self) -> None:
+        coord_padding = self.tile_size if self.show_coord_labels else 0
+        self.world_width_px = max(1, int(round(self.width * self.tile_size + coord_padding)))
+        self.world_height_px = max(1, int(round(self.height * self.tile_size + coord_padding)))
+        self.minimap_scale = min(
+            self.minimap_width_px / self.world_width_px,
+            self.minimap_height_px / self.world_height_px,
+        )
+        self.minimap_render_width_px = max(
+            1, int(round(self.world_width_px * self.minimap_scale))
+        )
+        self.minimap_render_height_px = max(
+            1, int(round(self.world_height_px * self.minimap_scale))
+        )
+        self.minimap_offset_x_px = (self.minimap_width_px - self.minimap_render_width_px) // 2
+        self.minimap_offset_y_px = (self.minimap_height_px - self.minimap_render_height_px) // 2
+
+
+    def update_viewport_metrics(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.viewport_width_px = max(
+                1,
+                min(
+                    self.world_width_px,
+                    max(
+                        VIEWPORT_MIN_WIDTH,
+                        self.screen_width - self.panel_width_px,
+                    ),
+                ),
+            )
+            self.viewport_height_px = max(
+                1,
+                min(
+                    self.world_height_px,
+                    max(
+                        VIEWPORT_MIN_HEIGHT,
+                        self.screen_height,
+                    ),
+                ),
+            )
+        else:
+            self.viewport_width_px = (self.width + 1) * self.tile_size
+            self.viewport_height_px = (self.height + 1) * self.tile_size
+
+
+    def compute_default_tile_size(self) -> int:
+        available_width = max(
+            VIEWPORT_MIN_WIDTH,
+            self.screen_width - self.panel_width_px,
+        )
+        available_height = max(
+            VIEWPORT_MIN_HEIGHT,
+            self.screen_height,
+        )
+        width_target = max(1, available_width // VIEWPORT_TARGET_VISIBLE_COLS)
+        height_target = max(1, available_height // VIEWPORT_TARGET_VISIBLE_ROWS)
+        return max(1, min(width_target, height_target))
+
+
+    def update_canvas_scrollregion(self) -> None:
+        self.update_world_view_metrics()
+        if self.use_viewport_mode:
+            self.canvas.configure(scrollregion=(0, 0, self.world_width_px, self.world_height_px))
+        else:
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+
+    def compute_initial_focus_bbox(self) -> None:
+        agent_points = [(loc[0], loc[1]) for loc in self.start_loc.values()]
+        task_points = [task.loc for seq_task in self.seq_tasks.values() for task in seq_task.tasks]
+
+        if agent_points and task_points:
+            focus_points = agent_points + task_points
+        elif agent_points:
+            focus_points = agent_points
+        elif task_points:
+            focus_points = task_points
+        else:
+            self.initial_focus_bbox = (0, max(0, self.height - 1), 0, max(0, self.width - 1))
+            return
+
+        min_row = min(row for row, _ in focus_points)
+        max_row = max(row for row, _ in focus_points)
+        min_col = min(col for _, col in focus_points)
+        max_col = max(col for _, col in focus_points)
+        self.initial_focus_bbox = (min_row, max_row, min_col, max_col)
 
 
     def load_paths(self, data:Dict):
