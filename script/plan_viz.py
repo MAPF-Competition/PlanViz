@@ -9,14 +9,13 @@ import re
 from bisect import bisect_right
 from typing import List, Tuple, Dict, Set, Optional
 import tkinter as tk
-from tkinter import ttk,font
+from tkinter import ttk, font
 import time
 import platform
 from PIL import Image, ImageTk
 from util import (AGENT_COLORS, AgentStatus, DIR_OFFSET, TASK_COLORS, TEXT_SIZE, get_angle,
                   get_dir_loc, get_rotation)
 from plan_config import PlanConfig2023, PlanConfig2024
-
 
 class PlanViz2023:
     """ This is the control panel of PlanViz
@@ -775,7 +774,6 @@ class PlanViz2023:
             for (tid, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep-1].items():
                 self.pcf.tasks[tid].state = "assigned"
                 self.change_task_color(tid, TASK_COLORS["assigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
 
@@ -829,7 +827,6 @@ class PlanViz2023:
                 assert self.pcf.tasks[tid].state == "newlyassigned"
                 self.pcf.tasks[tid].state = "unassigned"
                 self.change_task_color(tid, TASK_COLORS["unassigned"])
-                self.change_ag_color(ag_id, AGENT_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
             self.pcf.event_tracker["aid"] = prev_aid
@@ -1013,7 +1010,6 @@ class PlanViz2023:
         self.pcf.canvas.update()
 
 
-
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
@@ -1038,8 +1034,11 @@ class PlanViz2024:
         self.show_static = tk.BooleanVar()
         self.show_all_conf_ag = tk.BooleanVar()
         self.show_agent_path = tk.BooleanVar()
+        self.show_heat_map = tk.BooleanVar()
         self.show_hover_loc = tk.BooleanVar()
         self.is_heat_map = tk.BooleanVar()
+        self.is_dynamic_map = tk.BooleanVar()
+        self.is_agent_colors = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
 
@@ -1063,10 +1062,10 @@ class PlanViz2024:
             gui_window.transient(self.pcf.window)
             gui_window.lift()
             gui_window.title("UI Panel")
-            gui_window.config(width=300, height=(self.pcf.height+1) * self.pcf.tile_size)
+            gui_window.config(width=300, height=(self.pcf.height + 1) * self.pcf.tile_size)
             self.gui_column = 0
         self.frame = tk.Frame(gui_window)
-        self.frame.grid(row=0, column=self.gui_column,sticky="nsew")
+        self.frame.grid(row=0, column=self.gui_column, sticky="nsew")
         self.row_idx = 0
         self.pop_gui_window = None
         self.pop_event_listbox = None
@@ -1180,8 +1179,7 @@ class PlanViz2024:
         self.pcf.canvas.bind("<Button-4>", self.__wheel)
         self.pcf.canvas.bind("<Button-5>", self.__wheel)
         # windows scroll
-        self.pcf.canvas.bind("<MouseWheel>",self.__wheel)
-
+        self.pcf.canvas.bind("<MouseWheel>", self.__wheel)
 
     def _tag_agent_dynamic_canvas_items(self, agent_) -> None:
         self.pcf.canvas.addtag_withtag(self.AGENT_OBJ_TAG, agent_.agent_obj.obj)
@@ -1251,36 +1249,46 @@ class PlanViz2024:
     def init_button(self):
         # ---------- List of buttons ------------------------------- #
         self.run_button = tk.Button(self.frame, text="Play",
-                                    font=("Arial",TEXT_SIZE),
+                                    font=("Arial", TEXT_SIZE),
                                     command=self.move_agents)
         self.run_button.grid(row=self.row_idx, column=0, sticky="nsew")
         self.pause_button = tk.Button(self.frame, text="Pause",
-                                      font=("Arial",TEXT_SIZE),
+                                      font=("Arial", TEXT_SIZE),
                                       command=self.pause_agents)
         self.pause_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
-                                            font=("Arial",TEXT_SIZE),
+                                            font=("Arial", TEXT_SIZE),
                                             command=self.resume_zoom)
         self.resume_zoom_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
         self.next_button = tk.Button(self.frame, text="Next",
-                                     font=("Arial",TEXT_SIZE),
+                                     font=("Arial", TEXT_SIZE),
                                      command=self.move_agents_per_timestep)
         self.next_button.grid(row=self.row_idx, column=0, sticky="nsew")
         self.prev_button = tk.Button(self.frame, text="Prev",
-                                     font=("Arial",TEXT_SIZE),
+                                     font=("Arial", TEXT_SIZE),
                                      command=self.back_agents_per_timestep)
         self.prev_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.restart_button = tk.Button(self.frame, text="Restart",
-                                        font=("Arial",TEXT_SIZE),
+                                        font=("Arial", TEXT_SIZE),
                                         command=self.restart_timestep)
         self.restart_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
-
+        self.reset_dynamic_button = tk.Button(self.frame, text="Reset Heatmap",
+                                        font=("Arial", TEXT_SIZE),
+                                        command=self.reset_heat_map)
+        self.reset_dynamic_button.grid(row=self.row_idx, column=0, sticky="nsew")
+        self.stats_button = tk.Button(
+            self.frame, text="Heatmap Stats",
+            font=("Arial", TEXT_SIZE),
+            command=self.open_heatmap_stats
+        )
+        self.stats_button.grid(row=self.row_idx, column=1, sticky="nsew")
+        self.row_idx += 1
         # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
-                                          font=("Arial",TEXT_SIZE),
+                                          font=("Arial", TEXT_SIZE),
                                           variable=self.is_grid,
                                           onvalue=True, offvalue=False,
                                           command=self.show_grid)
@@ -1288,7 +1296,7 @@ class PlanViz2024:
         self.row_idx += 1
 
         self.id_button = tk.Checkbutton(self.frame, text="Show agent indices",
-                                        font=("Arial",TEXT_SIZE),
+                                        font=("Arial", TEXT_SIZE),
                                         variable=self.show_ag_idx, onvalue=True, offvalue=False,
                                         command=self.show_agent_index)
         self.id_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
@@ -1302,26 +1310,47 @@ class PlanViz2024:
         self.row_idx += 1
 
         self.static_button = tk.Checkbutton(self.frame, text="Show start locations",
-                                            font=("Arial",TEXT_SIZE),
+                                            font=("Arial", TEXT_SIZE),
                                             variable=self.show_static, onvalue=True, offvalue=False,
                                             command=self.show_static_loc)
         self.static_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
 
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show colliding agents",
-                                                      font=("Arial",TEXT_SIZE),
+                                                      font=("Arial", TEXT_SIZE),
                                                       variable=self.show_all_conf_ag,
                                                       onvalue=True, offvalue=False,
                                                       command=self.mark_conf_agents)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        
+
         self.show_all_conf_ag_button = tk.Checkbutton(self.frame, text="Show selected agent path",
-                                                      font=("Arial",TEXT_SIZE),
+                                                      font=("Arial", TEXT_SIZE),
                                                       variable=self.show_agent_path,
                                                       onvalue=True, offvalue=False,
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Environmental Heatmap ({self.pcf.heatmap_max_type})",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_heat_map,
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_heat_maps)
+        self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic Heatmap",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_dynamic_map,
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_dynamic_maps)
+        self.show_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
+        self.row_idx += 1
+        self.show_agent_color_button = tk.Checkbutton(self.frame, text="Show Agent Heatmap",
+                                                  font=("Arial", TEXT_SIZE),
+                                                  variable=self.is_agent_colors,
+                                                  onvalue=True, offvalue=False,
+                                                  command=self.show_agent_colours)
+        self.show_agent_color_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
         
                 
@@ -1335,7 +1364,7 @@ class PlanViz2024:
 
     def init_label(self):
         # ---------- Show tasks according to their states ---------- #
-        task_label = tk.Label(self.frame, text = "Shown", font = ("Arial", TEXT_SIZE))
+        task_label = tk.Label(self.frame, text="Shown", font=("Arial", TEXT_SIZE))
         task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.task_shown = ttk.Combobox(self.frame, width=15, state="readonly",
                                        values=["Next Errand",
@@ -1347,14 +1376,28 @@ class PlanViz2024:
         self.task_shown.grid(row=self.row_idx, column=1, sticky="w")
         self.row_idx += 1
 
-        # ---------- Set the starting time ------------------------- #
-        st_label = tk.Label(self.frame, text="Start time", font=("Arial",TEXT_SIZE))
+        # ---------- Change Heatmap View ---------- #
+        task_label = tk.Label(self.frame, text="Change heatmap view", font=("Arial", TEXT_SIZE))
+        task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
+        self.heatmap_type = ttk.Combobox(self.frame, width=15, state="readonly",
+                                       values=["All suboptimality",
+                                               "Wrong direction",
+                                               "Wait actions",
+                                               "Suboptimal turns"
+                                               ])
+        self.heatmap_type.current(0)
+        self.heatmap_type.bind("<<ComboboxSelected>>", self.show_heat_maps)
+        self.heatmap_type.grid(row=self.row_idx, column=1, sticky="w")
+        self.row_idx += 1
+
+        # ---------- Set the starting timestep --------------------- #
+        st_label = tk.Label(self.frame, text="Start time", font=("Arial", TEXT_SIZE))
         st_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
         self.new_time = tk.IntVar(value=1)
         self.start_time_entry = tk.Entry(self.frame, width=5, textvariable=self.new_time,
-                                         font=("Arial",TEXT_SIZE))
+                                         font=("Arial", TEXT_SIZE))
         self.start_time_entry.grid(row=self.row_idx, column=1, sticky="w")
-        self.update_button = tk.Button(self.frame, text="Go", font=("Arial",TEXT_SIZE),
+        self.update_button = tk.Button(self.frame, text="Go", font=("Arial", TEXT_SIZE),
                                        command=self.update_curtime)
         self.update_button.grid(row=self.row_idx, column=2, sticky="w")
         self.row_idx += 1
@@ -1366,41 +1409,76 @@ class PlanViz2024:
         err_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
-        self.shown_conflicts:Dict[str, List[List,bool]] = {}
+        self.shown_conflicts: Dict[str, List[List, bool]] = {}
         self.conflict_listbox = tk.Listbox(self.frame,
                                            width=35,
                                            height=9,
-                                           font=("Arial",TEXT_SIZE),
+                                           font=("Arial", TEXT_SIZE),
                                            selectmode=tk.EXTENDED)
+        conf_id = 0
+        for tstep in sorted(self.pcf.conflicts.keys(), reverse=True):
+            if tstep < self.pcf.start_tstep:
+                continue
+            if tstep > self.pcf.end_tstep:
+                break
+
+            for conf in self.pcf.conflicts[tstep]:
+                agent1 = conf[0]
+                agent2 = conf[1]
+                if agent1 > (self.pcf.team_size - 1) or agent2 > (self.pcf.team_size - 1):
+                    continue
+                assert tstep == conf[2]
+                pid = tstep - self.pcf.start_tstep
+                conf_str = str()
+                if agent1 != -1:
+                    conf_str += "a" + str(agent1)
+                if agent2 != -1:
+                    conf_str += ", a" + str(agent2)
+                if conf[-1] == "vertex conflict":
+                    _loc = "(" + str(self.pcf.agents[agent1].plan_path[pid][0]) + "," + \
+                           str(self.pcf.agents[agent1].plan_path[pid][1]) + ")"
+                    conf_str += ", v: " + _loc
+                elif conf[-1] == "edge conflict":
+                    _loc1 = "(" + str(self.pcf.agents[agent1].plan_path[pid - 1][0]) + "," + \
+                            str(self.pcf.agents[agent1].plan_path[pid - 1][1]) + ")"
+                    _loc2 = "(" + str(self.pcf.agents[agent1].plan_path[pid - 1][0]) + "," + \
+                            str(self.pcf.agents[agent1].plan_path[pid - 1][1]) + ")"
+                    conf_str += ", e: " + _loc1 + "->" + _loc2
+                elif conf[-1] == "incorrect vector size":
+                    conf_str += "Planner timeout"
+                else:
+                    conf_str += conf[-1]
+                conf_str += ", t: " + str(tstep)
+                self.conflict_listbox.insert(conf_id, conf_str)
+                self.shown_conflicts[conf_str] = [conf, False]
 
         self.conflict_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.conflict_listbox.bind("<<ListboxSelect>>", self.select_conflict)
         self.conflict_listbox.bind("<Double-1>", self.move_to_conflict)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
-        self.conflict_listbox.config(yscrollcommand = scrollbar.set)
+        self.conflict_listbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.conflict_listbox.yview)
         scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
 
         # ---------- Show the list of events ----------------------- #
-        event_label = tk.Label(self.frame, text="Most recent of events", font=("Arial",TEXT_SIZE))
+        event_label = tk.Label(self.frame, text="Most recent of events", font=("Arial", TEXT_SIZE))
         event_label.grid(row=self.row_idx, column=0, columnspan=3, sticky="w")
         self.row_idx += 1
 
-        self.shown_events:Dict[str, Tuple[int,int,int,int,str]] = {}
+        self.shown_events: Dict[str, Tuple[int, int, int, int, str]] = {}
         self.event_listbox = tk.Listbox(self.frame,
                                         width=35,
                                         height=9,
-                                        font=("Arial",TEXT_SIZE),
+                                        font=("Arial", TEXT_SIZE),
                                         selectmode=tk.EXTENDED)
-        
 
         self.event_listbox.grid(row=self.row_idx, column=0, columnspan=5, sticky="w")
         self.event_listbox.bind("<Double-1>", self.move_to_event)
 
         scrollbar = tk.Scrollbar(self.frame, orient="vertical", width=20)
-        self.event_listbox.config(yscrollcommand = scrollbar.set)
+        self.event_listbox.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.event_listbox.yview)
         scrollbar.grid(row=self.row_idx, column=3, sticky="ns")
         self.row_idx += 1
@@ -1832,7 +1910,7 @@ class PlanViz2024:
             return
         for tstep in time_list:
             if tstep in self.pcf.events["assigned"]:
-                cur_events= self.pcf.events["assigned"][tstep]
+                cur_events = self.pcf.events["assigned"][tstep]
                 for global_task_id in sorted(cur_events.keys(), reverse=False):
                     task_id = global_task_id // self.pcf.max_seq_num
                     seq_id = global_task_id % self.pcf.max_seq_num
@@ -1956,7 +2034,6 @@ class PlanViz2024:
 
         self.update_agent_colors()
 
-
     def restart_timestep(self):
         self.new_time.set(self.pcf.start_tstep)
         for ag_idx in self.pcf.shown_path_agents:
@@ -1967,7 +2044,7 @@ class PlanViz2024:
                 self.pcf.canvas.itemconfigure(_p_.obj, state=tk.HIDDEN)
         self.pcf.shown_path_agents.clear()
         self.pcf.shown_tasks_seq.clear()
-        
+
         self.pcf.event_tracker["aid"] = 0
         self.pcf.event_tracker["fid"] = 0
 
@@ -1979,6 +2056,8 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
+        self.pcf.reset_subop_map()
+        self.pcf.update_dynamic_subop_map()
         
 
 
@@ -2002,7 +2081,7 @@ class PlanViz2024:
         if self.is_run.get() is True:
             return
 
-        _sid_ = event.widget.curselection()  # get all selected indices
+        _sid_ = event.widget.curselection()
         if len(_sid_) < 1:
             return
         _sid_ = _sid_[0]
@@ -2011,7 +2090,10 @@ class PlanViz2024:
             task_id, agent1, agent2, tstep_std, description = conf[0]
         if len(conf[0]) == 4:
             agent1, agent2, tstep_std, description = conf[0]
+
         self.shown_conflicts[self.conflict_listbox.get(_sid_)][1] = True
+        preview_t = max(int(tstep_std) - 1, self.pcf.start_tstep)
+        self.new_time.set(preview_t)
         primary_ag_idx = -1
         if 0 <= agent1 < self.pcf.team_size:
             primary_ag_idx = agent1
@@ -2026,13 +2108,24 @@ class PlanViz2024:
         if primary_ag_idx != -1:
             self.center_view_on_agent(primary_ag_idx)
 
+        try:
+            for _, agent_ in self.pcf.agents.items():
+                agent_.path = agent_.plan_path
+            self.move_agents_per_timestep()
+            time.sleep(1.5)
+        finally:
+            for _, agent_ in self.pcf.agents.items():
+                agent_.path = agent_.exec_path
+
+        self.new_time.set(preview_t)
+        self.update_curtime()
 
     def move_to_event(self, event):
         if self.is_run.get() is True:
             return
         selected_idx = event.widget.curselection()  # get all selected indices
         if len(selected_idx) < 1:
-            return 
+            return
         selected_idx = selected_idx[0]
         
         # Determine which event listbox triggered the event
@@ -2487,7 +2580,7 @@ class PlanViz2024:
         first_errand_t = -1
         tsk_idx = -1
         for t, i in agent_tasks:
-            if self.pcf.cur_tstep >= t-1:
+            if self.pcf.cur_tstep >= t - 1:
                 tsk_idx = i
         if tsk_idx == -1:
             return int(first_errand_t)
@@ -2503,7 +2596,6 @@ class PlanViz2024:
         self.pcf.agent_shown_task_arrow[ag_idx] = self.show_task_seq(ag_idx, tsk_idx, first_errand, moving)
         return int(first_errand_t)
 
-
     def show_ag_plan(self, ag_idx, first_errand_t, moving=False):
 
         self.pcf.lazy_render_agent_path(ag_idx)
@@ -2515,10 +2607,10 @@ class PlanViz2024:
                 self.pcf.canvas.tag_lower(_p_.obj)
         else:
             self.pcf.shown_path_agents.add(ag_idx)  # Add ag_id to the set
-            if not self.show_agent_path.get(): 
+            if not self.show_agent_path.get():
                 return
-            ml = min(first_errand_t+1, len(self.pcf.agents[ag_idx].path_objs))
-            for _pid_ in range(self.pcf.cur_tstep+1, ml):
+            ml = min(first_errand_t + 1, len(self.pcf.agents[ag_idx].path_objs))
+            for _pid_ in range(self.pcf.cur_tstep + 1, ml):
                 self.pcf.canvas.itemconfigure(self.pcf.agents[ag_idx].path_objs[_pid_].obj,
                                               state=tk.DISABLED)
                 self.pcf.canvas.tag_raise(self.pcf.agents[ag_idx].path_objs[_pid_].obj)
@@ -2544,9 +2636,9 @@ class PlanViz2024:
             x_center = (coords[0] + coords[2]) / 2
             y_center = (coords[1] + coords[3]) / 2
             return x_center, y_center
-        
+
         arrows = []
-        
+
         if task_idx in self.pcf.shown_tasks_seq and (not moving):
             self.pcf.shown_tasks_seq.remove(task_idx)
             for arrow_id in self.pcf.agent_shown_task_arrow[agent_idx]:
@@ -2561,10 +2653,10 @@ class PlanViz2024:
                 if self.pcf.cur_tstep >= task_t:
                     self.change_task_color(task_idx, idx, TASK_COLORS["finished"])
                     continue
-                
-                self.change_task_color(task_idx,idx, "pink")
+
+                self.change_task_color(task_idx, idx, "pink")
                 if idx == first_errand:
-                    self.change_task_color(task_idx,idx, "orange")
+                    self.change_task_color(task_idx, idx, "orange")
 
                 self.set_task_visibility(task_idx, idx, True)
                 x1, y1 = get_center_coords(self.pcf.canvas, last_obj)
@@ -2595,18 +2687,63 @@ class PlanViz2024:
             for _line_ in self.pcf.grids:
                 self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
 
-
-    def show_heat_map(self) -> None:
+    def show_heat_maps(self, _=None) -> None:
+        heatmap_type_to_heatgrids = {"All suboptimality": self.pcf.heat_grids,  "Wrong direction": self.pcf.wrong_direction_grids,
+                                     "Wait actions": self.pcf.wait_action_grids, "Suboptimal turns": self.pcf.bad_turn_grids}
+        current_type = heatmap_type_to_heatgrids[self.heatmap_type.get()]
         if self.is_heat_map.get() is True:
-            for item in self.pcf.heat_grids:
+            for item in current_type:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
-                self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
+            for key, value in heatmap_type_to_heatgrids.items():
+                if key != self.heatmap_type.get():
+                    for item in value:
+                        self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
         else:
-            for item in self.pcf.heat_grids:
+            for item in self.pcf.heat_grids + self.pcf.wrong_direction_grids + self.pcf.wait_action_grids + self.pcf.bad_turn_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-                self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+                # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
 
+    def reset_heat_map(self) -> None:
+        self.pcf.reset_subop_map()
+        self.pcf.render_dynamic_map()
+        self.pcf.canvas.update()
 
+    def show_dynamic_maps(self) -> None:
+        if self.is_dynamic_map.get() is True:
+            for item in self.pcf.dynamic_heat_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
+        else:
+            for item in self.pcf.dynamic_heat_grids:
+                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
+    def open_heatmap_stats(self):
+        stats = self.pcf.compute_heatmap_stats()
+        win = tk.Toplevel(self.frame)
+        win.title("Heat-map statistics")
+        win.resizable(False, False)
+
+        mono = font.Font(family="Courier New", size=max(TEXT_SIZE - 2, 8))
+
+        for i, (k, v) in enumerate(stats.items()):
+            tk.Label(win, text=f"{k:<18}", font=mono, anchor="w").grid(row=i, column=0, sticky="w", padx=6)
+            tk.Label(win, text=f"{v:>10.2f}" if isinstance(v, float) else f"{v:>10}",
+                     font=mono, anchor="e").grid(row=i, column=1, sticky="e", padx=6)
+
+    def show_agent_colours(self) -> None:
+        if self.is_agent_colors.get() is True:
+            for (ag_id, agent) in self.pcf.agents.items():
+                color = (int(self.pcf.agents_rgba[ag_id][0] * 255),
+                         int(self.pcf.agents_rgba[ag_id][1] * 255),
+                         int(self.pcf.agents_rgba[ag_id][2] * 255))
+                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
+                self.change_ag_color(ag_id, hex_color)
+        else:
+            for (ag_id, agent) in self.pcf.agents.items():
+                color = AGENT_COLORS["assigned"]
+                self.change_ag_color(ag_id, color)
+        self.pcf.canvas.update()
     def show_highway(self) -> None:
         if self.is_highway.get() is True:
             for item in self.pcf.highway:
@@ -2614,7 +2751,6 @@ class PlanViz2024:
         else:
             for item in self.pcf.highway:
                 self.pcf.canvas.itemconfig(item["obj"], state=tk.HIDDEN)
-
 
     def show_heuristic_map(self) -> None:
         if self.is_heuristic_map.get() is True:
@@ -2625,7 +2761,6 @@ class PlanViz2024:
             for item in self.pcf.heuristic_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
                 self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
-
 
     def show_agent_index(self) -> None:
         _state_ = tk.DISABLED if self.show_ag_idx.get() is True else tk.HIDDEN
@@ -2664,7 +2799,6 @@ class PlanViz2024:
             obj_state = self.pcf.canvas.itemcget(task.task_obj.obj, "state")
             self.set_task_visibility(task_id, seq_id, obj_state != tk.HIDDEN)
         self.raise_agent_canvas_items()
-
 
     def show_tasks(self) -> None:
         for (task_id, seq_id) in list(self.pcf.rendered_tasks):
@@ -2717,7 +2851,6 @@ class PlanViz2024:
 
         self.show_task_index()
 
-
     def show_tasks_by_click(self, _) -> None:
         self.new_time.set(self.pcf.cur_tstep)
         self.update_curtime()
@@ -2753,10 +2886,8 @@ class PlanViz2024:
 
         self.set_task_visibility(task_id, seq_id, visible)
 
-
     def hide_single_task(self, task_id, seq_id) -> None:
         self.set_task_visibility(task_id, seq_id, False)
-
 
     def show_static_loc(self) -> None:
         """ Show the static locations (e.g., start locations)
@@ -2767,11 +2898,10 @@ class PlanViz2024:
         self.pcf.canvas.itemconfig(self.AGENT_START_OBJ_TAG, state=_os_)
         self.pcf.canvas.itemconfig(self.AGENT_START_TEXT_TAG, state=_ts_)
 
-
     def move_agents_per_timestep(self) -> None:
         """ Move agents forward from cur_tstep, adding cur_tstep by 1.
         """
-        if self.pcf.cur_tstep+1 > min(self.pcf.makespan, self.pcf.end_tstep):
+        if self.pcf.cur_tstep + 1 > min(self.pcf.makespan, self.pcf.end_tstep):
             return
 
         if self.pcf.window_size is not None:
@@ -2781,20 +2911,24 @@ class PlanViz2024:
                 self.pcf.ensure_paths_through(target_timestep)
 
         self.next_button.config(state=tk.DISABLED)
-        _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size/2
+        _rad_ = ((1 - 2*DIR_OFFSET) - 0.1*2) * self.pcf.tile_size / 2
         substeps = self.pcf.animation_substeps
         if substeps < 1:
             substeps = 1
 
+        self.pcf.update_dynamic_subop_map()
+        if self.is_dynamic_map.get():
+            self.show_dynamic_maps()
+
         # Update the next timestep for each agent
         next_tstep = {}
         for (ag_id, agent) in self.pcf.agents.items():
-            next_t = min(self.pcf.cur_tstep+1 - self.pcf.start_tstep, len(agent.path)-1)
+            next_t = min(self.pcf.cur_tstep + 1 - self.pcf.start_tstep, len(agent.path) - 1)
             next_tstep[ag_id] = next_t
 
         for _m_ in range(substeps):
             if _m_ == substeps // 2:
-                self.set_time_labels(self.pcf.cur_tstep+1)
+                self.set_time_labels(self.pcf.cur_tstep + 1)
 
             for (ag_id, agent) in self.pcf.agents.items():
                 cur_angle = get_angle(agent.agent_obj.loc[2])
@@ -2804,11 +2938,11 @@ class PlanViz2024:
                             direction[1] * (self.pcf.tile_size / substeps))
                 cur_rotation = get_rotation(agent.agent_obj.loc[2],
                                             agent.path[next_tstep[ag_id]][2])
-                next_ang = cur_rotation*(math.pi/2)/(substeps)
+                next_ang = cur_rotation * (math.pi / 2) / substeps
 
                 # Move agent
-                _cos = math.cos(cur_angle + next_ang * (_m_+1)) - math.cos(cur_angle+next_ang*_m_)
-                _sin = -1 * (math.sin(cur_angle+ next_ang*(_m_+1))-math.sin(cur_angle+next_ang*_m_))
+                _cos = math.cos(cur_angle + next_ang * (_m_ + 1)) - math.cos(cur_angle + next_ang * _m_)
+                _sin = -1 * (math.sin(cur_angle + next_ang * (_m_ + 1)) - math.sin(cur_angle + next_ang * _m_))
                 self.pcf.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.pcf.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
                 if self.pcf.agent_model == "MAPF_T":
@@ -2851,6 +2985,7 @@ class PlanViz2024:
                 task_id = global_task_id // self.pcf.max_seq_num
                 seq_id = global_task_id % self.pcf.max_seq_num
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
+
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
@@ -2866,8 +3001,8 @@ class PlanViz2024:
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
                     tsk = self.pcf.seq_tasks[task_id].tasks
-                    if len(tsk)-1 > seq_id:
-                        self.show_single_task(task_id, seq_id+1)
+                    if len(tsk) - 1 > seq_id:
+                        self.show_single_task(task_id, seq_id + 1)
             self.pcf.event_tracker["fid"] += 1
         self.render_selected_agent_context()
         self.update_agent_colors()
@@ -2881,18 +3016,18 @@ class PlanViz2024:
             return
 
         self.prev_button.config(state=tk.DISABLED)
-        prev_timestep = max(self.pcf.cur_tstep-1, 0)
+        prev_timestep = max(self.pcf.cur_tstep - 1, 0)
 
         # Move the event tracker backward
-        prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
-        prev_fid = max(self.pcf.event_tracker["fid"]-1, 0)
+        prev_aid = max(self.pcf.event_tracker["aid"] - 1, 0)
+        prev_fid = max(self.pcf.event_tracker["fid"] - 1, 0)
         prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
         prev_fin_time = self.pcf.event_tracker["fTime"][prev_fid]
 
         if self.pcf.cur_tstep == prev_fin_time:  # from finished to assigned
             for (global_task_id, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
                 task_id = global_task_id // self.pcf.max_seq_num
-                seq_id  = global_task_id % self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
                 assert self.pcf.seq_tasks[task_id].tasks[seq_id].state == "finished"
                 self.pcf.seq_tasks[task_id].tasks[seq_id].state = "assigned"
                 self.change_task_color(task_id, seq_id, TASK_COLORS["assigned"])
@@ -2910,14 +3045,14 @@ class PlanViz2024:
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] = prev_aid
-            prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
+            prev_aid = max(self.pcf.event_tracker["aid"] - 1, 0)
             prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
 
         # Compute the previous location
-        prev_loc:Dict[int, Tuple[int, int]] = {}
+        prev_loc: Dict[int, Tuple[int, int]] = {}
         relative_prev_t = prev_timestep - self.pcf.start_tstep
         for (ag_id, agent) in self.pcf.agents.items():
-            if relative_prev_t > len(agent.path)-1:
+            if relative_prev_t > len(agent.path) - 1:
                 prev_loc[ag_id] = (agent.path[-1][0],
                                    agent.path[-1][1],
                                    agent.path[-1][2])
@@ -2944,8 +3079,8 @@ class PlanViz2024:
                 next_ang = cur_rotation*(math.pi/2)/(substeps)
 
                 # Move agent
-                _cos = math.cos(cur_angle+next_ang*(_m_+1)) - math.cos(cur_angle + next_ang*_m_)
-                _sin = -1*(math.sin(cur_angle+next_ang*(_m_+1))-math.sin(cur_angle + next_ang*_m_))
+                _cos = math.cos(cur_angle + next_ang * (_m_ + 1)) - math.cos(cur_angle + next_ang * _m_)
+                _sin = -1 * (math.sin(cur_angle + next_ang * (_m_ + 1)) - math.sin(cur_angle + next_ang * _m_))
                 self.pcf.canvas.move(agent.agent_obj.obj, cur_move[0], cur_move[1])
                 self.pcf.canvas.move(agent.agent_obj.text, cur_move[0], cur_move[1])
                 if self.pcf.agent_model == "MAPF_T":
@@ -2978,7 +3113,6 @@ class PlanViz2024:
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
 
-
     def move_agents(self) -> None:
         """ Move agents constantly until pause or end_tstep is reached.
         """
@@ -3009,7 +3143,6 @@ class PlanViz2024:
         self.restart_button.config(state=tk.NORMAL)
         self.task_shown.config(state=tk.NORMAL)
 
-
     def pause_agents(self) -> None:
         self.is_run.set(False)
         self.pause_button.config(state=tk.DISABLED)
@@ -3018,7 +3151,6 @@ class PlanViz2024:
         self.prev_button.config(state=tk.NORMAL)
         self.restart_button.config(state=tk.NORMAL)
         self.pcf.canvas.after(200, lambda: self.pause_button.config(state=tk.NORMAL))
-
 
     def update_curtime(self) -> None:
         """ Update the agents and tasks' colors to the cur_tstep
@@ -3078,7 +3210,7 @@ class PlanViz2024:
 
         for (ag_id, agent_) in self.pcf.agents.items():
             # Re-generate agent objects
-            tstep = min(self.pcf.cur_tstep - self.pcf.start_tstep, len(agent_.path)-1)
+            tstep = min(self.pcf.cur_tstep - self.pcf.start_tstep, len(agent_.path) - 1)
             self.pcf.canvas.delete(agent_.agent_obj.obj)
             self.pcf.canvas.delete(agent_.agent_obj.text)
             agent_.agent_obj = self.pcf.render_obj(ag_id, agent_.path[tstep], "oval",

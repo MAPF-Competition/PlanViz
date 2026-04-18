@@ -59,6 +59,9 @@ The user interface supports a variety of operations to control and focus the dis
 - `--delay` (type: *float*): Wait time between animation updates (*default*: auto-configured per map).
 - `--start` (type: *int*): Start time for visualization (*default*: 0).
 - `--end` (type: *int*): End time for visualization (*default*: inf).
+- `--hm` (type: *List[str]*): A list of path files (ends with `.json`) for generating heatmap.
+- `--pathalg` (type: *str*) Distance heuristic used for suboptimality heatmap (see Heatmap.md)
+- `--heatmap_max` (type: *int*) Heatmap colour ramp ceiling (*default*: -1 = relative scaling)
 - `--version` (type: *str*): Plan file version. Supported values: `'2024 LoRR'`, `'2026 LoRR'`, or `'2023 LoRR'`. If not specified, the version is read from the plan JSON file. If neither is available, defaults to `2023 LoRR` (*default*: None).
 - `--window` (type: *int*): Number of timesteps to load from the start time. The visualization will cover timesteps from `start` to `start + window` (*default*: 50000).
 - `--event-limit` (type: *int*): Number of recent events to show in the event panel (*default*: 10).
