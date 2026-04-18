@@ -457,7 +457,9 @@ class PlanViz2023:
         if event.num == 4 or event.delta > 0:  # scroll up, bigger
             scale *= 1.10
             self.pcf.tile_size *= 1.10
-        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        cursor_world_x = self.pcf.canvas.canvasx(event.x)
+        cursor_world_y = self.pcf.canvas.canvasy(event.y)
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale around origin keeps content in positive quadrant
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
@@ -465,6 +467,25 @@ class PlanViz2023:
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
         self.pcf.canvas.configure(scrollregion = self.pcf.canvas.bbox("all"))
+        self.__scroll_to_world_point(cursor_world_x * scale - event.x,
+                                     cursor_world_y * scale - event.y)
+
+
+    def __scroll_to_world_point(self, target_scroll_x, target_scroll_y):
+        """Move the canvas view so (target_scroll_x, target_scroll_y) in world coords is the visible top-left."""
+        sr = self.pcf.canvas.cget("scrollregion")
+        if not sr:
+            return
+        parts = sr.split() if isinstance(sr, str) else list(sr)
+        if len(parts) != 4:
+            return
+        srx0, sry0, srx1, sry1 = (float(p) for p in parts)
+        sr_w = srx1 - srx0
+        sr_h = sry1 - sry0
+        if sr_w > 0:
+            self.pcf.canvas.xview_moveto((target_scroll_x - srx0) / sr_w)
+        if sr_h > 0:
+            self.pcf.canvas.yview_moveto((target_scroll_y - sry0) / sr_h)
 
 
     def resume_zoom(self):
@@ -2101,7 +2122,9 @@ class PlanViz2024:
         if event.num == 4 or event.delta > 0:  # scroll up, bigger
             scale *= 1.05
             self.pcf.tile_size *= 1.05
-        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale all objects
+        cursor_world_x = self.pcf.canvas.canvasx(event.x)
+        cursor_world_y = self.pcf.canvas.canvasy(event.y)
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)  # rescale around origin keeps content inside scrollregion
         for child_widget in self.pcf.canvas.find_withtag("text"):
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size // 2)))
@@ -2109,7 +2132,26 @@ class PlanViz2024:
             self.pcf.canvas.itemconfigure(child_widget,
                                           font=("Arial", int(self.pcf.tile_size*1.2)))
         self.pcf.update_canvas_scrollregion()
+        self.__scroll_to_world_point(cursor_world_x * scale - event.x,
+                                     cursor_world_y * scale - event.y)
         self.update_minimap_viewport()
+
+
+    def __scroll_to_world_point(self, target_scroll_x, target_scroll_y):
+        """Move the canvas view so (target_scroll_x, target_scroll_y) in world coords is the visible top-left."""
+        sr = self.pcf.canvas.cget("scrollregion")
+        if not sr:
+            return
+        parts = sr.split() if isinstance(sr, str) else list(sr)
+        if len(parts) != 4:
+            return
+        srx0, sry0, srx1, sry1 = (float(p) for p in parts)
+        sr_w = srx1 - srx0
+        sr_h = sry1 - sry0
+        if sr_w > 0:
+            self.pcf.canvas.xview_moveto((target_scroll_x - srx0) / sr_w)
+        if sr_h > 0:
+            self.pcf.canvas.yview_moveto((target_scroll_y - sry0) / sr_h)
 
 
     def resume_zoom(self):
