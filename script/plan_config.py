@@ -1883,6 +1883,20 @@ class PlanConfig2024:
 
         return dist_matrix
 
+    def _subop_stride(self) -> int:
+        return self.ticks_per_timestep if self.time_unit == "tick" else 1
+
+    @staticmethod
+    def _snap_state(state):
+        """Snap a (possibly fractional) tick-level state to integer (row, col, dir)."""
+        return (int(round(float(state[0]))),
+                int(round(float(state[1]))),
+                int(round(float(state[2]))) % 4)
+
+    def _abs_timestep(self, tick_index: int) -> int:
+        """Convert an absolute tick index to an absolute timestep number for goal lookup."""
+        return tick_index // self._subop_stride()
+
     def reset_subop_map(self):
         self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
     def update_dynamic_subop_map(self):
@@ -1917,33 +1931,50 @@ class PlanConfig2024:
             else:
                 return path_alg((row, col), current_goal)
 
-        for agent, path in enumerate(self.exec_paths.values()):
-            t = self.cur_tstep
-            cur_goal = self.get_current_goal(agent, t)
-            if cur_goal == None:
+        stride = self._subop_stride()
+        t_rel = self.cur_tstep - self.start_tstep
+
+        # Only update at timestep boundaries; in-between ticks keep the last map
+        if t_rel < 0 or (t_rel % stride) != 0:
+            return
+
+        for ag_id, path in self.exec_paths.items():
+            if t_rel + stride >= len(path):
                 continue
-            cur_location = (path[t][0],path[t][1])
-            next_location = (path[t+1][0],path[t+1][1])
-            cur_distance = path_alg(cur_location, cur_goal)
-            next_distance = path_alg(next_location, cur_goal)
-            turn = get_rotation(path[t][2], path[t+1][2])
-            if turn == 0: # Agent has not turned
-                if path[t] == path[t + 1]: # Agent has not moved
-                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
-                elif cur_distance < next_distance:  # Agent moved further away
-                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 2
-            else: # Agent has turned
-                unturned_future_square = state_transition(path[t], "F")
-                unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
-                turned_future_square = state_transition(path[t+1], "F")
-                turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
-                if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
-                    self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+            cur_goal = self.get_current_goal(ag_id, self._abs_timestep(self.cur_tstep))
+            if cur_goal is None:
+                continue
+
+            cur_state  = self._snap_state(path[t_rel])
+            next_state = self._snap_state(path[t_rel + stride])
+            cur_loc  = (cur_state[0],  cur_state[1])
+            next_loc = (next_state[0], next_state[1])
+            cur_dist  = path_alg(cur_loc, cur_goal)
+            next_dist = path_alg(next_loc, cur_goal)
+            turn = get_rotation(cur_state[2], next_state[2])
+
+            if turn == 0:
+                if cur_loc == next_loc:
+                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
+                elif cur_dist < next_dist:
+                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 2
+            else:
+                unturned_future = state_transition(cur_state, "F")
+                unturned_future_dist = get_valid_future_distance(
+                    unturned_future[0], unturned_future[1], cur_dist, cur_goal)
+                turned_future = state_transition(next_state, "F")
+                turned_future_dist = get_valid_future_distance(
+                    turned_future[0], turned_future[1], cur_dist, cur_goal)
+                if cur_dist - unturned_future_dist == 1:
+                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
                 else:
-                    opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
-                    opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
-                    if turned_future_distance > opposite_turned_future_distance:
-                        self.dynamic_heatmap[path[t][0]][path[t][1]] += 1
+                    opposite = state_transition(
+                        (cur_state[0], cur_state[1], (cur_state[2] + 2) % 4), "F")
+                    opposite_dist = get_valid_future_distance(
+                        opposite[0], opposite[1], cur_dist, cur_goal)
+                    if turned_future_dist > opposite_dist:
+                        self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
+
         self.render_dynamic_map()
         # self.canvas.delete("dynamic")
         #
@@ -2027,44 +2058,55 @@ class PlanConfig2024:
         self.wrong_direction_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.wait_action_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
         self.bad_turn_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        for agent, path in enumerate(self.exec_paths.values()):
-            for t in range(len(path)-1):
-                cur_goal = self.get_current_goal(agent, t)
-                if cur_goal == None:
+        stride = self._subop_stride()
+        for ag_id, path in self.exec_paths.items():
+            # Only sample at timestep boundaries
+            for t in range(0, len(path) - stride, stride):
+                abs_tick = self.start_tstep + t
+                cur_goal = self.get_current_goal(ag_id, self._abs_timestep(abs_tick))
+                if cur_goal is None:
                     continue
-                cur_location = (path[t][0],path[t][1])
-                next_location = (path[t+1][0],path[t+1][1])
-                cur_distance = path_alg(cur_location, cur_goal)
-                next_distance = path_alg(next_location, cur_goal)
-                turn = get_rotation(path[t][2], path[t+1][2])
-                if turn == 0: # Agent has not turned
-                    if path[t] == path[t + 1]: # Agent has not moved
-                        self.subop_map[path[t][0]][path[t][1]] += 1
-                        self.agent_performance[agent] += 1
-                        self.wait_action_heatmap[path[t][0]][path[t][1]] += 1
+
+                cur_state  = self._snap_state(path[t])
+                next_state = self._snap_state(path[t + stride])
+                cur_loc  = (cur_state[0],  cur_state[1])
+                next_loc = (next_state[0], next_state[1])
+                cur_dist  = path_alg(cur_loc, cur_goal)
+                next_dist = path_alg(next_loc, cur_goal)
+                turn = get_rotation(cur_state[2], next_state[2])
+
+                if turn == 0:
+                    if cur_loc == next_loc:
+                        self.subop_map[cur_loc[0]][cur_loc[1]] += 1
+                        self.agent_performance[ag_id] += 1
+                        self.wait_action_heatmap[cur_loc[0]][cur_loc[1]] += 1
                         self.supop_types["waited"] += 1
-                    elif cur_distance < next_distance:  # Agent moved further away
-                        self.subop_map[path[t][0]][path[t][1]] += 2
-                        self.agent_performance[agent] += 2
-                        self.wrong_direction_heatmap[path[t][0]][path[t][1]] += 1
+                    elif cur_dist < next_dist:
+                        self.subop_map[cur_loc[0]][cur_loc[1]] += 2
+                        self.agent_performance[ag_id] += 2
+                        self.wrong_direction_heatmap[cur_loc[0]][cur_loc[1]] += 1
                         self.supop_types["wrong_direction"] += 1
-                else: # Agent has turned
-                    unturned_future_square = state_transition(path[t], "F")
-                    unturned_future_distance = get_valid_future_distance(unturned_future_square[0], unturned_future_square[1], cur_distance, cur_goal)
-                    turned_future_square = state_transition(path[t+1], "F")
-                    turned_future_distance = get_valid_future_distance(turned_future_square[0], turned_future_square[1], cur_distance, cur_goal)
-                    if cur_distance - unturned_future_distance == 1: # Going forward was still a path reduction (optimal)
-                        self.subop_map[path[t][0]][path[t][1]] += 1
-                        self.agent_performance[agent] += 1
-                        self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
-                        self.supop_types["bad_turn"] +=1
+                else:
+                    unturned_future = state_transition(cur_state, "F")
+                    unturned_future_dist = get_valid_future_distance(
+                        unturned_future[0], unturned_future[1], cur_dist, cur_goal)
+                    turned_future = state_transition(next_state, "F")
+                    turned_future_dist = get_valid_future_distance(
+                        turned_future[0], turned_future[1], cur_dist, cur_goal)
+                    if cur_dist - unturned_future_dist == 1:
+                        self.subop_map[cur_loc[0]][cur_loc[1]] += 1
+                        self.agent_performance[ag_id] += 1
+                        self.bad_turn_heatmap[cur_loc[0]][cur_loc[1]] += 1
+                        self.supop_types["bad_turn"] += 1
                     else:
-                        opposite_turned_future_square = state_transition((path[t][0], path[t][1], (path[t][2]+2)%4), "F")
-                        opposite_turned_future_distance = get_valid_future_distance(opposite_turned_future_square[0], opposite_turned_future_square[1], cur_distance, cur_goal)
-                        if turned_future_distance > opposite_turned_future_distance:
-                            self.subop_map[path[t][0]][path[t][1]] += 1
-                            self.agent_performance[agent] += 1
-                            self.bad_turn_heatmap[path[t][0]][path[t][1]] += 1
+                        opposite = state_transition(
+                            (cur_state[0], cur_state[1], (cur_state[2] + 2) % 4), "F")
+                        opposite_dist = get_valid_future_distance(
+                            opposite[0], opposite[1], cur_dist, cur_goal)
+                        if turned_future_dist > opposite_dist:
+                            self.subop_map[cur_loc[0]][cur_loc[1]] += 1
+                            self.agent_performance[ag_id] += 1
+                            self.bad_turn_heatmap[cur_loc[0]][cur_loc[1]] += 1
                             self.supop_types["bad_turn"] += 1
         # Rendering heatmap
         self.render_static_map()

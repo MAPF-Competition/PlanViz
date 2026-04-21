@@ -1123,8 +1123,14 @@ class PlanViz2024:
 
     def update_agent_colors(self) -> None:
         current_error_agents = self.pcf.error_agents_by_timestep.get(self.pcf.cur_tstep, set())
+        heatmap_mode = self.is_agent_colors.get()
         for ag_idx, agent in self.pcf.agents.items():
-            shown_color = AGENT_COLORS[self.pcf.get_agent_status(ag_idx, self.pcf.cur_tstep).color_key]
+            if heatmap_mode:
+                rgba = self.pcf.agents_rgba[ag_idx]
+                shown_color = '#{:02X}{:02X}{:02X}'.format(
+                    int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255))
+            else:
+                shown_color = AGENT_COLORS[self.pcf.get_agent_status(ag_idx, self.pcf.cur_tstep).color_key]
             outline_color = ""
             outline_width = 1
 
@@ -1349,7 +1355,7 @@ class PlanViz2024:
                                                   font=("Arial", TEXT_SIZE),
                                                   variable=self.is_agent_colors,
                                                   onvalue=True, offvalue=False,
-                                                  command=self.show_agent_colours)
+                                                  command=self.update_agent_colors)
         self.show_agent_color_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
         
@@ -2731,19 +2737,6 @@ class PlanViz2024:
             tk.Label(win, text=f"{v:>10.2f}" if isinstance(v, float) else f"{v:>10}",
                      font=mono, anchor="e").grid(row=i, column=1, sticky="e", padx=6)
 
-    def show_agent_colours(self) -> None:
-        if self.is_agent_colors.get() is True:
-            for (ag_id, agent) in self.pcf.agents.items():
-                color = (int(self.pcf.agents_rgba[ag_id][0] * 255),
-                         int(self.pcf.agents_rgba[ag_id][1] * 255),
-                         int(self.pcf.agents_rgba[ag_id][2] * 255))
-                hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
-                self.change_ag_color(ag_id, hex_color)
-        else:
-            for (ag_id, agent) in self.pcf.agents.items():
-                color = AGENT_COLORS["assigned"]
-                self.change_ag_color(ag_id, color)
-        self.pcf.canvas.update()
     def show_highway(self) -> None:
         if self.is_highway.get() is True:
             for item in self.pcf.highway:
