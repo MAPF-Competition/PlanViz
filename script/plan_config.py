@@ -804,6 +804,9 @@ class PlanConfig2024:
 
         self.agent_model:str = ""
         self.version = version
+        self.solution_team_size = None
+        self.solution_total_task_finished = None
+        self.solution_max_timestep:int = -1
 
         self.width:int = -1
         self.height:int = -1
@@ -1521,6 +1524,20 @@ class PlanConfig2024:
         print(f"Done! agents={len(self.delay_intervals)}")
 
 
+    def load_solution_metadata(self, data:Dict) -> None:
+        """Load high-level solution metadata for the control panel."""
+        self.solution_team_size = data.get("teamSize")
+        self.solution_total_task_finished = data.get("numTaskFinished")
+
+        max_timestep = data.get("makespanTicks") if self.time_unit == "tick" else None
+        if max_timestep is None:
+            max_timestep = data.get("makespan")
+        if max_timestep is None and self.end_tstep != math.inf:
+            max_timestep = self.end_tstep
+        if max_timestep is not None:
+            self.solution_max_timestep = int(max_timestep)
+
+
     def agent_has_delay(self, ag_id:int, timestep:int) -> bool:
         if ag_id not in self.delay_intervals:
             return False
@@ -1687,6 +1704,7 @@ class PlanConfig2024:
         self.load_sequential_tasks(data)
         self.load_schedule(data)
         self.load_events(data)
+        self.load_solution_metadata(data)
 
 
     def render_obj(self, idx:int, loc:Tuple[int], shape:str="rectangle",

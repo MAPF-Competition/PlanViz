@@ -1071,6 +1071,8 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels:Dict[str, tk.Label] = {}
         self.event_count_frame = None
         self.event_count_value_labels:Dict[str, tk.Label] = {}
         self.event_count_times:List[int] = []
@@ -1106,7 +1108,11 @@ class PlanViz2024:
 
     def set_time_labels(self, timeline_value:int) -> None:
         """Update the displayed time based on the current timeline value."""
-        self.time_label.config(text=f"Time: {int(timeline_value):03d}")
+        time_label = "Tick" if self.pcf.time_unit == "tick" else "Time"
+        self.time_label.config(
+            text=f"{time_label}: {int(timeline_value):03d} / {self.get_solution_max_timestep()}"
+        )
+        self.update_solution_metadata_popup(timeline_value)
 
 
     def agent_has_selected_conflict(self, ag_idx:int) -> bool:
@@ -1331,6 +1337,136 @@ class PlanViz2024:
                                                       onvalue=True, offvalue=False)
         self.show_hover_loc_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
+
+        self.metadata_button = tk.Button(self.frame, text="Show metadata",
+                                         font=("Arial", TEXT_SIZE),
+                                         command=self.open_solution_metadata_popup)
+        self.metadata_button.grid(row=self.row_idx, column=0, columnspan=3, sticky="nsew")
+        self.row_idx += 1
+
+
+    def format_completed_tasks(self, end_tstep:int) -> str:
+        completed_count = self.get_event_count_breakdown(end_tstep)["task_finished"]
+        total_count = self.pcf.solution_total_task_finished
+        if total_count is None:
+            return str(completed_count)
+        return f"{completed_count} / {total_count}"
+
+
+    def get_solution_max_timestep(self) -> int:
+        if self.pcf.solution_max_timestep >= 0:
+            return self.pcf.solution_max_timestep
+        if self.pcf.makespan >= 0 and self.pcf.end_tstep != math.inf:
+            return int(min(self.pcf.makespan, self.pcf.end_tstep))
+        if self.pcf.end_tstep != math.inf:
+            return int(self.pcf.end_tstep)
+        if self.pcf.makespan >= 0:
+            return int(self.pcf.makespan)
+        return 0
+
+
+    def get_solution_metadata_values(self, timeline_value:Optional[int]=None) -> Dict[str, str]:
+        if timeline_value is None:
+            timeline_value = self.pcf.cur_tstep
+        timeline_value = int(timeline_value)
+        return {
+            "tasks_completed": self.format_completed_tasks(timeline_value),
+            "agents": str(self.pcf.solution_team_size or self.pcf.team_size),
+            "map_size": f"{self.pcf.width} x {self.pcf.height}",
+        }
+
+
+    def update_solution_metadata_popup(self, timeline_value:Optional[int]=None) -> None:
+        if not self.solution_metadata_value_labels:
+            return
+        if self.solution_metadata_window is None or \
+            not self.solution_metadata_window.winfo_exists():
+            return
+
+        metadata_values = self.get_solution_metadata_values(timeline_value)
+        for metadata_key, metadata_value in metadata_values.items():
+            if metadata_key in self.solution_metadata_value_labels:
+                self.solution_metadata_value_labels[metadata_key].config(text=metadata_value)
+
+
+    def close_solution_metadata_popup(self, _event=None) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.solution_metadata_window.destroy()
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels = {}
+
+
+    def open_solution_metadata_popup(self) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.update_solution_metadata_popup(self.pcf.cur_tstep)
+            self.solution_metadata_window.lift()
+            self.solution_metadata_window.focus_force()
+            return
+
+        self.solution_metadata_window = tk.Toplevel(self.frame.winfo_toplevel())
+        self.solution_metadata_window.title("Solution metadata")
+        self.solution_metadata_window.transient(self.frame.winfo_toplevel())
+        self.solution_metadata_window.lift()
+        self.solution_metadata_window.protocol("WM_DELETE_WINDOW",
+                                               self.close_solution_metadata_popup)
+        self.solution_metadata_window.bind("<Escape>", self.close_solution_metadata_popup)
+
+        mouse_x = self.pcf.window.winfo_pointerx()
+        mouse_y = self.pcf.window.winfo_pointery()
+        self.solution_metadata_window.geometry(f"+{mouse_x + 20}+{mouse_y + 20}")
+
+        popup_frame = tk.Frame(self.solution_metadata_window, padx=10, pady=10)
+        popup_frame.grid(row=0, column=0, sticky="nsew")
+        popup_frame.grid_columnconfigure(0, weight=1)
+
+        header_frame = tk.Frame(popup_frame)
+        header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        header_frame.grid_columnconfigure(0, weight=1)
+
+        title_label = tk.Label(header_frame,
+                               text="Solution metadata",
+                               font=("Arial", TEXT_SIZE, "bold"),
+                               anchor="w")
+        title_label.grid(row=0, column=0, sticky="w")
+        close_button = tk.Button(header_frame,
+                                 text="X",
+                                 font=("Arial", TEXT_SIZE),
+                                 width=3,
+                                 command=self.close_solution_metadata_popup)
+        close_button.grid(row=0, column=1, sticky="e")
+
+        metadata_rows = [
+            ("Tasks completed", "tasks_completed"),
+            ("Agents", "agents"),
+            ("Map size", "map_size"),
+        ]
+        values_frame = tk.Frame(popup_frame)
+        values_frame.grid(row=1, column=0, sticky="ew")
+        values_frame.grid_columnconfigure(1, weight=1)
+
+        self.solution_metadata_value_labels = {}
+        for row_num, (label_text, metadata_key) in enumerate(metadata_rows):
+            label = tk.Label(values_frame,
+                             text=f"{label_text}:",
+                             font=("Arial", TEXT_SIZE),
+                             anchor="w",
+                             fg="#2b2f36")
+            label.grid(row=row_num, column=0, sticky="w", pady=(0, 4))
+
+            value = tk.Label(values_frame,
+                             text="",
+                             font=("Arial", TEXT_SIZE + 1, "bold"),
+                             anchor="e",
+                             justify=tk.RIGHT,
+                             width=12,
+                             fg="#222222")
+            value.grid(row=row_num, column=1, sticky="e", padx=(16, 0), pady=(0, 4))
+            self.solution_metadata_value_labels[metadata_key] = value
+
+        self.update_solution_metadata_popup(self.pcf.cur_tstep)
+        self.solution_metadata_window.focus_force()
 
 
     def init_label(self):
@@ -1719,6 +1855,7 @@ class PlanViz2024:
             if event_type not in self.event_count_value_labels:
                 continue
             self.event_count_value_labels[event_type].config(text=str(count_value))
+        self.update_solution_metadata_popup(end_tstep)
 
     def set_error_listbox_height(self, error_count: int) -> None:
         min_rows = 2
