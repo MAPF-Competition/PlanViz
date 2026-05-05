@@ -1080,7 +1080,10 @@ class PlanViz2024:
             "errand_finished": [],
             "task_finished": [],
         }
-        self.throughput_by_time:Dict[int, int] = {}
+        self.throughput_by_time:Dict[str, Dict[int, int]] = {
+            "task_finished": {},
+            "errand_finished": {},
+        }
         self.minimap_canvas = None
         self.minimap_photo = None
         self.minimap_image_obj = None
@@ -1658,7 +1661,10 @@ class PlanViz2024:
             "errand_finished": [],
             "task_finished": [],
         }
-        self.throughput_by_time = {}
+        self.throughput_by_time = {
+            "task_finished": {},
+            "errand_finished": {},
+        }
         if self.pcf.max_seq_num <= 0:
             return
 
@@ -1694,9 +1700,10 @@ class PlanViz2024:
             "task_finished": 0,
         }
         for tstep in sorted(event_count_by_time.keys()):
-            cur_task_finished = event_count_by_time[tstep]["task_finished"]
-            if cur_task_finished > 0:
-                self.throughput_by_time[tstep] = cur_task_finished
+            for throughput_type in ["task_finished", "errand_finished"]:
+                cur_finished = event_count_by_time[tstep][throughput_type]
+                if cur_finished > 0:
+                    self.throughput_by_time[throughput_type][tstep] = cur_finished
             for event_type in running_total:
                 running_total[event_type] += event_count_by_time[tstep][event_type]
             self.event_count_times.append(tstep)
@@ -1739,63 +1746,8 @@ class PlanViz2024:
             return max(event_times, default=start_tstep)
         return int(end_tstep)
 
-    def build_finished_throughput_series(self,
-                                         finished_events:Dict[int, Dict[int, int]],
-                                         start_tstep:int,
-                                         end_tstep:int) -> Tuple[List[int], List[int]]:
-        event_times = sorted(finished_events.keys())
-        start_tstep = int(start_tstep)
-        end_tstep = self.get_plot_end_tstep(start_tstep, end_tstep, event_times)
-        running_total = 0
-        times = [start_tstep]
-        throughput = [0]
-
-        for tstep in event_times:
-            if tstep > end_tstep:
-                break
-
-            running_total += len(finished_events[tstep])
-            if tstep <= start_tstep:
-                throughput[0] = running_total
-            else:
-                times.append(tstep)
-                throughput.append(running_total)
-
-        if times[-1] < end_tstep:
-            times.append(end_tstep)
-            throughput.append(throughput[-1])
-
-        return times, throughput
-
-    def build_finished_instant_throughput_series(self,
-                                                 finished_events:Dict[int, Dict[int, int]],
-                                                 start_tstep:int,
-                                                 end_tstep:int) -> Tuple[List[int], List[int]]:
-        event_times = sorted(finished_events.keys())
-        start_tstep = int(start_tstep)
-        end_tstep = self.get_plot_end_tstep(start_tstep, end_tstep, event_times)
-        times = [start_tstep]
-        throughput = [len(finished_events.get(start_tstep, {}))]
-
-        for tstep in event_times:
-            if tstep < start_tstep:
-                continue
-            if tstep > end_tstep:
-                break
-            if tstep == start_tstep:
-                continue
-            times.append(tstep)
-            throughput.append(len(finished_events[tstep]))
-
-        if times[-1] < end_tstep:
-            times.append(end_tstep)
-            throughput.append(len(finished_events.get(end_tstep, {})))
-
-        return times, throughput
-
     def open_throughput_popup(self,
-                              accumulated_series:Tuple[List[int], List[int]],
-                              instant_series:Tuple[List[int], List[int]],
+                              throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]],
                               time_axis_label:str,
                               plot_end_tstep:int,
                               current_tstep:int) -> tk.Toplevel:
@@ -1859,42 +1811,58 @@ class PlanViz2024:
                 "toolbar": toolbar,
             }
 
+        popup.throughput_tab_order = [
+            "task_accumulated",
+            "task_instant",
+            "errand_accumulated",
+            "errand_instant",
+        ]
         popup.throughput_tabs = {
-            "accumulated": create_chart_tab("Accumulated"),
-            "instant": create_chart_tab("Instant"),
+            "task_accumulated": create_chart_tab("Task Accumulated"),
+            "task_instant": create_chart_tab("Task Instant"),
+            "errand_accumulated": create_chart_tab("Errand Accumulated"),
+            "errand_instant": create_chart_tab("Errand Instant"),
         }
         notebook.bind("<<NotebookTabChanged>>",
                       lambda _: getattr(popup, "refresh_callback", lambda: None)())
 
-        accumulated_times, accumulated_throughput = accumulated_series
-        instant_times, instant_throughput = instant_series
-        self.render_accumulated_throughput_axis(
-            popup.throughput_tabs["accumulated"]["axis"],
-            accumulated_times,
-            accumulated_throughput,
-            time_axis_label,
-            plot_end_tstep,
-            current_tstep,
-            False,
-        )
-        self.render_instant_throughput_axis(
-            popup.throughput_tabs["instant"]["axis"],
-            instant_times,
-            instant_throughput,
-            time_axis_label,
-            plot_end_tstep,
-            current_tstep,
-            False,
-        )
+        for metric_key, item_label in [("task", "tasks"), ("errand", "errands")]:
+            accumulated_times, accumulated_throughput = throughput_series[metric_key]["accumulated"]
+            instant_times, instant_throughput = throughput_series[metric_key]["instant"]
+            self.render_accumulated_throughput_axis(
+                popup.throughput_tabs[f"{metric_key}_accumulated"]["axis"],
+                accumulated_times,
+                accumulated_throughput,
+                time_axis_label,
+                plot_end_tstep,
+                current_tstep,
+                False,
+                item_label,
+            )
+            self.render_instant_throughput_axis(
+                popup.throughput_tabs[f"{metric_key}_instant"]["axis"],
+                instant_times,
+                instant_throughput,
+                time_axis_label,
+                plot_end_tstep,
+                current_tstep,
+                False,
+                item_label,
+            )
         self.update_throughput_summary(
             summary_label,
-            "accumulated",
+            "task_accumulated",
             time_axis_label,
             current_tstep,
-            accumulated_throughput[-1] if accumulated_throughput else 0,
-            accumulated_throughput[-1] if accumulated_throughput else 0,
-            instant_throughput[-1] if instant_throughput else 0,
-            max(instant_throughput, default=0),
+            {
+                metric_key: self.get_throughput_summary_values(
+                    metric_key,
+                    current_tstep,
+                    throughput_series[metric_key]["accumulated"][1],
+                    throughput_series[metric_key]["instant"][1],
+                )
+                for metric_key in ["task", "errand"]
+            },
             False,
         )
 
@@ -1936,7 +1904,8 @@ class PlanViz2024:
                                            time_axis_label:str,
                                            plot_end_tstep:int,
                                            current_tstep:int,
-                                           show_full_timeline:bool) -> None:
+                                           show_full_timeline:bool,
+                                           item_label:str) -> None:
         axis.clear()
         if times and throughput and max(throughput) > 0:
             axis.step(times, throughput, where="post", linewidth=2.0, color="#2563eb")
@@ -1946,7 +1915,7 @@ class PlanViz2024:
                       ha="center", va="center", transform=axis.transAxes)
         self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
                                        current_tstep, show_full_timeline,
-                                       "Accumulated throughput (completed tasks)")
+                                       f"Accumulated throughput (completed {item_label})")
 
     def render_instant_throughput_axis(self, axis,
                                        times:List[int],
@@ -1954,7 +1923,8 @@ class PlanViz2024:
                                        time_axis_label:str,
                                        plot_end_tstep:int,
                                        current_tstep:int,
-                                       show_full_timeline:bool) -> None:
+                                       show_full_timeline:bool,
+                                       item_label:str) -> None:
         axis.clear()
         positive_points = [
             (time_value, throughput_value)
@@ -1968,48 +1938,48 @@ class PlanViz2024:
                         linewidth=1.8, color="#2563eb", alpha=0.8)
             axis.scatter(point_times, point_values, s=22, color="#1d4ed8", zorder=3)
         else:
-            axis.text(0.5, 0.5, "No task completions yet",
+            axis.text(0.5, 0.5, f"No {item_label} completions yet",
                       ha="center", va="center", transform=axis.transAxes)
         self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
                                        current_tstep, show_full_timeline,
-                                       "Instant throughput (completed tasks per time)")
+                                       f"Instant throughput (completed {item_label} per time)")
 
     def get_selected_throughput_tab(self) -> str:
         if self.throughput_popup is None:
-            return "accumulated"
+            return "task_accumulated"
         try:
             tab_index = self.throughput_popup.throughput_notebook.index("current")
-            return "instant" if tab_index == 1 else "accumulated"
+            return self.throughput_popup.throughput_tab_order[tab_index]
         except tk.TclError:
-            return "accumulated"
+            return "task_accumulated"
 
     def update_throughput_summary(self, summary_label:tk.Label,
                                   selected_tab:str,
                                   time_axis_label:str,
                                   current_tstep:int,
-                                  accumulated_current:int,
-                                  accumulated_total:int,
-                                  instant_current:int,
-                                  instant_peak:int,
+                                  summary_values:Dict[str, Dict[str, int]],
                                   show_full_timeline:bool) -> None:
-        if selected_tab == "instant":
+        metric_key = "errand" if selected_tab.startswith("errand") else "task"
+        item_label = "errands" if metric_key == "errand" else "tasks"
+        values = summary_values[metric_key]
+        if selected_tab.endswith("instant"):
             if show_full_timeline:
                 summary_label.config(
-                    text=f"Throughput at {time_axis_label.lower()} {current_tstep}: {instant_current} | Peak throughput: {instant_peak}"
+                    text=f"{item_label.title()} throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']} | Peak throughput: {values['instant_peak']}"
                 )
             else:
                 summary_label.config(
-                    text=f"Throughput at {time_axis_label.lower()} {current_tstep}: {instant_current}"
+                    text=f"{item_label.title()} throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']}"
                 )
             return
 
         if show_full_timeline:
             summary_label.config(
-                text=f"Completed tasks by {time_axis_label.lower()} {current_tstep}: {accumulated_current} | Total completed tasks: {accumulated_total}"
+                text=f"Completed {item_label} by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']} | Total completed {item_label}: {values['accumulated_total']}"
             )
         else:
             summary_label.config(
-                text=f"Completed tasks by {time_axis_label.lower()} {current_tstep}: {accumulated_current}"
+                text=f"Completed {item_label} by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']}"
             )
 
     def get_throughput_plot_end_tstep(self) -> int:
@@ -2020,21 +1990,43 @@ class PlanViz2024:
                                        self.pcf.end_tstep,
                                        event_times)
 
-    def get_accumulated_throughput_at_time(self, tstep:int) -> int:
+    def get_throughput_event_type(self, metric_key:str) -> str:
+        return "errand_finished" if metric_key == "errand" else "task_finished"
+
+    def get_finished_throughput_counts_by_time(self, metric_key:str) -> Dict[int, int]:
+        event_type = self.get_throughput_event_type(metric_key)
         if self.event_count_times:
-            return self.get_event_count_breakdown(tstep)["task_finished"]
+            return self.throughput_by_time[event_type]
+
+        counts_by_time:Dict[int, int] = {}
+        for tstep, cur_events in self.pcf.events["finished"].items():
+            for global_task_id in cur_events:
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                if task_id not in self.pcf.seq_tasks:
+                    continue
+                last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
+                is_task_finished = seq_id == last_seq_id
+                if (metric_key == "task" and is_task_finished) or \
+                    (metric_key == "errand" and not is_task_finished):
+                    counts_by_time[tstep] = counts_by_time.get(tstep, 0) + 1
+        return counts_by_time
+
+    def get_accumulated_throughput_at_time(self, metric_key:str, tstep:int) -> int:
+        event_type = self.get_throughput_event_type(metric_key)
+        if self.event_count_times:
+            return self.get_event_count_breakdown(tstep)[event_type]
         return sum(
-            len(cur_events)
-            for event_tstep, cur_events in self.pcf.events["finished"].items()
+            count
+            for event_tstep, count in self.get_finished_throughput_counts_by_time(metric_key).items()
             if event_tstep <= tstep
         )
 
-    def get_instant_throughput_at_time(self, tstep:int) -> int:
-        if self.event_count_times:
-            return self.throughput_by_time.get(int(tstep), 0)
-        return len(self.pcf.events["finished"].get(int(tstep), {}))
+    def get_instant_throughput_at_time(self, metric_key:str, tstep:int) -> int:
+        return self.get_finished_throughput_counts_by_time(metric_key).get(int(tstep), 0)
 
     def get_accumulated_throughput_series(self,
+                                          metric_key:str,
                                           through_tstep:Optional[int]=None) -> Tuple[List[int], List[int]]:
         plot_end_tstep = self.get_throughput_plot_end_tstep()
         if through_tstep is None:
@@ -2042,24 +2034,25 @@ class PlanViz2024:
 
         through_tstep = max(int(self.pcf.start_tstep),
                             min(int(through_tstep), plot_end_tstep))
-        if not self.event_count_times:
-            return self.build_finished_throughput_series(
-                self.pcf.events["finished"],
-                self.pcf.start_tstep,
-                through_tstep,
-            )
 
         start_tstep = int(self.pcf.start_tstep)
+        event_type = self.get_throughput_event_type(metric_key)
+        counts_by_time = self.get_finished_throughput_counts_by_time(metric_key)
         times = [start_tstep]
-        throughput = [self.get_event_count_breakdown(start_tstep)["task_finished"]]
+        running_total = self.get_event_count_breakdown(start_tstep)[event_type] \
+            if self.event_count_times else sum(
+                count for tstep, count in counts_by_time.items() if tstep <= start_tstep
+            )
+        throughput = [running_total]
 
-        for event_idx, tstep in enumerate(self.event_count_times):
+        for tstep in sorted(counts_by_time.keys()):
             if tstep <= start_tstep:
                 continue
             if tstep > through_tstep:
                 break
+            running_total += counts_by_time[tstep]
             times.append(tstep)
-            throughput.append(self.event_count_prefix["task_finished"][event_idx])
+            throughput.append(running_total)
 
         if times[-1] < through_tstep:
             times.append(through_tstep)
@@ -2068,6 +2061,7 @@ class PlanViz2024:
         return times, throughput
 
     def get_instant_throughput_series(self,
+                                      metric_key:str,
                                       through_tstep:Optional[int]=None) -> Tuple[List[int], List[int]]:
         plot_end_tstep = self.get_throughput_plot_end_tstep()
         if through_tstep is None:
@@ -2075,30 +2069,72 @@ class PlanViz2024:
 
         through_tstep = max(int(self.pcf.start_tstep),
                             min(int(through_tstep), plot_end_tstep))
-        if not self.event_count_times:
-            return self.build_finished_instant_throughput_series(
-                self.pcf.events["finished"],
-                self.pcf.start_tstep,
-                through_tstep,
-            )
-
         start_tstep = int(self.pcf.start_tstep)
+        counts_by_time = self.get_finished_throughput_counts_by_time(metric_key)
         times = [start_tstep]
-        throughput = [self.throughput_by_time.get(start_tstep, 0)]
+        throughput = [counts_by_time.get(start_tstep, 0)]
 
-        for tstep in sorted(self.throughput_by_time.keys()):
+        for tstep in sorted(counts_by_time.keys()):
             if tstep <= start_tstep:
                 continue
             if tstep > through_tstep:
                 break
             times.append(tstep)
-            throughput.append(self.throughput_by_time[tstep])
+            throughput.append(counts_by_time[tstep])
 
         if times[-1] < through_tstep:
             times.append(through_tstep)
-            throughput.append(self.throughput_by_time.get(through_tstep, 0))
+            throughput.append(counts_by_time.get(through_tstep, 0))
 
         return times, throughput
+
+    def get_throughput_series_by_metric(self, through_tstep:int) -> Dict[str, Dict[str, Tuple[List[int], List[int]]]]:
+        return {
+            metric_key: {
+                "accumulated": self.get_accumulated_throughput_series(
+                    metric_key,
+                    through_tstep,
+                ),
+                "instant": self.get_instant_throughput_series(
+                    metric_key,
+                    through_tstep,
+                ),
+            }
+            for metric_key in ["task", "errand"]
+        }
+
+    def get_throughput_summary_values(self,
+                                      metric_key:str,
+                                      current_tstep:int,
+                                      accumulated_throughput:List[int],
+                                      instant_throughput:List[int]) -> Dict[str, int]:
+        return {
+            "accumulated_current": self.get_accumulated_throughput_at_time(
+                metric_key,
+                current_tstep,
+            ),
+            "accumulated_total": accumulated_throughput[-1] if accumulated_throughput else 0,
+            "instant_current": self.get_instant_throughput_at_time(
+                metric_key,
+                current_tstep,
+            ),
+            "instant_peak": max(instant_throughput, default=0),
+        }
+
+    def get_throughput_summary_values_by_metric(
+            self,
+            current_tstep:int,
+            throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]]
+    ) -> Dict[str, Dict[str, int]]:
+        return {
+            metric_key: self.get_throughput_summary_values(
+                metric_key,
+                current_tstep,
+                throughput_series[metric_key]["accumulated"][1],
+                throughput_series[metric_key]["instant"][1],
+            )
+            for metric_key in ["task", "errand"]
+        }
 
     def update_throughput_popup(self, timeline_value:Optional[int]=None) -> None:
         if self.throughput_popup is None or \
@@ -2114,39 +2150,39 @@ class PlanViz2024:
         if not show_full_timeline:
             series_end_tstep = current_tstep
 
-        accumulated_times, accumulated_throughput = self.get_accumulated_throughput_series(
-            series_end_tstep
-        )
-        instant_times, instant_throughput = self.get_instant_throughput_series(
-            series_end_tstep
-        )
-        self.render_accumulated_throughput_axis(
-            self.throughput_popup.throughput_tabs["accumulated"]["axis"],
-            accumulated_times,
-            accumulated_throughput,
-            self.throughput_popup.time_axis_label,
-            self.throughput_popup.plot_end_tstep,
-            current_tstep,
-            show_full_timeline,
-        )
-        self.render_instant_throughput_axis(
-            self.throughput_popup.throughput_tabs["instant"]["axis"],
-            instant_times,
-            instant_throughput,
-            self.throughput_popup.time_axis_label,
-            self.throughput_popup.plot_end_tstep,
-            current_tstep,
-            show_full_timeline,
-        )
+        throughput_series = self.get_throughput_series_by_metric(series_end_tstep)
+        for metric_key, item_label in [("task", "tasks"), ("errand", "errands")]:
+            accumulated_times, accumulated_throughput = throughput_series[metric_key]["accumulated"]
+            instant_times, instant_throughput = throughput_series[metric_key]["instant"]
+            self.render_accumulated_throughput_axis(
+                self.throughput_popup.throughput_tabs[f"{metric_key}_accumulated"]["axis"],
+                accumulated_times,
+                accumulated_throughput,
+                self.throughput_popup.time_axis_label,
+                self.throughput_popup.plot_end_tstep,
+                current_tstep,
+                show_full_timeline,
+                item_label,
+            )
+            self.render_instant_throughput_axis(
+                self.throughput_popup.throughput_tabs[f"{metric_key}_instant"]["axis"],
+                instant_times,
+                instant_throughput,
+                self.throughput_popup.time_axis_label,
+                self.throughput_popup.plot_end_tstep,
+                current_tstep,
+                show_full_timeline,
+                item_label,
+            )
         self.update_throughput_summary(
             self.throughput_popup.summary_label,
             self.get_selected_throughput_tab(),
             self.throughput_popup.time_axis_label,
             current_tstep,
-            self.get_accumulated_throughput_at_time(current_tstep),
-            accumulated_throughput[-1] if accumulated_throughput else 0,
-            self.get_instant_throughput_at_time(current_tstep),
-            max(instant_throughput, default=0),
+            self.get_throughput_summary_values_by_metric(
+                current_tstep,
+                throughput_series,
+            ),
             show_full_timeline,
         )
         for chart_tab in self.throughput_popup.throughput_tabs.values():
@@ -2159,11 +2195,9 @@ class PlanViz2024:
 
         time_axis_label = "Tick" if self.pcf.time_unit == "tick" else "Time"
         plot_end_tstep = self.get_throughput_plot_end_tstep()
-        accumulated_series = self.get_accumulated_throughput_series(self.pcf.cur_tstep)
-        instant_series = self.get_instant_throughput_series(self.pcf.cur_tstep)
+        throughput_series = self.get_throughput_series_by_metric(self.pcf.cur_tstep)
         self.throughput_popup = self.open_throughput_popup(
-            accumulated_series,
-            instant_series,
+            throughput_series,
             time_axis_label,
             plot_end_tstep,
             self.pcf.cur_tstep,
