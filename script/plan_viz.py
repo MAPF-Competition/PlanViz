@@ -1755,7 +1755,7 @@ class PlanViz2024:
         from matplotlib.figure import Figure
 
         popup = tk.Toplevel(self.pcf.window)
-        popup.title("Time vs Throughput")
+        popup.title("Throughput Timeline")
         popup.transient(self.pcf.window)
         popup.lift()
         popup.geometry("760x540")
@@ -1764,7 +1764,7 @@ class PlanViz2024:
         header_frame = tk.Frame(popup, padx=12, pady=10)
         header_frame.pack(fill=tk.X)
         title_label = tk.Label(header_frame,
-                               text="Time vs Throughput",
+                               text="Throughput Timeline",
                                font=("Arial", TEXT_SIZE + 6, "bold"),
                                anchor="w")
         title_label.pack(fill=tk.X)
@@ -1911,11 +1911,11 @@ class PlanViz2024:
             axis.step(times, throughput, where="post", linewidth=2.0, color="#2563eb")
             axis.scatter(times, throughput, s=18, color="#1d4ed8", zorder=3)
         else:
-            axis.text(0.5, 0.5, "No completed tasks yet",
+            axis.text(0.5, 0.5, f"No completed {item_label} yet",
                       ha="center", va="center", transform=axis.transAxes)
         self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
                                        current_tstep, show_full_timeline,
-                                       f"Accumulated throughput (completed {item_label})")
+                                       "Throughput")
 
     def render_instant_throughput_axis(self, axis,
                                        times:List[int],
@@ -1942,7 +1942,7 @@ class PlanViz2024:
                       ha="center", va="center", transform=axis.transAxes)
         self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
                                        current_tstep, show_full_timeline,
-                                       f"Instant throughput (completed {item_label} per time)")
+                                       "Throughput")
 
     def get_selected_throughput_tab(self) -> str:
         if self.throughput_popup is None:
@@ -1960,26 +1960,26 @@ class PlanViz2024:
                                   summary_values:Dict[str, Dict[str, int]],
                                   show_full_timeline:bool) -> None:
         metric_key = "errand" if selected_tab.startswith("errand") else "task"
-        item_label = "errands" if metric_key == "errand" else "tasks"
+        item_label = "Errand" if metric_key == "errand" else "Task"
         values = summary_values[metric_key]
         if selected_tab.endswith("instant"):
             if show_full_timeline:
                 summary_label.config(
-                    text=f"{item_label.title()} throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']} | Peak throughput: {values['instant_peak']}"
+                    text=f"{item_label} instant throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']} | Peak throughput: {values['instant_peak']}"
                 )
             else:
                 summary_label.config(
-                    text=f"{item_label.title()} throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']}"
+                    text=f"{item_label} instant throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']}"
                 )
             return
 
         if show_full_timeline:
             summary_label.config(
-                text=f"Completed {item_label} by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']} | Total completed {item_label}: {values['accumulated_total']}"
+                text=f"{item_label} accumulated throughput at {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']} | Final throughput: {values['accumulated_total']}"
             )
         else:
             summary_label.config(
-                text=f"Completed {item_label} by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']}"
+                text=f"{item_label} accumulated throughput at {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']}"
             )
 
     def get_throughput_plot_end_tstep(self) -> int:
