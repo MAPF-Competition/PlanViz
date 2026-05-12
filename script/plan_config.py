@@ -807,10 +807,13 @@ class PlanConfig2024:
         self.solution_team_size = None
         self.solution_total_task_finished = None
         self.solution_max_timestep:int = -1
+        self.solution_agent_max_counter = None
 
         self.width:int = -1
         self.height:int = -1
         self.env_map:List[List[int]] = []
+        self.traversable_cell_count:int = 0
+        self.obstacle_cell_count:int = 0
         self.use_viewport_mode:bool = False
         self.show_coord_labels:bool = True
         self.base_env_image = None
@@ -1123,6 +1126,10 @@ class PlanConfig2024:
 
         header_height, self.width, actual_height, self.env_map = load_map_grid(map_file)
         self.height = actual_height
+        self.obstacle_cell_count = sum(
+            1 for cur_row in self.env_map for cur_ele in cur_row if cur_ele == 0
+        )
+        self.traversable_cell_count = self.width * self.height - self.obstacle_cell_count
         self.show_coord_labels = (self.width + self.height) <= COORD_LABEL_LIMIT
         self.base_env_image = build_base_env_image(self.env_map)
         if header_height != actual_height:
@@ -1528,6 +1535,7 @@ class PlanConfig2024:
         """Load high-level solution metadata for the control panel."""
         self.solution_team_size = data.get("teamSize")
         self.solution_total_task_finished = data.get("numTaskFinished")
+        self.solution_agent_max_counter = data.get("agentMaxCounter")
 
         max_timestep = data.get("makespanTicks") if self.time_unit == "tick" else None
         if max_timestep is None:
