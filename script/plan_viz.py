@@ -1284,7 +1284,7 @@ class PlanViz2024:
         self.restart_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
-        self.throughput_button = tk.Button(self.frame, text="Throughput",
+        self.throughput_button = tk.Button(self.frame, text="Productivity",
                                            font=("Arial",TEXT_SIZE),
                                            command=self.show_throughput_popup)
         self.throughput_button.grid(row=self.row_idx, column=0, columnspan=4, sticky="nsew")
