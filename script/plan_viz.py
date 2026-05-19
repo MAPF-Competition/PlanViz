@@ -1746,6 +1746,122 @@ class PlanViz2024:
             return max(event_times, default=start_tstep)
         return int(end_tstep)
 
+    def get_throughput_options_from_popup(self, popup:tk.Toplevel) -> Tuple[str, str]:
+        metric_key = "errand" if popup.throughput_item_var.get() == "Errand" else "task"
+        selected_metric = popup.throughput_metric_var.get()
+        if selected_metric == "Throughput":
+            series_key = "rate"
+        elif selected_metric == "Instant":
+            series_key = "instant"
+        else:
+            series_key = "accumulated"
+        return metric_key, series_key
+
+    def get_throughput_help_text(self, popup:tk.Toplevel) -> str:
+        metric_key, series_key = self.get_throughput_options_from_popup(popup)
+        item_name = "Errand" if metric_key == "errand" else "Task"
+        time_axis_label = popup.time_axis_label.lower()
+        item_description = {
+            "task": "Task counts increase only when the final step of a task sequence is finished.",
+            "errand": "Errand counts increase when an intermediate stop in a task sequence is finished.",
+        }[metric_key]
+        plot_descriptions = {
+            "accumulated": (
+                "Completed plot\n"
+                f"Shows the cumulative number of completed {item_name.lower()}s from the start "
+                f"through each {time_axis_label}."
+            ),
+            "instant": (
+                "Instant plot\n"
+                f"Shows how many {item_name.lower()}s finish exactly at each {time_axis_label}. "
+            ),
+            "rate": (
+                "Throughput plot\n"
+                f"Shows cumulative completed {item_name.lower()}s divided by elapsed time since "
+                "the start. Higher values mean a faster average completion rate."
+            ),
+        }
+        timeline_description = (
+            "The red dotted vertical line marks the current visualizer time. "
+            "With 'Show full timeline' off, the plot is clipped to the current time."
+        )
+        return (
+            f"{item_description}\n\n"
+            f"{plot_descriptions[series_key]}\n\n{timeline_description}"
+        )
+
+    def hide_throughput_help_tooltip(self, popup:tk.Toplevel) -> None:
+        tooltip = getattr(popup, "throughput_help_tooltip", None)
+        if tooltip is None:
+            return
+        try:
+            if tooltip.winfo_exists():
+                tooltip.destroy()
+        except tk.TclError:
+            pass
+        popup.throughput_help_tooltip = None
+
+    def show_throughput_help_tooltip(self, popup:tk.Toplevel,
+                                     anchor_widget:tk.Widget) -> None:
+        if popup.winfo_exists() == 0:
+            return
+        self.hide_throughput_help_tooltip(popup)
+
+        tooltip = tk.Toplevel(popup)
+        tooltip.wm_overrideredirect(True)
+        tooltip.transient(popup)
+        try:
+            tooltip.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+
+        help_label = tk.Label(tooltip,
+                              text=self.get_throughput_help_text(popup),
+                              font=("Arial", TEXT_SIZE),
+                              justify=tk.LEFT,
+                              wraplength=380,
+                              padx=10,
+                              pady=8,
+                              bg="#fffaf0",
+                              fg="#1f2937",
+                              relief=tk.SOLID,
+                              bd=1)
+        help_label.pack()
+
+        x = anchor_widget.winfo_rootx() + anchor_widget.winfo_width() + 8
+        y = anchor_widget.winfo_rooty() - 6
+        tooltip.wm_geometry(f"+{x}+{y}")
+        popup.throughput_help_tooltip = tooltip
+
+    def refresh_throughput_help_tooltip(self, popup:tk.Toplevel) -> None:
+        if getattr(popup, "throughput_help_tooltip", None) is None:
+            return
+        self.show_throughput_help_tooltip(popup, popup.throughput_help_icon)
+
+    def create_throughput_help_icon(self, popup:tk.Toplevel,
+                                    parent:tk.Widget) -> tk.Canvas:
+        icon_size = 22
+        help_icon = tk.Canvas(parent,
+                              width=icon_size,
+                              height=icon_size,
+                              highlightthickness=0,
+                              bd=0,
+                              bg=parent.cget("bg"))
+        help_icon.create_oval(2, 2, icon_size - 2, icon_size - 2,
+                              fill="#f8fafc",
+                              outline="#64748b",
+                              width=1)
+        help_icon.create_text(icon_size / 2,
+                              icon_size / 2,
+                              text="?",
+                              fill="#334155",
+                              font=("Arial", TEXT_SIZE, "bold"))
+        help_icon.bind("<Enter>",
+                       lambda _: self.show_throughput_help_tooltip(popup, help_icon))
+        help_icon.bind("<Leave>",
+                       lambda _: self.hide_throughput_help_tooltip(popup))
+        return help_icon
+
     def open_throughput_popup(self,
                               throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]],
                               time_axis_label:str,
@@ -1780,6 +1896,11 @@ class PlanViz2024:
 
         control_frame = tk.Frame(header_frame)
         control_frame.pack(fill=tk.X, pady=(6, 0))
+
+        def on_throughput_control_change(_=None) -> None:
+            getattr(popup, "refresh_callback", lambda: None)()
+            self.refresh_throughput_help_tooltip(popup)
+
         item_combobox = ttk.Combobox(control_frame,
                                      textvariable=popup.throughput_item_var,
                                      values=("Task", "Errand"),
@@ -1800,14 +1921,12 @@ class PlanViz2024:
                                             variable=popup.show_full_timeline,
                                             onvalue=True,
                                             offvalue=False,
-                                            command=lambda: getattr(
-                                                popup, "refresh_callback", lambda: None
-                                            )())
+                                            command=on_throughput_control_change)
         show_full_checkbox.pack(side=tk.LEFT)
-        item_combobox.bind("<<ComboboxSelected>>",
-                           lambda _: getattr(popup, "refresh_callback", lambda: None)())
-        metric_combobox.bind("<<ComboboxSelected>>",
-                             lambda _: getattr(popup, "refresh_callback", lambda: None)())
+        help_icon = self.create_throughput_help_icon(popup, control_frame)
+        help_icon.pack(side=tk.LEFT, padx=(8, 0))
+        item_combobox.bind("<<ComboboxSelected>>", on_throughput_control_change)
+        metric_combobox.bind("<<ComboboxSelected>>", on_throughput_control_change)
 
         chart_frame = tk.Frame(popup)
         chart_frame.pack(fill=tk.BOTH, expand=True)
@@ -1858,6 +1977,8 @@ class PlanViz2024:
         popup.show_full_checkbox = show_full_checkbox
         popup.item_combobox = item_combobox
         popup.metric_combobox = metric_combobox
+        popup.throughput_help_icon = help_icon
+        popup.throughput_help_tooltip = None
         popup.time_axis_label = time_axis_label
         popup.plot_end_tstep = plot_end_tstep
         return popup
@@ -2014,16 +2135,7 @@ class PlanViz2024:
         if self.throughput_popup is None:
             return "task", "accumulated"
         try:
-            metric_key = "errand" \
-                if self.throughput_popup.throughput_item_var.get() == "Errand" else "task"
-            selected_metric = self.throughput_popup.throughput_metric_var.get()
-            if selected_metric == "Throughput":
-                series_key = "rate"
-            elif selected_metric == "Instant":
-                series_key = "instant"
-            else:
-                series_key = "accumulated"
-            return metric_key, series_key
+            return self.get_throughput_options_from_popup(self.throughput_popup)
         except tk.TclError:
             return "task", "accumulated"
 
