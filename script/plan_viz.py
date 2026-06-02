@@ -1298,7 +1298,7 @@ class PlanViz2024:
         self.pause_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
                                             font=("Arial",TEXT_SIZE),
-                                            command=self.resume_zoom)
+                                            command=self.fit_map_to_view)
         self.resume_zoom_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
@@ -3053,6 +3053,49 @@ class PlanViz2024:
             self.pcf.canvas.xview_moveto((target_scroll_x - srx0) / sr_w)
         if sr_h > 0:
             self.pcf.canvas.yview_moveto((target_scroll_y - sry0) / sr_h)
+
+
+    def fit_map_to_view(self):
+        self.pcf.canvas.update_idletasks()
+        view_width = self.pcf.canvas.winfo_width()
+        view_height = self.pcf.canvas.winfo_height()
+        if view_width <= 1:
+            view_width = self.pcf.viewport_width_px
+        if view_height <= 1:
+            view_height = self.pcf.viewport_height_px
+        if view_width <= 1:
+            view_width = int(float(self.pcf.canvas.cget("width")))
+        if view_height <= 1:
+            view_height = int(float(self.pcf.canvas.cget("height")))
+        view_width = max(1.0, float(view_width))
+        view_height = max(1.0, float(view_height))
+
+        coord_padding_tiles = 1 if self.pcf.show_coord_labels else 0
+        map_width_tiles = max(1, self.pcf.width + coord_padding_tiles)
+        map_height_tiles = max(1, self.pcf.height + coord_padding_tiles)
+        tile_size = max(1.0, min(view_width / map_width_tiles,
+                                  view_height / map_height_tiles))
+
+        if self.pcf.tile_size <= 0:
+            return
+        scale = tile_size / self.pcf.tile_size
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)
+        self.pcf.tile_size = tile_size
+
+        text_size = max(1, int(self.pcf.tile_size // 2))
+        hwy_size = max(1, int(self.pcf.tile_size * 1.2))
+        for child_widget in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(child_widget, font=("Arial", text_size))
+        for child_widget in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(child_widget, font=("Arial", hwy_size))
+        if self.pcf.use_viewport_mode:
+            self.pcf.viewport_width_px = int(view_width)
+            self.pcf.viewport_height_px = int(view_height)
+        self.pcf.update_canvas_scrollregion()
+        self.pcf.canvas.xview_moveto(0)
+        self.pcf.canvas.yview_moveto(0)
+        self.update_minimap_viewport()
+        self.pcf.canvas.update()
 
 
     def resume_zoom(self):

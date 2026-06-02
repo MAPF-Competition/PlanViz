@@ -34,7 +34,7 @@ The user interface supports a variety of operations to control and focus the dis
 - The buttons controls the progress of the plan/execution:
   - `Play`: Auto-play the plan/execution
   - `Pause`: Pause the scenario at the current time
-  - `Fullsize`: Reset the scenario to fullsize
+  - `Fullsize`: Fit the whole map into the visible canvas
   - `Next`: Move the scenario to the next time
   - `Prev`: Move the scenario to the previous time
   - `Restart`: Reset the scenario to time 0
