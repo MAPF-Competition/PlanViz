@@ -1,7 +1,7 @@
 # PlanViz
 The primary purpose of PlanViz is to help participants in the [League of Robot Runners competition](https://leagueofrobotrunners.org) better understand the planned paths and executed commands of their robots. PlanViz offers insights into problem solving strategies, by showing how robots move across the map, and by highlighting and exploring the errors and events given by the competition [Start-Kit](https://github.com/MAPF-Competition/Start-Kit). 
 
-Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the the competition Start-Kit. For the 2024/2026 view, the log file describes the planned and executed actions of agents over time, where time is shown as the elapsed timeline index. An example of the application in action is shown in the following video.
+Being an offline tool, PlanViz takes as input a grid map (part of the competition problem set) and a [`JSON` formatted log file](https://github.com/MAPF-Competition/Start-Kit/blob/main/Input_Output_Format.md), which is produced by the competition Start-Kit. For the 2024/2026 view, the log file describes the planned and executed actions of agents over time. In 2026 tick-based plans, the UI shows the elapsed tick index. An example of the application in action is shown in the following video.
 
 ![plan_viz_gif](images/plan_viz2026.gif)
 
@@ -12,7 +12,7 @@ PlanViz provides a variety of visual markers to help users understand the result
 ![scenario](images/scenario_2.png)
 
 - The map is plotted in grids with the white ones being the free spaces and black ones being obstacles.
-- An agent is plotted in a blue circle, with a number being the agent index and a darkblue dot being its heading. When `delayIntervals` are present in a `2026 LoRR` file, delayed agents are shown in yellow during the corresponding ticks.
+- An agent is plotted in a blue circle, with a number being the agent index and a dark blue dot being its heading. When `delayIntervals` are present in a `2026 LoRR` file, delayed agents are shown in yellow during the corresponding ticks.
 - All errands of tasks are represented by colored squares. Errands for a task are initially marked in yellow, turn orange when the task is assigned to an agent, and turn to white once the errand is completed and there is no further errand at this location.
 
 ![scenario](images/scenario_1.png)
@@ -22,7 +22,7 @@ PlanViz provides a variety of visual markers to help users understand the result
 
 ![scenario](images/scenario_4.png)
 
-- Ctrl + Right-click an errand will show all related events
+- Ctrl + Right-click an errand will show all related events.
 - Right-clicking on white grids will cancel selection.
 
 
@@ -30,24 +30,28 @@ PlanViz provides a variety of visual markers to help users understand the result
 
 The user interface supports a variety of operations to control and focus the display of plans.
 
-- In the 2024/2026 UI, `Time` shows the current time.
-- The buttons controls the progress of the plan/execution:
+- In the 2024/2026 UI, the timeline label shows the current `Time`. For tick-based 2026 plans, it shows `Tick: current / max`.
+- The `i` icon next to the timeline opens a solution metadata popup with the number of agents, map size, traversable cells, obstacle cells, and `agentMaxCounter` when available.
+- The buttons control the progress of the plan/execution:
   - `Play`: Auto-play the plan/execution
   - `Pause`: Pause the scenario at the current time
   - `Fullsize`: Fit the whole map into the visible canvas
   - `Next`: Move the scenario to the next time
   - `Prev`: Move the scenario to the previous time
   - `Restart`: Reset the scenario to time 0
-- The checkbox controls what to be shown in the scenario.
+- `Productivity`: Open a popup that plots task or errand completion over time. The popup supports completed count, instant completion count, and throughput views, and can show either the current timeline range or the full timeline.
+- The checkboxes control what is shown in the scenario.
+- On large maps, PlanViz enables viewport mode with a minimap. Drag the map canvas or the minimap viewport to pan around the map.
 - In the 2024/2026 UI, `Start time`: Input the desired start time and move the scenario to it.
 - `List of errors` contains collisions and timeout issues from the Start-Kit. When the scenario is paused, you can double-click an error to see the invalid movements.
-- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at time $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. See agents 19 and 22 in the following figure for example.
+- A vertex/edge collision between agents $a_i$ and $a_j$ at location $V$/edge $(U,V)$ at time $T$ is presented under the format of `ai, aj, v=V/e=(U,V), t=T`. Single-click the collision in `List of errors` can mark the colliding agents in red, and press `ctrl` while clicking to select multiple collisions. The `Show colliding agents` checkbox outlines agents that collide at any point and fills agents red when they collide at the current timestep.
 - `Most recent events` contains information of task assignments, errands completion and task completion. When the scenario is paused, you can *double-click* an event to move all the agents to the time when such event occurs.
+- The event counters show cumulative assigned, errand-finished, and task-finished counts. When a total is available, counters are shown as `current / total`.
 
 ## Arguments
 
-- `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/warehouse-small.map` for more information.
-- `--plan` (type: *str*): Path to the planned path file (ends with `.json`). See `example/warehouse-small-60.json` for more information.
+- `--map` (type: *str*): Path to the map file (ends with `.map`). See `example/warehouse_small.map` for more information.
+- `--plan` (type: *str*): Path to the planned path file (ends with `.json`). See `example/warehouse_small_2026.json` for more information.
 - `--n` (type: *int*): Number of agents to show, starting from index 0 (*default*: All agents in the path file).
 - `--grid` (type: *bool*): Whether to show the grids on the map (*default*: True).
 - `--aid` (type: *bool*): Whether to show the agent indices (*default*: True).
