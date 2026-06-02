@@ -1017,6 +1017,9 @@ class PlanViz2023:
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
+    MIN_RESIZED_CANVAS_WIDTH = 240
+    MIN_RESIZED_CANVAS_HEIGHT = 240
+
     AGENT_OBJ_TAG = "agent_obj"
     AGENT_DIR_TAG = "agent_dir"
     AGENT_START_OBJ_TAG = "agent_start_obj"
@@ -1477,12 +1480,34 @@ class PlanViz2024:
         self.pcf.window.geometry(f"{wd_width}x{wd_height}")
         self.pcf.window.title("PlanViz")
         if self.pcf.use_viewport_mode:
+            self.configure_resizable_layout()
             self.pcf.window.update_idletasks()
             self.center_view_on_initial_focus()
             self.update_minimap_viewport()
 
 
-    def on_canvas_configure(self, _):
+    def configure_resizable_layout(self) -> None:
+        if not self.pcf.use_viewport_mode or self.frame.master is not self.pcf.window:
+            return
+
+        self.pcf.window.grid_rowconfigure(0, weight=1)
+        self.pcf.window.grid_columnconfigure(0, weight=1, minsize=1)
+        self.pcf.window.grid_columnconfigure(1, weight=0)
+        self.pcf.canvas.grid_configure(sticky="nsew")
+        self.frame.grid_configure(sticky="ns")
+
+        self.frame.update_idletasks()
+        panel_width = max(self.frame.winfo_width(), self.frame.winfo_reqwidth(), 0)
+        min_canvas_width = min(self.MIN_RESIZED_CANVAS_WIDTH, self.pcf.world_width_px)
+        min_width = min(self.pcf.screen_width, panel_width + min_canvas_width + 8)
+        min_height = min(self.pcf.screen_height, self.MIN_RESIZED_CANVAS_HEIGHT)
+        self.pcf.window.minsize(min_width, min_height)
+
+
+    def on_canvas_configure(self, event):
+        if self.pcf.use_viewport_mode:
+            self.pcf.viewport_width_px = max(event.width, 1)
+            self.pcf.viewport_height_px = max(event.height, 1)
         self.update_minimap_viewport()
 
 
