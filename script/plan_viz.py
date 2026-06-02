@@ -1071,6 +1071,8 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels:Dict[str, tk.Label] = {}
         self.event_count_frame = None
         self.event_count_value_labels:Dict[str, tk.Label] = {}
         self.event_count_times:List[int] = []
@@ -1085,10 +1087,33 @@ class PlanViz2024:
         self.minimap_view_obj = None
         self.minimap_dragging = False
         
-        self.time_label = tk.Label(self.frame,
+        self.header_frame = tk.Frame(self.frame)
+        self.header_frame.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+
+        self.time_label = tk.Label(self.header_frame,
                                    text=f"Time: {self.pcf.cur_tstep:03d}",
                                    font=("Arial", TEXT_SIZE + 10))
-        self.time_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.time_label.grid(row=0, column=0, sticky="w")
+
+        self.metadata_info_button = tk.Canvas(self.header_frame,
+                                              width=24,
+                                              height=24,
+                                              highlightthickness=0,
+                                              bd=0,
+                                              bg=self.header_frame.cget("bg"),
+                                              cursor="hand2")
+        self.metadata_info_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.metadata_info_button.create_oval(2, 2, 22, 22,
+                                             fill="#f5f7fb",
+                                             outline="#6b7280",
+                                             width=1)
+        self.metadata_info_button.create_text(12, 12,
+                                             text="i",
+                                             fill="#374151",
+                                             font=("Arial", TEXT_SIZE, "bold"))
+        self.metadata_info_button.bind("<Enter>", self.open_solution_metadata_popup)
+        self.metadata_info_button.bind("<Leave>", self.close_solution_metadata_popup)
+        self.metadata_info_button.bind("<Button-1>", self.open_solution_metadata_popup)
         self.set_time_labels(self.pcf.cur_tstep)
         self.row_idx += 1
         self.mouse_loc_label = tk.Label(self.frame,
@@ -1106,7 +1131,11 @@ class PlanViz2024:
 
     def set_time_labels(self, timeline_value:int) -> None:
         """Update the displayed time based on the current timeline value."""
-        self.time_label.config(text=f"Time: {int(timeline_value):03d}")
+        time_label = "Tick" if self.pcf.time_unit == "tick" else "Time"
+        self.time_label.config(
+            text=f"{time_label}: {int(timeline_value):03d} / {self.get_solution_max_timestep()}"
+        )
+        self.update_solution_metadata_popup(timeline_value)
 
 
     def agent_has_selected_conflict(self, ag_idx:int) -> bool:
@@ -1333,6 +1362,141 @@ class PlanViz2024:
         self.row_idx += 1
 
 
+    def format_completed_tasks(self, end_tstep:int) -> str:
+        completed_count = self.get_event_count_breakdown(end_tstep)["task_finished"]
+        total_count = self.pcf.solution_total_task_finished
+        if total_count is None:
+            return str(completed_count)
+        return f"{completed_count} / {total_count}"
+
+
+    def format_assigned_tasks(self, end_tstep:int) -> str:
+        assigned_count = self.get_event_count_breakdown(end_tstep)["assigned"]
+        if not self.event_count_prefix["assigned"]:
+            return str(assigned_count)
+        total_count = self.event_count_prefix["assigned"][-1]
+        return f"{assigned_count} / {total_count}"
+
+
+    def format_errand_finished(self, end_tstep:int) -> str:
+        errand_finished_count = self.get_event_count_breakdown(end_tstep)["errand_finished"]
+        if not self.event_count_prefix["errand_finished"]:
+            return str(errand_finished_count)
+        total_count = self.event_count_prefix["errand_finished"][-1]
+        return f"{errand_finished_count} / {total_count}"
+
+
+    def get_solution_max_timestep(self) -> int:
+        if self.pcf.solution_max_timestep >= 0:
+            return self.pcf.solution_max_timestep
+        if self.pcf.makespan >= 0 and self.pcf.end_tstep != math.inf:
+            return int(min(self.pcf.makespan, self.pcf.end_tstep))
+        if self.pcf.end_tstep != math.inf:
+            return int(self.pcf.end_tstep)
+        if self.pcf.makespan >= 0:
+            return int(self.pcf.makespan)
+        return 0
+
+
+    def get_solution_metadata_values(self, _timeline_value:Optional[int]=None) -> Dict[str, str]:
+        return {
+            "agents": str(self.pcf.solution_team_size or self.pcf.team_size),
+            "map_size": f"{self.pcf.width} x {self.pcf.height}",
+            "traversable_cells": str(self.pcf.traversable_cell_count),
+            "obstacle_cells": str(self.pcf.obstacle_cell_count),
+            "agent_max_counter": str(self.pcf.solution_agent_max_counter or "N/A"),
+        }
+
+
+    def update_solution_metadata_popup(self, timeline_value:Optional[int]=None) -> None:
+        if not self.solution_metadata_value_labels:
+            return
+        if self.solution_metadata_window is None or \
+            not self.solution_metadata_window.winfo_exists():
+            return
+
+        metadata_values = self.get_solution_metadata_values(timeline_value)
+        for metadata_key, metadata_value in metadata_values.items():
+            if metadata_key in self.solution_metadata_value_labels:
+                self.solution_metadata_value_labels[metadata_key].config(text=metadata_value)
+
+
+    def close_solution_metadata_popup(self, _event=None) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.solution_metadata_window.destroy()
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels = {}
+
+
+    def open_solution_metadata_popup(self, _event=None) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.update_solution_metadata_popup(self.pcf.cur_tstep)
+            self.solution_metadata_window.lift()
+            return
+
+        self.solution_metadata_window = tk.Toplevel(self.frame.winfo_toplevel())
+        self.solution_metadata_window.overrideredirect(True)
+        self.solution_metadata_window.transient(self.frame.winfo_toplevel())
+        self.solution_metadata_window.lift()
+
+        popup_x = self.metadata_info_button.winfo_rootx() - 210
+        popup_y = self.metadata_info_button.winfo_rooty() + \
+            self.metadata_info_button.winfo_height() + 6
+        self.solution_metadata_window.geometry(f"+{max(0, popup_x)}+{popup_y}")
+
+        popup_frame = tk.Frame(self.solution_metadata_window,
+                               padx=10,
+                               pady=10,
+                               bd=1,
+                               relief=tk.SOLID,
+                               bg="#ffffff")
+        popup_frame.grid(row=0, column=0, sticky="nsew")
+        popup_frame.grid_columnconfigure(0, weight=1)
+
+        title_label = tk.Label(popup_frame,
+                               text="Solution metadata",
+                               font=("Arial", TEXT_SIZE, "bold"),
+                               anchor="w",
+                               bg="#ffffff")
+        title_label.grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        metadata_rows = [
+            ("Agents", "agents"),
+            ("Map size", "map_size"),
+            ("Traversable cells", "traversable_cells"),
+            ("Obstacle cells", "obstacle_cells"),
+            ("agentMaxCounter", "agent_max_counter"),
+        ]
+        values_frame = tk.Frame(popup_frame, bg="#ffffff")
+        values_frame.grid(row=1, column=0, sticky="ew")
+        values_frame.grid_columnconfigure(1, weight=1)
+
+        self.solution_metadata_value_labels = {}
+        for row_num, (label_text, metadata_key) in enumerate(metadata_rows):
+            label = tk.Label(values_frame,
+                             text=f"{label_text}:",
+                             font=("Arial", TEXT_SIZE),
+                             anchor="w",
+                             fg="#2b2f36",
+                             bg="#ffffff")
+            label.grid(row=row_num, column=0, sticky="w", pady=(0, 4))
+
+            value = tk.Label(values_frame,
+                             text="",
+                             font=("Arial", TEXT_SIZE + 1, "bold"),
+                             anchor="e",
+                             justify=tk.RIGHT,
+                             width=12,
+                             fg="#222222",
+                             bg="#ffffff")
+            value.grid(row=row_num, column=1, sticky="e", padx=(16, 0), pady=(0, 4))
+            self.solution_metadata_value_labels[metadata_key] = value
+
+        self.update_solution_metadata_popup(self.pcf.cur_tstep)
+
+
     def init_label(self):
         # ---------- Show tasks according to their states ---------- #
         task_label = tk.Label(self.frame, text = "Shown", font = ("Arial", TEXT_SIZE))
@@ -1441,7 +1605,7 @@ class PlanViz2024:
                                    text="0",
                                    font=("Arial", TEXT_SIZE + 1, "bold"),
                                    anchor="e",
-                                   width=6,
+                                   width=12,
                                    fg="#222222")
             count_value.grid(row=0, column=1, sticky="e", padx=(12, 0))
             self.event_count_value_labels[event_type] = count_value
@@ -1718,7 +1882,16 @@ class PlanViz2024:
         for event_type, count_value in event_breakdown.items():
             if event_type not in self.event_count_value_labels:
                 continue
-            self.event_count_value_labels[event_type].config(text=str(count_value))
+            if event_type == "assigned":
+                display_value = self.format_assigned_tasks(end_tstep)
+            elif event_type == "errand_finished":
+                display_value = self.format_errand_finished(end_tstep)
+            elif event_type == "task_finished":
+                display_value = self.format_completed_tasks(end_tstep)
+            else:
+                display_value = str(count_value)
+            self.event_count_value_labels[event_type].config(text=display_value)
+        self.update_solution_metadata_popup(end_tstep)
 
     def set_error_listbox_height(self, error_count: int) -> None:
         min_rows = 2
