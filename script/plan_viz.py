@@ -1878,10 +1878,9 @@ class PlanViz2024:
                 task_id = global_task_id // self.pcf.max_seq_num
                 seq_id = global_task_id % self.pcf.max_seq_num
                 last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
+                add_event_count(tstep, "errand_finished")
                 if seq_id == last_seq_id:
                     add_event_count(tstep, "task_finished")
-                else:
-                    add_event_count(tstep, "errand_finished")
 
         running_total = {
             "assigned": 0,
@@ -1961,7 +1960,7 @@ class PlanViz2024:
         time_axis_label = popup.time_axis_label.lower()
         item_description = {
             "task": "Task counts increase only when the final step of a task sequence is finished.",
-            "errand": "Errand counts increase when an intermediate stop in a task sequence is finished.",
+            "errand": "Errand counts increase when any stop in a task sequence is finished, including the final stop.",
         }[metric_key]
         plot_descriptions = {
             "accumulated": (
@@ -2401,8 +2400,7 @@ class PlanViz2024:
                     continue
                 last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
                 is_task_finished = seq_id == last_seq_id
-                if (metric_key == "task" and is_task_finished) or \
-                    (metric_key == "errand" and not is_task_finished):
+                if metric_key == "errand" or (metric_key == "task" and is_task_finished):
                     counts_by_time[tstep] = counts_by_time.get(tstep, 0) + 1
         return counts_by_time
 
