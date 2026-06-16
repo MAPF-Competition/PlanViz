@@ -1013,6 +1013,9 @@ class PlanViz2023:
 class PlanViz2024:
     """ This is the control panel of PlanViz2
     """
+    MIN_RESIZED_CANVAS_WIDTH = 240
+    MIN_RESIZED_CANVAS_HEIGHT = 240
+
     AGENT_OBJ_TAG = "agent_obj"
     AGENT_DIR_TAG = "agent_dir"
     AGENT_START_OBJ_TAG = "agent_start_obj"
@@ -1070,6 +1073,9 @@ class PlanViz2024:
         self.pop_gui_window = None
         self.pop_event_listbox = None
         self.pop_location_listbox = None
+        self.throughput_popup = None
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels:Dict[str, tk.Label] = {}
         self.event_count_frame = None
         self.event_count_value_labels:Dict[str, tk.Label] = {}
         self.event_count_times:List[int] = []
@@ -1078,16 +1084,43 @@ class PlanViz2024:
             "errand_finished": [],
             "task_finished": [],
         }
+        self.throughput_by_time:Dict[str, Dict[int, int]] = {
+            "task_finished": {},
+            "errand_finished": {},
+        }
         self.minimap_canvas = None
         self.minimap_photo = None
         self.minimap_image_obj = None
         self.minimap_view_obj = None
         self.minimap_dragging = False
         
-        self.time_label = tk.Label(self.frame,
+        self.header_frame = tk.Frame(self.frame)
+        self.header_frame.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+
+        self.time_label = tk.Label(self.header_frame,
                                    text=f"Time: {self.pcf.cur_tstep:03d}",
                                    font=("Arial", TEXT_SIZE + 10))
-        self.time_label.grid(row=self.row_idx, column=0, columnspan=10, sticky="w")
+        self.time_label.grid(row=0, column=0, sticky="w")
+
+        self.metadata_info_button = tk.Canvas(self.header_frame,
+                                              width=24,
+                                              height=24,
+                                              highlightthickness=0,
+                                              bd=0,
+                                              bg=self.header_frame.cget("bg"),
+                                              cursor="hand2")
+        self.metadata_info_button.grid(row=0, column=1, sticky="w", padx=(8, 0))
+        self.metadata_info_button.create_oval(2, 2, 22, 22,
+                                             fill="#f5f7fb",
+                                             outline="#6b7280",
+                                             width=1)
+        self.metadata_info_button.create_text(12, 12,
+                                             text="i",
+                                             fill="#374151",
+                                             font=("Arial", TEXT_SIZE, "bold"))
+        self.metadata_info_button.bind("<Enter>", self.open_solution_metadata_popup)
+        self.metadata_info_button.bind("<Leave>", self.close_solution_metadata_popup)
+        self.metadata_info_button.bind("<Button-1>", self.open_solution_metadata_popup)
         self.set_time_labels(self.pcf.cur_tstep)
         self.row_idx += 1
         self.mouse_loc_label = tk.Label(self.frame,
@@ -1105,7 +1138,12 @@ class PlanViz2024:
 
     def set_time_labels(self, timeline_value:int) -> None:
         """Update the displayed time based on the current timeline value."""
-        self.time_label.config(text=f"Time: {int(timeline_value):03d}")
+        time_label = "Tick" if self.pcf.time_unit == "tick" else "Time"
+        self.time_label.config(
+            text=f"{time_label}: {int(timeline_value):03d} / {self.get_solution_max_timestep()}"
+        )
+        self.update_throughput_popup(int(timeline_value))
+        self.update_solution_metadata_popup(timeline_value)
 
 
     def agent_has_selected_conflict(self, ag_idx:int) -> bool:
@@ -1264,7 +1302,7 @@ class PlanViz2024:
         self.pause_button.grid(row=self.row_idx, column=1, sticky="nsew")
         self.resume_zoom_button = tk.Button(self.frame, text="Fullsize",
                                             font=("Arial", TEXT_SIZE),
-                                            command=self.resume_zoom)
+                                            command=self.fit_map_to_view)
         self.resume_zoom_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
@@ -1291,6 +1329,12 @@ class PlanViz2024:
             command=self.open_heatmap_stats
         )
         self.stats_button.grid(row=self.row_idx, column=1, sticky="nsew")
+        self.row_idx += 1
+
+        self.throughput_button = tk.Button(self.frame, text="Productivity",
+                                           font=("Arial", TEXT_SIZE),
+                                           command=self.show_throughput_popup)
+        self.throughput_button.grid(row=self.row_idx, column=0, columnspan=4, sticky="nsew")
         self.row_idx += 1
         # ---------- List of checkboxes ---------------------------- #
         self.grid_button = tk.Checkbutton(self.frame, text="Show grids",
@@ -1366,6 +1410,141 @@ class PlanViz2024:
                                                       onvalue=True, offvalue=False)
         self.show_hover_loc_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
+
+
+    def format_completed_tasks(self, end_tstep:int) -> str:
+        completed_count = self.get_event_count_breakdown(end_tstep)["task_finished"]
+        total_count = self.pcf.solution_total_task_finished
+        if total_count is None:
+            return str(completed_count)
+        return f"{completed_count} / {total_count}"
+
+
+    def format_assigned_tasks(self, end_tstep:int) -> str:
+        assigned_count = self.get_event_count_breakdown(end_tstep)["assigned"]
+        if not self.event_count_prefix["assigned"]:
+            return str(assigned_count)
+        total_count = self.event_count_prefix["assigned"][-1]
+        return f"{assigned_count} / {total_count}"
+
+
+    def format_errand_finished(self, end_tstep:int) -> str:
+        errand_finished_count = self.get_event_count_breakdown(end_tstep)["errand_finished"]
+        if not self.event_count_prefix["errand_finished"]:
+            return str(errand_finished_count)
+        total_count = self.event_count_prefix["errand_finished"][-1]
+        return f"{errand_finished_count} / {total_count}"
+
+
+    def get_solution_max_timestep(self) -> int:
+        if self.pcf.solution_max_timestep >= 0:
+            return self.pcf.solution_max_timestep
+        if self.pcf.makespan >= 0 and self.pcf.end_tstep != math.inf:
+            return int(min(self.pcf.makespan, self.pcf.end_tstep))
+        if self.pcf.end_tstep != math.inf:
+            return int(self.pcf.end_tstep)
+        if self.pcf.makespan >= 0:
+            return int(self.pcf.makespan)
+        return 0
+
+
+    def get_solution_metadata_values(self, _timeline_value:Optional[int]=None) -> Dict[str, str]:
+        return {
+            "agents": str(self.pcf.solution_team_size or self.pcf.team_size),
+            "map_size": f"{self.pcf.width} x {self.pcf.height}",
+            "traversable_cells": str(self.pcf.traversable_cell_count),
+            "obstacle_cells": str(self.pcf.obstacle_cell_count),
+            "agent_max_counter": str(self.pcf.solution_agent_max_counter or "N/A"),
+        }
+
+
+    def update_solution_metadata_popup(self, timeline_value:Optional[int]=None) -> None:
+        if not self.solution_metadata_value_labels:
+            return
+        if self.solution_metadata_window is None or \
+            not self.solution_metadata_window.winfo_exists():
+            return
+
+        metadata_values = self.get_solution_metadata_values(timeline_value)
+        for metadata_key, metadata_value in metadata_values.items():
+            if metadata_key in self.solution_metadata_value_labels:
+                self.solution_metadata_value_labels[metadata_key].config(text=metadata_value)
+
+
+    def close_solution_metadata_popup(self, _event=None) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.solution_metadata_window.destroy()
+        self.solution_metadata_window = None
+        self.solution_metadata_value_labels = {}
+
+
+    def open_solution_metadata_popup(self, _event=None) -> None:
+        if self.solution_metadata_window is not None and \
+            self.solution_metadata_window.winfo_exists():
+            self.update_solution_metadata_popup(self.pcf.cur_tstep)
+            self.solution_metadata_window.lift()
+            return
+
+        self.solution_metadata_window = tk.Toplevel(self.frame.winfo_toplevel())
+        self.solution_metadata_window.overrideredirect(True)
+        self.solution_metadata_window.transient(self.frame.winfo_toplevel())
+        self.solution_metadata_window.lift()
+
+        popup_x = self.metadata_info_button.winfo_rootx() - 210
+        popup_y = self.metadata_info_button.winfo_rooty() + \
+            self.metadata_info_button.winfo_height() + 6
+        self.solution_metadata_window.geometry(f"+{max(0, popup_x)}+{popup_y}")
+
+        popup_frame = tk.Frame(self.solution_metadata_window,
+                               padx=10,
+                               pady=10,
+                               bd=1,
+                               relief=tk.SOLID,
+                               bg="#ffffff")
+        popup_frame.grid(row=0, column=0, sticky="nsew")
+        popup_frame.grid_columnconfigure(0, weight=1)
+
+        title_label = tk.Label(popup_frame,
+                               text="Solution metadata",
+                               font=("Arial", TEXT_SIZE, "bold"),
+                               anchor="w",
+                               bg="#ffffff")
+        title_label.grid(row=0, column=0, sticky="w", pady=(0, 8))
+
+        metadata_rows = [
+            ("Agents", "agents"),
+            ("Map size", "map_size"),
+            ("Traversable cells", "traversable_cells"),
+            ("Obstacle cells", "obstacle_cells"),
+            ("agentMaxCounter", "agent_max_counter"),
+        ]
+        values_frame = tk.Frame(popup_frame, bg="#ffffff")
+        values_frame.grid(row=1, column=0, sticky="ew")
+        values_frame.grid_columnconfigure(1, weight=1)
+
+        self.solution_metadata_value_labels = {}
+        for row_num, (label_text, metadata_key) in enumerate(metadata_rows):
+            label = tk.Label(values_frame,
+                             text=f"{label_text}:",
+                             font=("Arial", TEXT_SIZE),
+                             anchor="w",
+                             fg="#2b2f36",
+                             bg="#ffffff")
+            label.grid(row=row_num, column=0, sticky="w", pady=(0, 4))
+
+            value = tk.Label(values_frame,
+                             text="",
+                             font=("Arial", TEXT_SIZE + 1, "bold"),
+                             anchor="e",
+                             justify=tk.RIGHT,
+                             width=12,
+                             fg="#222222",
+                             bg="#ffffff")
+            value.grid(row=row_num, column=1, sticky="e", padx=(16, 0), pady=(0, 4))
+            self.solution_metadata_value_labels[metadata_key] = value
+
+        self.update_solution_metadata_popup(self.pcf.cur_tstep)
 
 
     def init_label(self):
@@ -1525,7 +1704,7 @@ class PlanViz2024:
                                    text="0",
                                    font=("Arial", TEXT_SIZE + 1, "bold"),
                                    anchor="e",
-                                   width=6,
+                                   width=12,
                                    fg="#222222")
             count_value.grid(row=0, column=1, sticky="e", padx=(12, 0))
             self.event_count_value_labels[event_type] = count_value
@@ -1561,12 +1740,34 @@ class PlanViz2024:
         self.pcf.window.geometry(f"{wd_width}x{wd_height}")
         self.pcf.window.title("PlanViz")
         if self.pcf.use_viewport_mode:
+            self.configure_resizable_layout()
             self.pcf.window.update_idletasks()
             self.center_view_on_initial_focus()
             self.update_minimap_viewport()
 
 
-    def on_canvas_configure(self, _):
+    def configure_resizable_layout(self) -> None:
+        if not self.pcf.use_viewport_mode or self.frame.master is not self.pcf.window:
+            return
+
+        self.pcf.window.grid_rowconfigure(0, weight=1)
+        self.pcf.window.grid_columnconfigure(0, weight=1, minsize=1)
+        self.pcf.window.grid_columnconfigure(1, weight=0)
+        self.pcf.canvas.grid_configure(sticky="nsew")
+        self.frame.grid_configure(sticky="ns")
+
+        self.frame.update_idletasks()
+        panel_width = max(self.frame.winfo_width(), self.frame.winfo_reqwidth(), 0)
+        min_canvas_width = min(self.MIN_RESIZED_CANVAS_WIDTH, self.pcf.world_width_px)
+        min_width = min(self.pcf.screen_width, panel_width + min_canvas_width + 8)
+        min_height = min(self.pcf.screen_height, self.MIN_RESIZED_CANVAS_HEIGHT)
+        self.pcf.window.minsize(min_width, min_height)
+
+
+    def on_canvas_configure(self, event):
+        if self.pcf.use_viewport_mode:
+            self.pcf.viewport_width_px = max(event.width, 1)
+            self.pcf.viewport_height_px = max(event.height, 1)
         self.update_minimap_viewport()
 
 
@@ -1733,6 +1934,10 @@ class PlanViz2024:
             "errand_finished": [],
             "task_finished": [],
         }
+        self.throughput_by_time = {
+            "task_finished": {},
+            "errand_finished": {},
+        }
         if self.pcf.max_seq_num <= 0:
             return
 
@@ -1768,6 +1973,10 @@ class PlanViz2024:
             "task_finished": 0,
         }
         for tstep in sorted(event_count_by_time.keys()):
+            for throughput_type in ["task_finished", "errand_finished"]:
+                cur_finished = event_count_by_time[tstep][throughput_type]
+                if cur_finished > 0:
+                    self.throughput_by_time[throughput_type][tstep] = cur_finished
             for event_type in running_total:
                 running_total[event_type] += event_count_by_time[tstep][event_type]
             self.event_count_times.append(tstep)
@@ -1802,7 +2011,699 @@ class PlanViz2024:
         for event_type, count_value in event_breakdown.items():
             if event_type not in self.event_count_value_labels:
                 continue
-            self.event_count_value_labels[event_type].config(text=str(count_value))
+            if event_type == "assigned":
+                display_value = self.format_assigned_tasks(end_tstep)
+            elif event_type == "errand_finished":
+                display_value = self.format_errand_finished(end_tstep)
+            elif event_type == "task_finished":
+                display_value = self.format_completed_tasks(end_tstep)
+            else:
+                display_value = str(count_value)
+            self.event_count_value_labels[event_type].config(text=display_value)
+        self.update_solution_metadata_popup(end_tstep)
+
+    def get_plot_end_tstep(self, start_tstep:int, end_tstep:int,
+                           event_times:List[int]) -> int:
+        if isinstance(end_tstep, float) and math.isinf(end_tstep):
+            return max(event_times, default=start_tstep)
+        return int(end_tstep)
+
+    def get_throughput_options_from_popup(self, popup:tk.Toplevel) -> Tuple[str, str]:
+        metric_key = "errand" if popup.throughput_item_var.get() == "Errand" else "task"
+        selected_metric = popup.throughput_metric_var.get()
+        if selected_metric == "Throughput":
+            series_key = "rate"
+        elif selected_metric == "Instant":
+            series_key = "instant"
+        else:
+            series_key = "accumulated"
+        return metric_key, series_key
+
+    def get_throughput_help_text(self, popup:tk.Toplevel) -> str:
+        metric_key, series_key = self.get_throughput_options_from_popup(popup)
+        item_name = "Errand" if metric_key == "errand" else "Task"
+        time_axis_label = popup.time_axis_label.lower()
+        item_description = {
+            "task": "Task counts increase only when the final step of a task sequence is finished.",
+            "errand": "Errand counts increase when an intermediate stop in a task sequence is finished.",
+        }[metric_key]
+        plot_descriptions = {
+            "accumulated": (
+                "Completed plot\n"
+                f"Shows the cumulative number of completed {item_name.lower()}s from the start "
+                f"through each {time_axis_label}."
+            ),
+            "instant": (
+                "Instant plot\n"
+                f"Shows how many {item_name.lower()}s finish exactly at each {time_axis_label}. "
+            ),
+            "rate": (
+                "Throughput plot\n"
+                f"Shows cumulative completed {item_name.lower()}s divided by elapsed time since "
+                "the start. Higher values mean a faster average completion rate."
+            ),
+        }
+        timeline_description = (
+            "The red dotted vertical line marks the current visualizer time. "
+            "With 'Show full timeline' off, the plot is clipped to the current time."
+        )
+        return (
+            f"{item_description}\n\n"
+            f"{plot_descriptions[series_key]}\n\n{timeline_description}"
+        )
+
+    def hide_throughput_help_tooltip(self, popup:tk.Toplevel) -> None:
+        tooltip = getattr(popup, "throughput_help_tooltip", None)
+        if tooltip is None:
+            return
+        try:
+            if tooltip.winfo_exists():
+                tooltip.destroy()
+        except tk.TclError:
+            pass
+        popup.throughput_help_tooltip = None
+
+    def show_throughput_help_tooltip(self, popup:tk.Toplevel,
+                                     anchor_widget:tk.Widget) -> None:
+        if popup.winfo_exists() == 0:
+            return
+        self.hide_throughput_help_tooltip(popup)
+
+        tooltip = tk.Toplevel(popup)
+        tooltip.wm_overrideredirect(True)
+        tooltip.transient(popup)
+        try:
+            tooltip.attributes("-topmost", True)
+        except tk.TclError:
+            pass
+
+        help_label = tk.Label(tooltip,
+                              text=self.get_throughput_help_text(popup),
+                              font=("Arial", TEXT_SIZE),
+                              justify=tk.LEFT,
+                              wraplength=380,
+                              padx=10,
+                              pady=8,
+                              bg="#fffaf0",
+                              fg="#1f2937",
+                              relief=tk.SOLID,
+                              bd=1)
+        help_label.pack()
+
+        x = anchor_widget.winfo_rootx() + anchor_widget.winfo_width() + 8
+        y = anchor_widget.winfo_rooty() - 6
+        tooltip.wm_geometry(f"+{x}+{y}")
+        popup.throughput_help_tooltip = tooltip
+
+    def refresh_throughput_help_tooltip(self, popup:tk.Toplevel) -> None:
+        if getattr(popup, "throughput_help_tooltip", None) is None:
+            return
+        self.show_throughput_help_tooltip(popup, popup.throughput_help_icon)
+
+    def create_throughput_help_icon(self, popup:tk.Toplevel,
+                                    parent:tk.Widget) -> tk.Canvas:
+        icon_size = 22
+        help_icon = tk.Canvas(parent,
+                              width=icon_size,
+                              height=icon_size,
+                              highlightthickness=0,
+                              bd=0,
+                              bg=parent.cget("bg"))
+        help_icon.create_oval(2, 2, icon_size - 2, icon_size - 2,
+                              fill="#f8fafc",
+                              outline="#64748b",
+                              width=1)
+        help_icon.create_text(icon_size / 2,
+                              icon_size / 2,
+                              text="?",
+                              fill="#334155",
+                              font=("Arial", TEXT_SIZE, "bold"))
+        help_icon.bind("<Enter>",
+                       lambda _: self.show_throughput_help_tooltip(popup, help_icon))
+        help_icon.bind("<Leave>",
+                       lambda _: self.hide_throughput_help_tooltip(popup))
+        return help_icon
+
+    def open_throughput_popup(self,
+                              throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]],
+                              time_axis_label:str,
+                              plot_end_tstep:int,
+                              current_tstep:int) -> tk.Toplevel:
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+        from matplotlib.figure import Figure
+
+        popup = tk.Toplevel(self.pcf.window)
+        popup.title("Throughput Timeline")
+        popup.transient(self.pcf.window)
+        popup.lift()
+        popup.geometry("760x540")
+        popup.show_full_timeline = tk.BooleanVar(master=popup, value=False)
+        popup.throughput_item_var = tk.StringVar(master=popup, value="Task")
+        popup.throughput_metric_var = tk.StringVar(master=popup, value="Completed")
+
+        header_frame = tk.Frame(popup, padx=12, pady=10)
+        header_frame.pack(fill=tk.X)
+        title_label = tk.Label(header_frame,
+                               text="Throughput Timeline",
+                               font=("Arial", TEXT_SIZE + 6, "bold"),
+                               anchor="w")
+        title_label.pack(fill=tk.X)
+        summary_label = tk.Label(header_frame,
+                                 text="",
+                                 font=("Arial", TEXT_SIZE),
+                                 anchor="w",
+                                 justify=tk.LEFT,
+                                 wraplength=720)
+        summary_label.pack(fill=tk.X)
+
+        control_frame = tk.Frame(header_frame)
+        control_frame.pack(fill=tk.X, pady=(6, 0))
+
+        def on_throughput_control_change(_=None) -> None:
+            getattr(popup, "refresh_callback", lambda: None)()
+            self.refresh_throughput_help_tooltip(popup)
+
+        item_combobox = ttk.Combobox(control_frame,
+                                     textvariable=popup.throughput_item_var,
+                                     values=("Task", "Errand"),
+                                     state="readonly",
+                                     width=10,
+                                     font=("Arial", TEXT_SIZE))
+        item_combobox.pack(side=tk.LEFT, padx=(0, 6))
+        metric_combobox = ttk.Combobox(control_frame,
+                                       textvariable=popup.throughput_metric_var,
+                                       values=("Completed", "Instant", "Throughput"),
+                                       state="readonly",
+                                       width=14,
+                                       font=("Arial", TEXT_SIZE))
+        metric_combobox.pack(side=tk.LEFT, padx=(0, 12))
+        show_full_checkbox = tk.Checkbutton(control_frame,
+                                            text="Show full timeline",
+                                            font=("Arial", TEXT_SIZE),
+                                            variable=popup.show_full_timeline,
+                                            onvalue=True,
+                                            offvalue=False,
+                                            command=on_throughput_control_change)
+        show_full_checkbox.pack(side=tk.LEFT)
+        help_icon = self.create_throughput_help_icon(popup, control_frame)
+        help_icon.pack(side=tk.LEFT, padx=(8, 0))
+        item_combobox.bind("<<ComboboxSelected>>", on_throughput_control_change)
+        metric_combobox.bind("<<ComboboxSelected>>", on_throughput_control_change)
+
+        chart_frame = tk.Frame(popup)
+        chart_frame.pack(fill=tk.BOTH, expand=True)
+        figure = Figure(figsize=(7.4, 4.2), dpi=100)
+        axis = figure.add_subplot(111)
+        canvas = FigureCanvasTkAgg(figure, master=chart_frame)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        toolbar_frame = tk.Frame(chart_frame)
+        toolbar_frame.pack(fill=tk.X)
+        toolbar = NavigationToolbar2Tk(canvas, toolbar_frame)
+        toolbar.update()
+
+        popup.throughput_chart = {
+            "frame": chart_frame,
+            "figure": figure,
+            "axis": axis,
+            "canvas": canvas,
+            "toolbar": toolbar,
+        }
+        self.render_selected_throughput_axis(
+            axis,
+            throughput_series,
+            "task",
+            "accumulated",
+            time_axis_label,
+            plot_end_tstep,
+            current_tstep,
+            False,
+        )
+        self.update_throughput_summary(
+            summary_label,
+            "task",
+            "accumulated",
+            time_axis_label,
+            current_tstep,
+            self.get_throughput_summary_values_by_metric(
+                current_tstep,
+                throughput_series,
+            ),
+            False,
+        )
+
+        popup.throughput_chart["figure"].tight_layout()
+        popup.throughput_chart["canvas"].draw()
+
+        popup.summary_label = summary_label
+        popup.show_full_checkbox = show_full_checkbox
+        popup.item_combobox = item_combobox
+        popup.metric_combobox = metric_combobox
+        popup.throughput_help_icon = help_icon
+        popup.throughput_help_tooltip = None
+        popup.time_axis_label = time_axis_label
+        popup.plot_end_tstep = plot_end_tstep
+        return popup
+
+    def configure_throughput_axis(self, axis,
+                                  times:List[int],
+                                  time_axis_label:str,
+                                  plot_end_tstep:int,
+                                  current_tstep:int,
+                                  show_full_timeline:bool,
+                                  y_label:str) -> None:
+        if times:
+            min_time = min(times)
+            if show_full_timeline:
+                max_time = max(plot_end_tstep, min_time + 1)
+            else:
+                max_time = min(max(current_tstep, min_time + 1),
+                               max(plot_end_tstep, min_time + 1))
+            axis.set_xlim(min_time, max_time)
+        axis.axvline(current_tstep, color="#dc2626", linestyle=":", linewidth=1.2)
+        axis.set_ylim(bottom=0)
+        axis.set_xlabel(time_axis_label)
+        axis.set_ylabel(y_label)
+        axis.grid(True, linestyle="--", linewidth=0.6, alpha=0.45)
+
+    def render_accumulated_throughput_axis(self, axis,
+                                           times:List[int],
+                                           throughput:List[int],
+                                           time_axis_label:str,
+                                           plot_end_tstep:int,
+                                           current_tstep:int,
+                                           show_full_timeline:bool,
+                                           item_label:str,
+                                           y_label:str) -> None:
+        axis.clear()
+        if times and throughput and max(throughput) > 0:
+            axis.step(times, throughput, where="post", linewidth=2.0, color="#2563eb")
+            axis.scatter(times, throughput, s=18, color="#1d4ed8", zorder=3)
+        else:
+            axis.text(0.5, 0.5, f"No completed {item_label} yet",
+                      ha="center", va="center", transform=axis.transAxes)
+        self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
+                                       current_tstep, show_full_timeline,
+                                       y_label)
+
+    def render_instant_throughput_axis(self, axis,
+                                       times:List[int],
+                                       throughput:List[int],
+                                       time_axis_label:str,
+                                       plot_end_tstep:int,
+                                       current_tstep:int,
+                                       show_full_timeline:bool,
+                                       item_label:str,
+                                       y_label:str) -> None:
+        axis.clear()
+        positive_points = [
+            (time_value, throughput_value)
+            for time_value, throughput_value in zip(times, throughput)
+            if throughput_value > 0
+        ]
+        if positive_points:
+            point_times = [time_value for time_value, _ in positive_points]
+            point_values = [throughput_value for _, throughput_value in positive_points]
+            axis.scatter(point_times, point_values, s=22, color="#1d4ed8", zorder=3)
+        else:
+            axis.text(0.5, 0.5, f"No {item_label} completions yet",
+                      ha="center", va="center", transform=axis.transAxes)
+        self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
+                                       current_tstep, show_full_timeline,
+                                       y_label)
+
+    def render_rate_throughput_axis(self, axis,
+                                    times:List[int],
+                                    throughput:List[float],
+                                    time_axis_label:str,
+                                    plot_end_tstep:int,
+                                    current_tstep:int,
+                                    show_full_timeline:bool,
+                                    item_label:str,
+                                    y_label:str) -> None:
+        axis.clear()
+        if times and throughput and max(throughput) > 0:
+            axis.plot(times, throughput, linewidth=2.0, color="#2563eb")
+            axis.scatter(times, throughput, s=18, color="#1d4ed8", zorder=3)
+        else:
+            axis.text(0.5, 0.5, f"No completed {item_label} yet",
+                      ha="center", va="center", transform=axis.transAxes)
+        self.configure_throughput_axis(axis, times, time_axis_label, plot_end_tstep,
+                                       current_tstep, show_full_timeline,
+                                       y_label)
+
+    def get_throughput_y_label(self, metric_key:str, series_key:str) -> str:
+        item_label = "Errand" if metric_key == "errand" else "Task"
+        if series_key == "rate":
+            return f"{item_label} Throughput"
+        if series_key == "instant":
+            return f"{item_label} Completions at Time"
+        return f"{item_label} Completed Count"
+
+    def render_selected_throughput_axis(self,
+                                        axis,
+                                        throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]],
+                                        metric_key:str,
+                                        series_key:str,
+                                        time_axis_label:str,
+                                        plot_end_tstep:int,
+                                        current_tstep:int,
+                                        show_full_timeline:bool) -> None:
+        item_label = "errands" if metric_key == "errand" else "tasks"
+        y_label = self.get_throughput_y_label(metric_key, series_key)
+        if series_key == "rate":
+            rate_times, rate_throughput = throughput_series[metric_key]["rate"]
+            self.render_rate_throughput_axis(
+                axis,
+                rate_times,
+                rate_throughput,
+                time_axis_label,
+                plot_end_tstep,
+                current_tstep,
+                show_full_timeline,
+                item_label,
+                y_label,
+            )
+            return
+        if series_key == "instant":
+            instant_times, instant_throughput = throughput_series[metric_key]["instant"]
+            self.render_instant_throughput_axis(
+                axis,
+                instant_times,
+                instant_throughput,
+                time_axis_label,
+                plot_end_tstep,
+                current_tstep,
+                show_full_timeline,
+                item_label,
+                y_label,
+            )
+            return
+
+        accumulated_times, accumulated_throughput = throughput_series[metric_key]["accumulated"]
+        self.render_accumulated_throughput_axis(
+            axis,
+            accumulated_times,
+            accumulated_throughput,
+            time_axis_label,
+            plot_end_tstep,
+            current_tstep,
+            show_full_timeline,
+            item_label,
+            y_label,
+        )
+
+    def get_selected_throughput_options(self) -> Tuple[str, str]:
+        if self.throughput_popup is None:
+            return "task", "accumulated"
+        try:
+            return self.get_throughput_options_from_popup(self.throughput_popup)
+        except tk.TclError:
+            return "task", "accumulated"
+
+    def update_throughput_summary(self, summary_label:tk.Label,
+                                  metric_key:str,
+                                  series_key:str,
+                                  time_axis_label:str,
+                                  current_tstep:int,
+                                  summary_values:Dict[str, Dict[str, int]],
+                                  show_full_timeline:bool) -> None:
+        item_label = "Errand" if metric_key == "errand" else "Task"
+        values = summary_values[metric_key]
+        if series_key == "rate":
+            if show_full_timeline:
+                summary_label.config(
+                    text=f"{item_label} throughput at {time_axis_label.lower()} {current_tstep}: {values['rate_current']:.4f} | Peak throughput: {values['rate_peak']:.4f}"
+                )
+            else:
+                summary_label.config(
+                    text=f"{item_label} throughput at {time_axis_label.lower()} {current_tstep}: {values['rate_current']:.4f}"
+                )
+            return
+        if series_key == "instant":
+            if show_full_timeline:
+                summary_label.config(
+                    text=f"{item_label} instant throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']} | Peak throughput: {values['instant_peak']}"
+                )
+            else:
+                summary_label.config(
+                    text=f"{item_label} instant throughput at {time_axis_label.lower()} {current_tstep}: {values['instant_current']}"
+                )
+            return
+
+        if show_full_timeline:
+            summary_label.config(
+                text=f"{item_label} completed by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']} | Final completed: {values['accumulated_total']}"
+            )
+        else:
+            summary_label.config(
+                text=f"{item_label} completed by {time_axis_label.lower()} {current_tstep}: {values['accumulated_current']}"
+            )
+
+    def get_throughput_plot_end_tstep(self) -> int:
+        event_times = self.event_count_times
+        if not event_times:
+            event_times = sorted(self.pcf.events["finished"].keys())
+        return self.get_plot_end_tstep(int(self.pcf.start_tstep),
+                                       self.pcf.end_tstep,
+                                       event_times)
+
+    def get_throughput_event_type(self, metric_key:str) -> str:
+        return "errand_finished" if metric_key == "errand" else "task_finished"
+
+    def get_finished_throughput_counts_by_time(self, metric_key:str) -> Dict[int, int]:
+        event_type = self.get_throughput_event_type(metric_key)
+        if self.event_count_times:
+            return self.throughput_by_time[event_type]
+
+        counts_by_time:Dict[int, int] = {}
+        for tstep, cur_events in self.pcf.events["finished"].items():
+            for global_task_id in cur_events:
+                task_id = global_task_id // self.pcf.max_seq_num
+                seq_id = global_task_id % self.pcf.max_seq_num
+                if task_id not in self.pcf.seq_tasks:
+                    continue
+                last_seq_id = len(self.pcf.seq_tasks[task_id].tasks) - 1
+                is_task_finished = seq_id == last_seq_id
+                if (metric_key == "task" and is_task_finished) or \
+                    (metric_key == "errand" and not is_task_finished):
+                    counts_by_time[tstep] = counts_by_time.get(tstep, 0) + 1
+        return counts_by_time
+
+    def get_accumulated_throughput_at_time(self, metric_key:str, tstep:int) -> int:
+        event_type = self.get_throughput_event_type(metric_key)
+        if self.event_count_times:
+            return self.get_event_count_breakdown(tstep)[event_type]
+        return sum(
+            count
+            for event_tstep, count in self.get_finished_throughput_counts_by_time(metric_key).items()
+            if event_tstep <= tstep
+        )
+
+    def get_instant_throughput_at_time(self, metric_key:str, tstep:int) -> int:
+        return self.get_finished_throughput_counts_by_time(metric_key).get(int(tstep), 0)
+
+    def get_accumulated_throughput_series(self,
+                                          metric_key:str,
+                                          through_tstep:Optional[int]=None) -> Tuple[List[int], List[int]]:
+        plot_end_tstep = self.get_throughput_plot_end_tstep()
+        if through_tstep is None:
+            through_tstep = plot_end_tstep
+
+        through_tstep = max(int(self.pcf.start_tstep),
+                            min(int(through_tstep), plot_end_tstep))
+
+        start_tstep = int(self.pcf.start_tstep)
+        event_type = self.get_throughput_event_type(metric_key)
+        counts_by_time = self.get_finished_throughput_counts_by_time(metric_key)
+        times = [start_tstep]
+        running_total = self.get_event_count_breakdown(start_tstep)[event_type] \
+            if self.event_count_times else sum(
+                count for tstep, count in counts_by_time.items() if tstep <= start_tstep
+            )
+        throughput = [running_total]
+
+        for tstep in sorted(counts_by_time.keys()):
+            if tstep <= start_tstep:
+                continue
+            if tstep > through_tstep:
+                break
+            running_total += counts_by_time[tstep]
+            times.append(tstep)
+            throughput.append(running_total)
+
+        if times[-1] < through_tstep:
+            times.append(through_tstep)
+            throughput.append(throughput[-1])
+
+        return times, throughput
+
+    def get_instant_throughput_series(self,
+                                      metric_key:str,
+                                      through_tstep:Optional[int]=None) -> Tuple[List[int], List[int]]:
+        plot_end_tstep = self.get_throughput_plot_end_tstep()
+        if through_tstep is None:
+            through_tstep = plot_end_tstep
+
+        through_tstep = max(int(self.pcf.start_tstep),
+                            min(int(through_tstep), plot_end_tstep))
+        start_tstep = int(self.pcf.start_tstep)
+        counts_by_time = self.get_finished_throughput_counts_by_time(metric_key)
+        times = [start_tstep]
+        throughput = [counts_by_time.get(start_tstep, 0)]
+
+        for tstep in sorted(counts_by_time.keys()):
+            if tstep <= start_tstep:
+                continue
+            if tstep > through_tstep:
+                break
+            times.append(tstep)
+            throughput.append(counts_by_time[tstep])
+
+        if times[-1] < through_tstep:
+            times.append(through_tstep)
+            throughput.append(counts_by_time.get(through_tstep, 0))
+
+        return times, throughput
+
+    def get_rate_throughput_at_time(self, metric_key:str, tstep:int) -> float:
+        elapsed_time = int(tstep) - int(self.pcf.start_tstep)
+        if elapsed_time <= 0:
+            return 0.0
+        return self.get_accumulated_throughput_at_time(metric_key, tstep) / elapsed_time
+
+    def get_rate_throughput_series(self,
+                                   metric_key:str,
+                                   through_tstep:Optional[int]=None) -> Tuple[List[int], List[float]]:
+        accumulated_times, accumulated_throughput = self.get_accumulated_throughput_series(
+            metric_key,
+            through_tstep,
+        )
+        start_tstep = int(self.pcf.start_tstep)
+        rate_throughput = []
+        for tstep, accumulated_value in zip(accumulated_times, accumulated_throughput):
+            elapsed_time = int(tstep) - start_tstep
+            if elapsed_time <= 0:
+                rate_throughput.append(0.0)
+            else:
+                rate_throughput.append(accumulated_value / elapsed_time)
+        return accumulated_times, rate_throughput
+
+    def get_throughput_series_by_metric(self, through_tstep:int) -> Dict[str, Dict[str, Tuple[List[int], List[int]]]]:
+        return {
+            metric_key: {
+                "accumulated": self.get_accumulated_throughput_series(
+                    metric_key,
+                    through_tstep,
+                ),
+                "instant": self.get_instant_throughput_series(
+                    metric_key,
+                    through_tstep,
+                ),
+                "rate": self.get_rate_throughput_series(
+                    metric_key,
+                    through_tstep,
+                ),
+            }
+            for metric_key in ["task", "errand"]
+        }
+
+    def get_throughput_summary_values(self,
+                                      metric_key:str,
+                                      current_tstep:int,
+                                      accumulated_throughput:List[int],
+                                      instant_throughput:List[int],
+                                      rate_throughput:List[float]) -> Dict[str, float]:
+        return {
+            "accumulated_current": self.get_accumulated_throughput_at_time(
+                metric_key,
+                current_tstep,
+            ),
+            "accumulated_total": accumulated_throughput[-1] if accumulated_throughput else 0,
+            "instant_current": self.get_instant_throughput_at_time(
+                metric_key,
+                current_tstep,
+            ),
+            "instant_peak": max(instant_throughput, default=0),
+            "rate_current": self.get_rate_throughput_at_time(metric_key, current_tstep),
+            "rate_peak": max(rate_throughput, default=0.0),
+        }
+
+    def get_throughput_summary_values_by_metric(
+            self,
+            current_tstep:int,
+            throughput_series:Dict[str, Dict[str, Tuple[List[int], List[int]]]]
+    ) -> Dict[str, Dict[str, int]]:
+        return {
+            metric_key: self.get_throughput_summary_values(
+                metric_key,
+                current_tstep,
+                throughput_series[metric_key]["accumulated"][1],
+                throughput_series[metric_key]["instant"][1],
+                throughput_series[metric_key]["rate"][1],
+            )
+            for metric_key in ["task", "errand"]
+        }
+
+    def update_throughput_popup(self, timeline_value:Optional[int]=None) -> None:
+        if self.throughput_popup is None or \
+            self.throughput_popup.winfo_exists() == 0:
+            return
+
+        current_tstep = self.pcf.cur_tstep
+        if timeline_value is not None:
+            current_tstep = int(timeline_value)
+
+        show_full_timeline = self.throughput_popup.show_full_timeline.get()
+        series_end_tstep = self.throughput_popup.plot_end_tstep
+        if not show_full_timeline:
+            series_end_tstep = current_tstep
+
+        throughput_series = self.get_throughput_series_by_metric(series_end_tstep)
+        metric_key, series_key = self.get_selected_throughput_options()
+        chart = self.throughput_popup.throughput_chart
+        self.render_selected_throughput_axis(
+            chart["axis"],
+            throughput_series,
+            metric_key,
+            series_key,
+            self.throughput_popup.time_axis_label,
+            self.throughput_popup.plot_end_tstep,
+            current_tstep,
+            show_full_timeline,
+        )
+        self.update_throughput_summary(
+            self.throughput_popup.summary_label,
+            metric_key,
+            series_key,
+            self.throughput_popup.time_axis_label,
+            current_tstep,
+            self.get_throughput_summary_values_by_metric(
+                current_tstep,
+                throughput_series,
+            ),
+            show_full_timeline,
+        )
+        chart["figure"].tight_layout()
+        chart["canvas"].draw()
+        chart["canvas"].flush_events()
+        self.throughput_popup.update()
+
+    def show_throughput_popup(self) -> None:
+        if self.throughput_popup is not None and self.throughput_popup.winfo_exists():
+            self.throughput_popup.destroy()
+
+        time_axis_label = "Time"
+        plot_end_tstep = self.get_throughput_plot_end_tstep()
+        throughput_series = self.get_throughput_series_by_metric(self.pcf.cur_tstep)
+        self.throughput_popup = self.open_throughput_popup(
+            throughput_series,
+            time_axis_label,
+            plot_end_tstep,
+            self.pcf.cur_tstep,
+        )
+        self.throughput_popup.refresh_callback = self.update_throughput_popup
+        self.update_throughput_popup()
 
     def set_error_listbox_height(self, error_count: int) -> None:
         min_rows = 2
@@ -2251,6 +3152,49 @@ class PlanViz2024:
             self.pcf.canvas.xview_moveto((target_scroll_x - srx0) / sr_w)
         if sr_h > 0:
             self.pcf.canvas.yview_moveto((target_scroll_y - sry0) / sr_h)
+
+
+    def fit_map_to_view(self):
+        self.pcf.canvas.update_idletasks()
+        view_width = self.pcf.canvas.winfo_width()
+        view_height = self.pcf.canvas.winfo_height()
+        if view_width <= 1:
+            view_width = self.pcf.viewport_width_px
+        if view_height <= 1:
+            view_height = self.pcf.viewport_height_px
+        if view_width <= 1:
+            view_width = int(float(self.pcf.canvas.cget("width")))
+        if view_height <= 1:
+            view_height = int(float(self.pcf.canvas.cget("height")))
+        view_width = max(1.0, float(view_width))
+        view_height = max(1.0, float(view_height))
+
+        coord_padding_tiles = 1 if self.pcf.show_coord_labels else 0
+        map_width_tiles = max(1, self.pcf.width + coord_padding_tiles)
+        map_height_tiles = max(1, self.pcf.height + coord_padding_tiles)
+        tile_size = max(1.0, min(view_width / map_width_tiles,
+                                  view_height / map_height_tiles))
+
+        if self.pcf.tile_size <= 0:
+            return
+        scale = tile_size / self.pcf.tile_size
+        self.pcf.canvas.scale("all", 0, 0, scale, scale)
+        self.pcf.tile_size = tile_size
+
+        text_size = max(1, int(self.pcf.tile_size // 2))
+        hwy_size = max(1, int(self.pcf.tile_size * 1.2))
+        for child_widget in self.pcf.canvas.find_withtag("text"):
+            self.pcf.canvas.itemconfigure(child_widget, font=("Arial", text_size))
+        for child_widget in self.pcf.canvas.find_withtag("hwy"):
+            self.pcf.canvas.itemconfigure(child_widget, font=("Arial", hwy_size))
+        if self.pcf.use_viewport_mode:
+            self.pcf.viewport_width_px = int(view_width)
+            self.pcf.viewport_height_px = int(view_height)
+        self.pcf.update_canvas_scrollregion()
+        self.pcf.canvas.xview_moveto(0)
+        self.pcf.canvas.yview_moveto(0)
+        self.update_minimap_viewport()
+        self.pcf.canvas.update()
 
 
     def resume_zoom(self):
