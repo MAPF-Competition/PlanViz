@@ -1015,6 +1015,15 @@ class PlanViz2024:
     """
     MIN_RESIZED_CANVAS_WIDTH = 240
     MIN_RESIZED_CANVAS_HEIGHT = 240
+    HEATMAP_OFF_LABEL = "Off"
+    HEATMAP_ENVIRONMENTAL_STATIC_LABEL = "Environmental static"
+    HEATMAP_ENVIRONMENTAL_DYNAMIC_LABEL = "Environmental dynamic"
+    HEATMAP_AGENT_STATIC_LABEL = "Agent static"
+    HEATMAP_AGENT_DYNAMIC_LABEL = "Agent dynamic"
+    TOTAL_SUBOPTIMAL_MOVEMENT_LABEL = "Total suboptimal movement"
+    WRONG_DIRECTION_COUNT_LABEL = "Wrong-direction count"
+    WAIT_COUNT_LABEL = "Wait count"
+    TURN_COUNT_LABEL = "Turn count"
 
     AGENT_OBJ_TAG = "agent_obj"
     AGENT_DIR_TAG = "agent_dir"
@@ -1044,6 +1053,8 @@ class PlanViz2024:
         self.is_agent_colors = tk.BooleanVar()
         self.is_highway = tk.BooleanVar()
         self.is_heuristic_map = tk.BooleanVar()
+        self.heatmap_mode = tk.StringVar(value=self.HEATMAP_OFF_LABEL)
+        self.dynamic_heatmap_start_time = tk.StringVar(value=str(self.pcf.start_tstep))
 
         self.is_run.set(False)
         self.is_grid.set(_grid)
@@ -1053,8 +1064,10 @@ class PlanViz2024:
         self.show_all_conf_ag.set(_conf_ag)
         self.show_hover_loc.set(False)
         self.is_heat_map.set(False)
+        self.is_dynamic_map.set(False)
         self.is_highway.set(False)
         self.is_heuristic_map.set(False)
+        self.heatmap_mode.set(self.HEATMAP_OFF_LABEL)
         self.listbox_monospace_font = font.Font(family="Courier", size=TEXT_SIZE)
 
         gui_window = self.pcf.window
@@ -1158,13 +1171,59 @@ class PlanViz2024:
                 return True
         return False
 
+    def is_environmental_static_heatmap_mode(self) -> bool:
+        return self.heatmap_mode.get() == self.HEATMAP_ENVIRONMENTAL_STATIC_LABEL
+
+    def is_environmental_dynamic_heatmap_mode(self) -> bool:
+        return self.heatmap_mode.get() == self.HEATMAP_ENVIRONMENTAL_DYNAMIC_LABEL
+
+    def is_agent_static_heatmap_mode(self) -> bool:
+        return self.heatmap_mode.get() == self.HEATMAP_AGENT_STATIC_LABEL
+
+    def is_agent_dynamic_heatmap_mode(self) -> bool:
+        return self.heatmap_mode.get() == self.HEATMAP_AGENT_DYNAMIC_LABEL
+
+    def is_environmental_heatmap_mode(self) -> bool:
+        return (
+            self.is_environmental_static_heatmap_mode() or
+            self.is_environmental_dynamic_heatmap_mode()
+        )
+
+    def is_agent_heatmap_mode(self) -> bool:
+        return (
+            self.is_agent_static_heatmap_mode() or
+            self.is_agent_dynamic_heatmap_mode()
+        )
+
+    def is_dynamic_heatmap_mode(self) -> bool:
+        return (
+            self.is_environmental_dynamic_heatmap_mode() or
+            self.is_agent_dynamic_heatmap_mode()
+        )
+
+    def get_selected_heatmap_metric_key(self):
+        if not hasattr(self, "heatmap_type"):
+            return "all"
+        return {
+            self.TOTAL_SUBOPTIMAL_MOVEMENT_LABEL: "all",
+            self.WRONG_DIRECTION_COUNT_LABEL: "wrong_direction",
+            self.WAIT_COUNT_LABEL: "waited",
+            self.TURN_COUNT_LABEL: "bad_turn",
+        }[self.heatmap_type.get()]
+
+    def get_selected_agent_rgba(self):
+        metric_key = self.get_selected_heatmap_metric_key()
+        if self.is_agent_dynamic_heatmap_mode():
+            return self.pcf.dynamic_agents_rgba_by_metric.get(metric_key, [])
+        return self.pcf.agents_rgba_by_metric.get(metric_key, [])
 
     def update_agent_colors(self) -> None:
         current_error_agents = self.pcf.error_agents_by_timestep.get(self.pcf.cur_tstep, set())
-        heatmap_mode = self.is_agent_colors.get()
+        heatmap_mode = self.is_agent_heatmap_mode()
+        agent_rgba = self.get_selected_agent_rgba()
         for ag_idx, agent in self.pcf.agents.items():
-            if heatmap_mode:
-                rgba = self.pcf.agents_rgba[ag_idx]
+            if heatmap_mode and ag_idx < len(agent_rgba):
+                rgba = agent_rgba[ag_idx]
                 shown_color = '#{:02X}{:02X}{:02X}'.format(
                     int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255))
             else:
@@ -1319,16 +1378,12 @@ class PlanViz2024:
                                         command=self.restart_timestep)
         self.restart_button.grid(row=self.row_idx, column=2, columnspan=2, sticky="nsew")
         self.row_idx += 1
-        self.reset_dynamic_button = tk.Button(self.frame, text="Reset Heatmap",
-                                        font=("Arial", TEXT_SIZE),
-                                        command=self.reset_heat_map)
-        self.reset_dynamic_button.grid(row=self.row_idx, column=0, sticky="nsew")
         self.stats_button = tk.Button(
             self.frame, text="Heatmap Stats",
             font=("Arial", TEXT_SIZE),
             command=self.open_heatmap_stats
         )
-        self.stats_button.grid(row=self.row_idx, column=1, sticky="nsew")
+        self.stats_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="nsew")
         self.row_idx += 1
 
         self.throughput_button = tk.Button(self.frame, text="Productivity",
@@ -1381,29 +1436,6 @@ class PlanViz2024:
                                                       command=self.off_agent_path)
         self.show_all_conf_ag_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
         self.row_idx += 1
-        self.show_heatmap_button = tk.Checkbutton(self.frame, text=f"Show Environmental Heatmap ({self.pcf.heatmap_max_type})",
-                                                  font=("Arial", TEXT_SIZE),
-                                                  variable=self.is_heat_map,
-                                                  onvalue=True, offvalue=False,
-                                                  command=self.show_heat_maps)
-        self.show_heatmap_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-        self.show_dynamic_button = tk.Checkbutton(self.frame, text="Show Dynamic Heatmap",
-                                                  font=("Arial", TEXT_SIZE),
-                                                  variable=self.is_dynamic_map,
-                                                  onvalue=True, offvalue=False,
-                                                  command=self.show_dynamic_maps)
-        self.show_dynamic_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-        self.show_agent_color_button = tk.Checkbutton(self.frame, text="Show Agent Heatmap",
-                                                  font=("Arial", TEXT_SIZE),
-                                                  variable=self.is_agent_colors,
-                                                  onvalue=True, offvalue=False,
-                                                  command=self.update_agent_colors)
-        self.show_agent_color_button.grid(row=self.row_idx, column=0, columnspan=2, sticky="w")
-        self.row_idx += 1
-        
-                
         self.show_hover_loc_button = tk.Checkbutton(self.frame, text="Show location when mouse hover",
                                                       font=("Arial",TEXT_SIZE),
                                                       variable=self.show_hover_loc,
@@ -1561,19 +1593,50 @@ class PlanViz2024:
         self.task_shown.grid(row=self.row_idx, column=1, sticky="w")
         self.row_idx += 1
 
-        # ---------- Change Heatmap View ---------- #
-        task_label = tk.Label(self.frame, text="Change heatmap view", font=("Arial", TEXT_SIZE))
+        # ---------- Change Heatmap Mode ---------- #
+        task_label = tk.Label(self.frame, text=f"Heatmap mode ({self.pcf.heatmap_max_type})",
+                              font=("Arial", TEXT_SIZE))
         task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
-        self.heatmap_type = ttk.Combobox(self.frame, width=15, state="readonly",
-                                       values=["All suboptimality",
-                                               "Wrong direction",
-                                               "Wait actions",
-                                               "Suboptimal turns"
+        self.heatmap_mode_selector = ttk.Combobox(self.frame, width=25, state="readonly",
+                                                  textvariable=self.heatmap_mode,
+                                                  values=[self.HEATMAP_OFF_LABEL,
+                                                          self.HEATMAP_ENVIRONMENTAL_STATIC_LABEL,
+                                                          self.HEATMAP_ENVIRONMENTAL_DYNAMIC_LABEL,
+                                                          self.HEATMAP_AGENT_STATIC_LABEL,
+                                                          self.HEATMAP_AGENT_DYNAMIC_LABEL])
+        self.heatmap_mode_selector.current(0)
+        self.heatmap_mode_selector.bind("<<ComboboxSelected>>", self.show_heat_maps)
+        self.heatmap_mode_selector.grid(row=self.row_idx, column=1, sticky="w")
+        self.row_idx += 1
+
+        # ---------- Change Heatmap Metric ---------- #
+        task_label = tk.Label(self.frame, text="Heatmap metric", font=("Arial", TEXT_SIZE))
+        task_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
+        self.heatmap_type = ttk.Combobox(self.frame, width=25, state="readonly",
+                                       values=[self.TOTAL_SUBOPTIMAL_MOVEMENT_LABEL,
+                                               self.WRONG_DIRECTION_COUNT_LABEL,
+                                               self.WAIT_COUNT_LABEL,
+                                               self.TURN_COUNT_LABEL
                                                ])
         self.heatmap_type.current(0)
         self.heatmap_type.bind("<<ComboboxSelected>>", self.show_heat_maps)
         self.heatmap_type.grid(row=self.row_idx, column=1, sticky="w")
         self.row_idx += 1
+
+        # ---------- Set Dynamic Heatmap Range ----------------------- #
+        self.dynamic_heatmap_start_label = tk.Label(self.frame, text="Dynamic start", font=("Arial", TEXT_SIZE))
+        self.dynamic_heatmap_start_label.grid(row=self.row_idx, column=0, columnspan=1, sticky="w")
+        self.dynamic_heatmap_start_entry = tk.Entry(
+            self.frame, width=7, textvariable=self.dynamic_heatmap_start_time,
+            font=("Arial", TEXT_SIZE))
+        self.dynamic_heatmap_start_entry.grid(row=self.row_idx, column=1, sticky="w")
+        self.dynamic_heatmap_start_entry.bind("<Return>", self.apply_dynamic_heatmap_start)
+        self.dynamic_heatmap_start_button = tk.Button(
+            self.frame, text="Set to current", font=("Arial", TEXT_SIZE),
+            command=self.set_dynamic_heatmap_start_to_current)
+        self.dynamic_heatmap_start_button.grid(row=self.row_idx, column=2, sticky="w")
+        self.row_idx += 1
+        self.update_dynamic_range_controls()
 
         # ---------- Set the starting timestep --------------------- #
         st_label = tk.Label(self.frame, text="Start time", font=("Arial", TEXT_SIZE))
@@ -2963,8 +3026,6 @@ class PlanViz2024:
 
         self.max_event_t = 0
         self.update_curtime()
-        self.pcf.reset_subop_map()
-        self.pcf.update_dynamic_subop_map()
         
 
 
@@ -3637,36 +3698,110 @@ class PlanViz2024:
             for _line_ in self.pcf.grids:
                 self.pcf.canvas.itemconfig(_line_, state=tk.HIDDEN)
 
+    def get_static_heatmap_grids_by_metric(self):
+        return {
+            self.TOTAL_SUBOPTIMAL_MOVEMENT_LABEL: self.pcf.heat_grids,
+            self.WRONG_DIRECTION_COUNT_LABEL: self.pcf.wrong_direction_grids,
+            self.WAIT_COUNT_LABEL: self.pcf.wait_action_grids,
+            self.TURN_COUNT_LABEL: self.pcf.bad_turn_grids,
+        }
+
+    def get_all_static_heatmap_grids(self):
+        return (
+            self.pcf.heat_grids
+            + self.pcf.wrong_direction_grids
+            + self.pcf.wait_action_grids
+            + self.pcf.bad_turn_grids
+        )
+
+    def sync_heatmap_mode_flags(self) -> None:
+        mode = self.heatmap_mode.get()
+        self.is_heat_map.set(mode == self.HEATMAP_ENVIRONMENTAL_STATIC_LABEL)
+        self.is_dynamic_map.set(
+            mode in [self.HEATMAP_ENVIRONMENTAL_DYNAMIC_LABEL, self.HEATMAP_AGENT_DYNAMIC_LABEL])
+        self.is_agent_colors.set(
+            mode in [self.HEATMAP_AGENT_STATIC_LABEL, self.HEATMAP_AGENT_DYNAMIC_LABEL])
+
+    def hide_static_heat_maps(self) -> None:
+        for item in self.get_all_static_heatmap_grids():
+            self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+            # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
+
+    def hide_dynamic_heat_maps(self) -> None:
+        for item in self.pcf.dynamic_heat_grids:
+            self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+
+    def update_dynamic_range_controls(self) -> None:
+        controls = [
+            self.dynamic_heatmap_start_label,
+            self.dynamic_heatmap_start_entry,
+            self.dynamic_heatmap_start_button,
+        ]
+        if self.is_dynamic_heatmap_mode():
+            for control in controls:
+                control.grid()
+        else:
+            for control in controls:
+                control.grid_remove()
+
+    def get_dynamic_heatmap_start_tstep(self) -> int:
+        try:
+            start_tstep = int(self.dynamic_heatmap_start_time.get())
+        except ValueError:
+            start_tstep = self.pcf.start_tstep
+
+        start_tstep = max(self.pcf.start_tstep, start_tstep)
+        start_tstep = min(start_tstep, self.pcf.cur_tstep)
+        self.dynamic_heatmap_start_time.set(str(start_tstep))
+        return start_tstep
+
+    def refresh_dynamic_heatmap(self, force=False) -> None:
+        self.pcf.dynamic_heatmap_start_tstep = self.get_dynamic_heatmap_start_tstep()
+        self.pcf.update_dynamic_subop_map(force=force)
+
+    def apply_dynamic_heatmap_start(self, _=None) -> None:
+        self.show_heat_maps()
+
+    def set_dynamic_heatmap_start_to_current(self) -> None:
+        self.dynamic_heatmap_start_time.set(str(self.pcf.cur_tstep))
+        self.show_heat_maps()
+
     def show_heat_maps(self, _=None) -> None:
-        heatmap_type_to_heatgrids = {"All suboptimality": self.pcf.heat_grids,  "Wrong direction": self.pcf.wrong_direction_grids,
-                                     "Wait actions": self.pcf.wait_action_grids, "Suboptimal turns": self.pcf.bad_turn_grids}
-        current_type = heatmap_type_to_heatgrids[self.heatmap_type.get()]
-        if self.is_heat_map.get() is True:
+        self.sync_heatmap_mode_flags()
+        self.update_dynamic_range_controls()
+        self.hide_static_heat_maps()
+        self.hide_dynamic_heat_maps()
+
+        if self.is_environmental_static_heatmap_mode():
+            heatmap_type_to_heatgrids = self.get_static_heatmap_grids_by_metric()
+            current_type = heatmap_type_to_heatgrids[self.heatmap_type.get()]
             for item in current_type:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
                 # self.pcf.canvas.itemconfig(item.text, state=tk.DISABLED)
-            for key, value in heatmap_type_to_heatgrids.items():
-                if key != self.heatmap_type.get():
-                    for item in value:
-                        self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-
-        else:
-            for item in self.pcf.heat_grids + self.pcf.wrong_direction_grids + self.pcf.wait_action_grids + self.pcf.bad_turn_grids:
-                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
-                # self.pcf.canvas.itemconfig(item.text, state=tk.HIDDEN)
-
-    def reset_heat_map(self) -> None:
-        self.pcf.reset_subop_map()
-        self.pcf.render_dynamic_map()
-        self.pcf.canvas.update()
-
-    def show_dynamic_maps(self) -> None:
-        if self.is_dynamic_map.get() is True:
+        elif self.is_environmental_dynamic_heatmap_mode():
+            self.refresh_dynamic_heatmap(force=True)
+            self.pcf.render_dynamic_map(self.get_selected_dynamic_heatmap())
             for item in self.pcf.dynamic_heat_grids:
                 self.pcf.canvas.itemconfig(item.obj, state=tk.DISABLED)
-        else:
-            for item in self.pcf.dynamic_heat_grids:
-                self.pcf.canvas.itemconfig(item.obj, state=tk.HIDDEN)
+        elif self.is_agent_dynamic_heatmap_mode():
+            self.refresh_dynamic_heatmap(force=True)
+
+        self.update_agent_colors()
+        self.raise_agent_canvas_items()
+
+    def get_selected_dynamic_heatmap(self):
+        heatmap_type_to_dynamic_map = {
+            self.TOTAL_SUBOPTIMAL_MOVEMENT_LABEL: self.pcf.dynamic_heatmap,
+            self.WRONG_DIRECTION_COUNT_LABEL: self.pcf.dynamic_wrong_direction_heatmap,
+            self.WAIT_COUNT_LABEL: self.pcf.dynamic_wait_action_heatmap,
+            self.TURN_COUNT_LABEL: self.pcf.dynamic_bad_turn_heatmap,
+        }
+        return heatmap_type_to_dynamic_map[self.heatmap_type.get()]
+
+    def show_dynamic_maps(self, _=None) -> None:
+        if not self.is_dynamic_heatmap_mode() and self.is_dynamic_map.get():
+            self.heatmap_mode.set(self.HEATMAP_ENVIRONMENTAL_DYNAMIC_LABEL)
+        self.show_heat_maps()
 
     def open_heatmap_stats(self):
         stats = self.pcf.compute_heatmap_stats()
@@ -3853,10 +3988,6 @@ class PlanViz2024:
         if substeps < 1:
             substeps = 1
 
-        self.pcf.update_dynamic_subop_map()
-        if self.is_dynamic_map.get():
-            self.show_dynamic_maps()
-
         # Update the next timestep for each agent
         next_tstep = {}
         for (ag_id, agent) in self.pcf.agents.items():
@@ -3898,6 +4029,8 @@ class PlanViz2024:
                                    agent.path[next_tstep[ag_id]][2])
         self.pcf.cur_tstep += 1
         self.next_button.config(state=tk.NORMAL)
+        if self.is_dynamic_heatmap_mode():
+            self.show_dynamic_maps()
 
         # Change tasks' states after cur_tstep += 1
         if not self.pcf.event_tracker:
@@ -4046,6 +4179,8 @@ class PlanViz2024:
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
         self.update_agent_colors()
+        if self.is_dynamic_heatmap_mode():
+            self.show_dynamic_maps()
         self.raise_agent_canvas_items()
         self.prev_button.config(state=tk.NORMAL)
         self.next_button.config(state=tk.NORMAL)
@@ -4185,4 +4320,6 @@ class PlanViz2024:
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
         self.update_agent_colors()
+        if self.is_dynamic_heatmap_mode():
+            self.show_dynamic_maps()
         self.pcf.canvas.update()

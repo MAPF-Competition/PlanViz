@@ -892,8 +892,18 @@ class PlanConfig2024:
         # Initialize the window
         self.window = tk.Tk()
 
-        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
+        self.dynamic_subop_heatmaps = self.create_empty_subop_heatmaps()
+        self.dynamic_heatmap = self.dynamic_subop_heatmaps["all"]
+        self.dynamic_wrong_direction_heatmap = self.dynamic_subop_heatmaps["wrong_direction"]
+        self.dynamic_wait_action_heatmap = self.dynamic_subop_heatmaps["waited"]
+        self.dynamic_bad_turn_heatmap = self.dynamic_subop_heatmaps["bad_turn"]
+        self.dynamic_heatmap_start_tstep = self.start_tstep
+        self.agent_performance_by_metric = {}
+        self.dynamic_agent_performance_by_metric = {}
+        self.agents_rgba_by_metric = {}
+        self.dynamic_agents_rgba_by_metric = {}
         self.agent_performance = []
+        self.dynamic_agent_performance = []
 
         self.screen_width = self.window.winfo_screenwidth()
         self.screen_height = self.window.winfo_screenheight()
@@ -1818,90 +1828,182 @@ class PlanConfig2024:
                 int(round(float(state[1]))),
                 int(round(float(state[2]))) % 4)
 
-    def _abs_timestep(self, tick_index: int) -> int:
-        """Convert an absolute tick index to an absolute timestep number for goal lookup."""
-        return tick_index // self._subop_stride()
+    def _abs_goal_time(self, tick_index: int) -> int:
+        """Return the absolute time value used by schedules/events for goal lookup."""
+        return tick_index
 
-    def reset_subop_map(self):
-        self.dynamic_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
-    def update_dynamic_subop_map(self):
-        """
-        Updates and renders the individual suboptimality heatmap squares for the dynamic heatmap at current timestep
-        """
+    def get_subop_distance_fn(self):
+        def manhattan_distance(loc, goal):
+            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+
         def shortest_path_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             return self.shortest_paths[to_id(loc), to_id(goal)]
-        def manhattan_distance(loc, goal):
-            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
+
         def landmark_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             u, v = to_id(loc), to_id(goal)
-            return max(
+            return max(manhattan_distance(loc, goal), max(
                 abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
-                for i in range(self.shortest_paths.shape[0]))
+                for i in range(self.shortest_paths.shape[0])
+            ))
+
         if self.pathalg == "True":
-            path_alg = shortest_path_distance
-        elif self.pathalg == "Landmark":
-            path_alg = landmark_distance
-        else:
-            path_alg = manhattan_distance
+            return shortest_path_distance
+        if self.pathalg == "Landmark":
+            return landmark_distance
+        return manhattan_distance
 
-        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
-            env_map = self.env_map
-            """True if (row,col) is inside the grid and not an obstacle."""
-            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
-                return current_distance  # off the board
-            elif env_map[row][col] == 0: # 0 == obstacle in your map
-                return current_distance
-            else:
-                return path_alg((row, col), current_goal)
+    def get_valid_subop_future_distance(self, row: int, col: int, current_distance, current_goal, path_alg):
+        """Return future distance, or current distance when the future cell is invalid."""
+        if not (0 <= row < len(self.env_map) and 0 <= col < len(self.env_map[0])):
+            return current_distance
+        if self.env_map[row][col] == 0:
+            return current_distance
+        return path_alg((row, col), current_goal)
 
+    def classify_suboptimal_action(self, cur_state, next_state, current_goal, path_alg):
+        cur_loc = (cur_state[0], cur_state[1])
+        next_loc = (next_state[0], next_state[1])
+        cur_dist = path_alg(cur_loc, current_goal)
+        next_dist = path_alg(next_loc, current_goal)
+        turn = get_rotation(cur_state[2], next_state[2])
+
+        if turn == 0:
+            if cur_loc == next_loc:
+                return "waited", 1
+            if cur_dist < next_dist:
+                return "wrong_direction", 2
+            return None, 0
+
+        unturned_future = state_transition(cur_state, "F")
+        unturned_future_dist = self.get_valid_subop_future_distance(
+            unturned_future[0], unturned_future[1], cur_dist, current_goal, path_alg)
+        if cur_dist - unturned_future_dist == 1:
+            return "bad_turn", 1
+
+        turned_future = state_transition(next_state, "F")
+        turned_future_dist = self.get_valid_subop_future_distance(
+            turned_future[0], turned_future[1], cur_dist, current_goal, path_alg)
+        opposite_dir = int((cur_state[2] - turn) % 4)
+        opposite = state_transition(
+            (cur_state[0], cur_state[1], opposite_dir), "F")
+        opposite_dist = self.get_valid_subop_future_distance(
+            opposite[0], opposite[1], cur_dist, current_goal, path_alg)
+        if turned_future_dist > opposite_dist:
+            return "bad_turn", 1
+
+        return None, 0
+
+    def create_empty_subop_heatmaps(self):
+        return {
+            "all": [[0 for _ in range(self.width)] for _ in range(self.height)],
+            "wrong_direction": [[0 for _ in range(self.width)] for _ in range(self.height)],
+            "waited": [[0 for _ in range(self.width)] for _ in range(self.height)],
+            "bad_turn": [[0 for _ in range(self.width)] for _ in range(self.height)],
+        }
+
+    def create_empty_agent_subop_scores(self):
+        return {
+            "all": [0 for _ in range(self.team_size)],
+            "wrong_direction": [0 for _ in range(self.team_size)],
+            "waited": [0 for _ in range(self.team_size)],
+            "bad_turn": [0 for _ in range(self.team_size)],
+        }
+
+    def compute_agents_rgba_by_metric(self, agent_scores_by_metric):
+        cmap = cm.get_cmap("turbo")
+        rgba_by_metric = {}
+        for metric, scores in agent_scores_by_metric.items():
+            max_val = max(scores) if scores else 0
+            norm = Normalize(vmin=0, vmax=max(max_val, 1))
+            rgba_by_metric[metric] = cmap(norm(scores))
+        return rgba_by_metric
+
+    def compute_subop_heatmaps(self, start_tick=None, end_tick=None):
+        heatmaps = self.create_empty_subop_heatmaps()
+        agent_scores = self.create_empty_agent_subop_scores()
+        type_counts = {"wrong_direction": 0, "waited": 0, "bad_turn": 0}
+        path_alg = self.get_subop_distance_fn()
+        stride = self._subop_stride()
+
+        if start_tick is None:
+            start_tick = self.start_tstep
+        start_rel = max(0, int(start_tick) - self.start_tstep)
+        if start_rel % stride != 0:
+            start_rel += stride - (start_rel % stride)
+
+        end_rel_limit = None
+        if end_tick is not None:
+            end_rel_limit = max(0, int(end_tick) - self.start_tstep)
+            if end_rel_limit <= start_rel:
+                return heatmaps, agent_scores, type_counts
+
+        for ag_id, path in self.exec_paths.items():
+            path_end = len(path) - stride
+            if path_end <= start_rel:
+                continue
+            stop_rel = path_end
+            if end_rel_limit is not None:
+                stop_rel = min(path_end, end_rel_limit - stride + 1)
+                if stop_rel <= start_rel:
+                    continue
+            for t in range(start_rel, stop_rel, stride):
+                abs_tick = self.start_tstep + t
+                cur_goal = self.get_current_goal(ag_id, self._abs_goal_time(abs_tick))
+                if cur_goal is None:
+                    continue
+
+                cur_state = self._snap_state(path[t])
+                next_state = self._snap_state(path[t + stride])
+                cur_loc = (cur_state[0], cur_state[1])
+                subop_type, movement_score = self.classify_suboptimal_action(
+                    cur_state, next_state, cur_goal, path_alg)
+                if movement_score == 0:
+                    continue
+
+                heatmaps["all"][cur_loc[0]][cur_loc[1]] += movement_score
+                heatmaps[subop_type][cur_loc[0]][cur_loc[1]] += 1
+                if ag_id < self.team_size:
+                    agent_scores["all"][ag_id] += movement_score
+                    agent_scores[subop_type][ag_id] += 1
+                type_counts[subop_type] += 1
+
+        return heatmaps, agent_scores, type_counts
+
+    def reset_subop_map(self):
+        self.dynamic_heatmap_start_tstep = self.cur_tstep
+        self.dynamic_subop_heatmaps = self.create_empty_subop_heatmaps()
+        self.dynamic_heatmap = self.dynamic_subop_heatmaps["all"]
+        self.dynamic_wrong_direction_heatmap = self.dynamic_subop_heatmaps["wrong_direction"]
+        self.dynamic_wait_action_heatmap = self.dynamic_subop_heatmaps["waited"]
+        self.dynamic_bad_turn_heatmap = self.dynamic_subop_heatmaps["bad_turn"]
+        self.dynamic_agent_performance_by_metric = self.create_empty_agent_subop_scores()
+        self.dynamic_agent_performance = self.dynamic_agent_performance_by_metric["all"]
+        self.dynamic_agents_rgba_by_metric = self.compute_agents_rgba_by_metric(
+            self.dynamic_agent_performance_by_metric)
+
+    def update_dynamic_subop_map(self, force=False):
+        """
+        Updates and renders the individual suboptimality heatmap squares for the dynamic heatmap at current timestep
+        """
         stride = self._subop_stride()
         t_rel = self.cur_tstep - self.start_tstep
 
         # Only update at timestep boundaries; in-between ticks keep the last map
-        if t_rel < 0 or (t_rel % stride) != 0:
+        if not force and (t_rel < 0 or (t_rel % stride) != 0):
             return
 
-        for ag_id, path in self.exec_paths.items():
-            if t_rel + stride >= len(path):
-                continue
-            cur_goal = self.get_current_goal(ag_id, self._abs_timestep(self.cur_tstep))
-            if cur_goal is None:
-                continue
+        self.dynamic_subop_heatmaps, self.dynamic_agent_performance_by_metric, _ = self.compute_subop_heatmaps(
+            self.dynamic_heatmap_start_tstep, self.cur_tstep)
+        self.dynamic_heatmap = self.dynamic_subop_heatmaps["all"]
+        self.dynamic_wrong_direction_heatmap = self.dynamic_subop_heatmaps["wrong_direction"]
+        self.dynamic_wait_action_heatmap = self.dynamic_subop_heatmaps["waited"]
+        self.dynamic_bad_turn_heatmap = self.dynamic_subop_heatmaps["bad_turn"]
+        self.dynamic_agent_performance = self.dynamic_agent_performance_by_metric["all"]
+        self.dynamic_agents_rgba_by_metric = self.compute_agents_rgba_by_metric(
+            self.dynamic_agent_performance_by_metric)
 
-            cur_state  = self._snap_state(path[t_rel])
-            next_state = self._snap_state(path[t_rel + stride])
-            cur_loc  = (cur_state[0],  cur_state[1])
-            next_loc = (next_state[0], next_state[1])
-            cur_dist  = path_alg(cur_loc, cur_goal)
-            next_dist = path_alg(next_loc, cur_goal)
-            turn = get_rotation(cur_state[2], next_state[2])
-
-            if turn == 0:
-                if cur_loc == next_loc:
-                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                elif cur_dist < next_dist:
-                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 2
-            else:
-                unturned_future = state_transition(cur_state, "F")
-                unturned_future_dist = get_valid_future_distance(
-                    unturned_future[0], unturned_future[1], cur_dist, cur_goal)
-                turned_future = state_transition(next_state, "F")
-                turned_future_dist = get_valid_future_distance(
-                    turned_future[0], turned_future[1], cur_dist, cur_goal)
-                if cur_dist - unturned_future_dist == 1:
-                    self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                else:
-                    opposite_dir = int((cur_state[2] - turn) % 4)
-                    opposite = state_transition(
-                        (cur_state[0], cur_state[1], opposite_dir), "F")
-                    opposite_dist = get_valid_future_distance(
-                        opposite[0], opposite[1], cur_dist, cur_goal)
-                    if turned_future_dist > opposite_dist:
-                        self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
-
-        self.render_dynamic_map()
         # self.canvas.delete("dynamic")
         #
         # cmap = cm.get_cmap("Reds")
@@ -1922,22 +2024,25 @@ class PlanConfig2024:
         # self.canvas.lower("dynamic")
         # return True
 
-    def render_dynamic_map(self):
+    def render_dynamic_map(self, heatmap=None):
         self.canvas.delete("dynamic")
+
+        if heatmap is None:
+            heatmap = self.dynamic_heatmap
 
         cmap = cm.get_cmap("Reds")
         norm = Normalize(vmin=0, vmax=self.max_heatmap_val)
-        rgba = cmap(norm(self.dynamic_heatmap))
+        rgba = cmap(norm(heatmap))
         self.dynamic_heat_grids = []
-        for i in range(len(self.dynamic_heatmap)):
-            for j in range(len(self.dynamic_heatmap[i])):
-                if self.dynamic_heatmap[i][j] == 0:
+        for i in range(len(heatmap)):
+            for j in range(len(heatmap[i])):
+                if heatmap[i][j] == 0:
                     continue
                 color = (int(rgba[i][j][0] * 255),
                          int(rgba[i][j][1] * 255),
                          int(rgba[i][j][2] * 255))
                 hex_color = '#{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2])
-                heat_square = self.render_obj(self.dynamic_heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
+                heat_square = self.render_obj(heatmap[i][j], (i, j), "rectangle", hex_color, tk.HIDDEN,
                                               0.0, "dynamic", show_text=False)
                 self.dynamic_heat_grids.append(heat_square)
         self.canvas.lower("dynamic")
@@ -1949,94 +2054,13 @@ class PlanConfig2024:
         Computes and renders the individual suboptimality heatmap squares for the static final heatmap.
         Also computes individual agent based suboptimalities and stores in self.agent_performance
         """
-        def manhattan_distance(loc, goal):
-            return abs(loc[0]-goal[0]) + abs(loc[1]-goal[1])
-
-        def shortest_path_distance(loc, goal):
-            to_id = lambda rc: rc[0] * self.width + rc[1]
-            return self.shortest_paths[to_id(loc), to_id(goal)]
-
-        def landmark_distance(loc, goal):
-            to_id = lambda rc: rc[0] * self.width + rc[1]
-            u, v = to_id(loc), to_id(goal)
-            return max(manhattan_distance(loc, goal), max(
-                abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
-                for i in range(self.shortest_paths.shape[0])
-            ))
-
-        if self.pathalg == "True":
-            path_alg = shortest_path_distance
-        elif self.pathalg == "Landmark":
-            path_alg = landmark_distance
-        else:
-            path_alg = manhattan_distance
-
-        def get_valid_future_distance(row: int, col: int, current_distance, current_goal) -> bool:
-            env_map = self.env_map
-            """True if (row,col) is inside the grid and not an obstacle."""
-            if not (0 <= row < len(env_map) and 0 <= col < len(env_map[0])):
-                return current_distance  # off the board
-            elif env_map[row][col] == 0: # 0 == obstacle in your map
-                return current_distance
-            else:
-                return path_alg((row, col), current_goal)
-
         print("Rendering suboptimality map", end="...")
-        self.subop_map = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.wrong_direction_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.wait_action_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        self.bad_turn_heatmap = [[0 for _ in range(self.width)] for _ in range(self.height)]
-        stride = self._subop_stride()
-        for ag_id, path in self.exec_paths.items():
-            # Only sample at timestep boundaries
-            for t in range(0, len(path) - stride, stride):
-                abs_tick = self.start_tstep + t
-                cur_goal = self.get_current_goal(ag_id, self._abs_timestep(abs_tick))
-                if cur_goal is None:
-                    continue
-
-                cur_state  = self._snap_state(path[t])
-                next_state = self._snap_state(path[t + stride])
-                cur_loc  = (cur_state[0],  cur_state[1])
-                next_loc = (next_state[0], next_state[1])
-                cur_dist  = path_alg(cur_loc, cur_goal)
-                next_dist = path_alg(next_loc, cur_goal)
-                turn = get_rotation(cur_state[2], next_state[2])
-
-                if turn == 0:
-                    if cur_loc == next_loc:
-                        self.subop_map[cur_loc[0]][cur_loc[1]] += 1
-                        self.agent_performance[ag_id] += 1
-                        self.wait_action_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                        self.supop_types["waited"] += 1
-                    elif cur_dist < next_dist:
-                        self.subop_map[cur_loc[0]][cur_loc[1]] += 2
-                        self.agent_performance[ag_id] += 2
-                        self.wrong_direction_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                        self.supop_types["wrong_direction"] += 1
-                else:
-                    unturned_future = state_transition(cur_state, "F")
-                    unturned_future_dist = get_valid_future_distance(
-                        unturned_future[0], unturned_future[1], cur_dist, cur_goal)
-                    turned_future = state_transition(next_state, "F")
-                    turned_future_dist = get_valid_future_distance(
-                        turned_future[0], turned_future[1], cur_dist, cur_goal)
-                    if cur_dist - unturned_future_dist == 1:
-                        self.subop_map[cur_loc[0]][cur_loc[1]] += 1
-                        self.agent_performance[ag_id] += 1
-                        self.bad_turn_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                        self.supop_types["bad_turn"] += 1
-                    else:
-                        opposite_dir = int((cur_state[2] - turn) % 4)
-                        opposite = state_transition(
-                            (cur_state[0], cur_state[1], opposite_dir), "F")
-                        opposite_dist = get_valid_future_distance(
-                            opposite[0], opposite[1], cur_dist, cur_goal)
-                        if turned_future_dist > opposite_dist:
-                            self.subop_map[cur_loc[0]][cur_loc[1]] += 1
-                            self.agent_performance[ag_id] += 1
-                            self.bad_turn_heatmap[cur_loc[0]][cur_loc[1]] += 1
-                            self.supop_types["bad_turn"] += 1
+        subop_heatmaps, self.agent_performance_by_metric, self.supop_types = self.compute_subop_heatmaps()
+        self.subop_map = subop_heatmaps["all"]
+        self.wrong_direction_heatmap = subop_heatmaps["wrong_direction"]
+        self.wait_action_heatmap = subop_heatmaps["waited"]
+        self.bad_turn_heatmap = subop_heatmaps["bad_turn"]
+        self.agent_performance = self.agent_performance_by_metric["all"]
         # Rendering heatmap
         self.render_static_map()
 
@@ -2072,10 +2096,9 @@ class PlanConfig2024:
                         self.wait_action_grids.append(heat_square)
                     else:
                         self.bad_turn_grids.append(heat_square)
-        cmap = cm.get_cmap("turbo")
-        max_val = max(self.agent_performance)
-        norm = Normalize(vmin=0, vmax=max_val)
-        self.agents_rgba = cmap(norm(self.agent_performance))
+        self.agents_rgba_by_metric = self.compute_agents_rgba_by_metric(
+            self.agent_performance_by_metric)
+        self.agents_rgba = self.agents_rgba_by_metric["all"]
         self.order_static_layers()
 
     def order_static_layers(self):
@@ -2092,16 +2115,16 @@ class PlanConfig2024:
         nz = data[data > 0]
         stats = {
             "Non-zero cells": int(nz.size),
-            "Total penalty": int(nz.sum()),
+            "Total suboptimal movement": int(nz.sum()),
             "Mean": float(nz.mean()) if nz.size else 0.0,
             "Std dev": float(nz.std()) if nz.size else 0.0,
             "Min": int(nz.min()) if nz.size else 0,
             "Max": int(nz.max()) if nz.size else 0,
         }
         stats.update({
-            "Wrong direction": self.supop_types["wrong_direction"],
-            "Wait actions": self.supop_types["waited"],
-            "Sub-optimal turns": self.supop_types["bad_turn"],
+            "Wrong-direction count": self.supop_types["wrong_direction"],
+            "Wait count": self.supop_types["waited"],
+            "Turn count": self.supop_types["bad_turn"],
         })
 
         #per-agent score
@@ -2144,7 +2167,12 @@ class PlanConfig2024:
 
         if self.team_size == math.inf:
             self.team_size = data["teamSize"]
-        self.agent_performance = [0 for _ in range(self.team_size)]
+        self.agent_performance_by_metric = self.create_empty_agent_subop_scores()
+        self.agent_performance = self.agent_performance_by_metric["all"]
+        self.dynamic_agent_performance_by_metric = self.create_empty_agent_subop_scores()
+        self.dynamic_agent_performance = self.dynamic_agent_performance_by_metric["all"]
+        self.dynamic_agents_rgba_by_metric = self.compute_agents_rgba_by_metric(
+            self.dynamic_agent_performance_by_metric)
         if self.end_tstep == math.inf:
             if self.time_unit == "tick" and "makespanTicks" in data:
                 self.end_tstep = data["makespanTicks"]
