@@ -1893,8 +1893,9 @@ class PlanConfig2024:
                 if cur_dist - unturned_future_dist == 1:
                     self.dynamic_heatmap[cur_loc[0]][cur_loc[1]] += 1
                 else:
+                    opposite_dir = int((cur_state[2] - turn) % 4)
                     opposite = state_transition(
-                        (cur_state[0], cur_state[1], (cur_state[2] + 2) % 4), "F")
+                        (cur_state[0], cur_state[1], opposite_dir), "F")
                     opposite_dist = get_valid_future_distance(
                         opposite[0], opposite[1], cur_dist, cur_goal)
                     if turned_future_dist > opposite_dist:
@@ -1954,6 +1955,7 @@ class PlanConfig2024:
         def shortest_path_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             return self.shortest_paths[to_id(loc), to_id(goal)]
+
         def landmark_distance(loc, goal):
             to_id = lambda rc: rc[0] * self.width + rc[1]
             u, v = to_id(loc), to_id(goal)
@@ -1961,6 +1963,7 @@ class PlanConfig2024:
                 abs(self.shortest_paths[i, u] - self.shortest_paths[i, v])
                 for i in range(self.shortest_paths.shape[0])
             ))
+
         if self.pathalg == "True":
             path_alg = shortest_path_distance
         elif self.pathalg == "Landmark":
@@ -2024,8 +2027,9 @@ class PlanConfig2024:
                         self.bad_turn_heatmap[cur_loc[0]][cur_loc[1]] += 1
                         self.supop_types["bad_turn"] += 1
                     else:
+                        opposite_dir = int((cur_state[2] - turn) % 4)
                         opposite = state_transition(
-                            (cur_state[0], cur_state[1], (cur_state[2] + 2) % 4), "F")
+                            (cur_state[0], cur_state[1], opposite_dir), "F")
                         opposite_dist = get_valid_future_distance(
                             opposite[0], opposite[1], cur_dist, cur_goal)
                         if turned_future_dist > opposite_dist:
