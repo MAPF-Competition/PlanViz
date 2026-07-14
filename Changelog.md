@@ -1,4 +1,20 @@
 # Changelog
+Version 3.2.0 - 2026-06-02
+---
+Added:
+- Added LoRR 2026 example maps and output files under `example/LoRR2026`.
+- Added solution metadata popup next to the time label, showing agent count, map size, traversable cells, obstacle cells, and agentMaxCounter.
+- Added `Productivity` popup for task and errand timelines, with completed, instant, and throughput views.
+
+Bug Fixes:
+- Fixed zoom drift by preserving the cursor-focused viewport during wheel zoom.
+- Fixed large-map viewport resizing so the minimap and visible region stay synchronized after canvas resize.
+- Fixed `Fullsize` behavior to fit the whole map into the visible canvas instead of only resetting to the default zoom.
+
+Changes:
+- Updated the time label to show `Tick` for tick-based 2026 plans and include the maximum timestep.
+- Updated event counters to show current and total counts where full totals are available.
+
 Version 3.1.0 - 2026-04-09
 ---
 Added:
