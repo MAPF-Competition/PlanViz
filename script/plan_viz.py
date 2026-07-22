@@ -770,7 +770,8 @@ class PlanViz2023:
             return
 
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
-        if self.pcf.cur_tstep-1 == self.pcf.event_tracker["aTime"][prev_aid]:
+        a_times = self.pcf.event_tracker["aTime"]
+        if a_times and prev_aid < len(a_times) and self.pcf.cur_tstep-1 == a_times[prev_aid]:
             # from newly assigned to assigned
             for (tid, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep-1].items():
                 self.pcf.tasks[tid].state = "assigned"
@@ -779,7 +780,8 @@ class PlanViz2023:
                 if not self.pcf.shown_path_agents or ag_id in self.pcf.shown_path_agents:
                     self.show_single_task(tid)
 
-        if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
+        a_id = self.pcf.event_tracker["aid"]
+        if a_times and a_id < len(a_times) and self.pcf.cur_tstep == a_times[a_id]:
             # from unassigned to newly assigned
             for (tid, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
                 self.pcf.tasks[tid].state = "newlyassigned"
@@ -789,7 +791,9 @@ class PlanViz2023:
                     self.show_single_task(tid)
             self.pcf.event_tracker["aid"] += 1
 
-        if self.pcf.cur_tstep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
+        f_times = self.pcf.event_tracker["fTime"]
+        f_id = self.pcf.event_tracker["fid"]
+        if f_times and f_id < len(f_times) and self.pcf.cur_tstep == f_times[f_id]:
             # from assigned to finished
             for tid in self.pcf.events["finished"][self.pcf.cur_tstep]:
                 self.pcf.tasks[tid].state = "finished"
@@ -812,8 +816,10 @@ class PlanViz2023:
         # Move the event tracker backward
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
         prev_fid = max(self.pcf.event_tracker["fid"]-1, 0)
-        prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
-        prev_fin_time = self.pcf.event_tracker["fTime"][prev_fid]
+        a_times = self.pcf.event_tracker["aTime"]
+        f_times = self.pcf.event_tracker["fTime"]
+        prev_agn_time = a_times[prev_aid] if a_times else -1
+        prev_fin_time = f_times[prev_fid] if f_times else -1
 
         if self.pcf.cur_tstep == prev_fin_time:  # from finished to assigned
             for (tid, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
@@ -834,7 +840,7 @@ class PlanViz2023:
                     self.show_single_task(tid)
             self.pcf.event_tracker["aid"] = prev_aid
             prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
-            prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
+            prev_agn_time = a_times[prev_aid] if a_times else -1
 
         if prev_timestep == prev_agn_time:  # from assigned to newly assigned
             for (tid, ag_id) in self.pcf.events["assigned"][prev_agn_time].items():
@@ -3787,7 +3793,9 @@ class PlanViz2024:
                     grid_x, grid_y = int(match.group(1)), int(match.group(2))
                     self.update_location_event_list(self.pop_location_listbox)
         self.update_error_list(self.conflict_listbox)
-        if self.pcf.cur_tstep == self.pcf.event_tracker["aTime"][self.pcf.event_tracker["aid"]]:
+        a_times = self.pcf.event_tracker["aTime"]
+        a_id = self.pcf.event_tracker["aid"]
+        if a_times and a_id < len(a_times) and self.pcf.cur_tstep == a_times[a_id]:
             # from unassigned to assigned
             for (global_task_id, ag_id) in self.pcf.events["assigned"][self.pcf.cur_tstep].items():
                 task_id = global_task_id // self.pcf.max_seq_num
@@ -3798,7 +3806,9 @@ class PlanViz2024:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] += 1
 
-        if self.pcf.cur_tstep == self.pcf.event_tracker["fTime"][self.pcf.event_tracker["fid"]]:
+        f_times = self.pcf.event_tracker["fTime"]
+        f_id = self.pcf.event_tracker["fid"]
+        if f_times and f_id < len(f_times) and self.pcf.cur_tstep == f_times[f_id]:
             # from assigned to finished
             for (global_task_id, ag_id) in self.pcf.events["finished"][self.pcf.cur_tstep].items():
                 task_id = global_task_id // self.pcf.max_seq_num
@@ -3828,8 +3838,10 @@ class PlanViz2024:
         # Move the event tracker backward
         prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
         prev_fid = max(self.pcf.event_tracker["fid"]-1, 0)
-        prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
-        prev_fin_time = self.pcf.event_tracker["fTime"][prev_fid]
+        a_times = self.pcf.event_tracker["aTime"]
+        f_times = self.pcf.event_tracker["fTime"]
+        prev_agn_time = a_times[prev_aid] if a_times else -1
+        prev_fin_time = f_times[prev_fid] if f_times else -1
 
         if self.pcf.cur_tstep == prev_fin_time:  # from finished to assigned
             for (global_task_id, ag_id) in self.pcf.events["finished"][prev_fin_time].items():
@@ -3853,7 +3865,7 @@ class PlanViz2024:
                     self.show_single_task(task_id, seq_id)
             self.pcf.event_tracker["aid"] = prev_aid
             prev_aid = max(self.pcf.event_tracker["aid"]-1, 0)
-            prev_agn_time = self.pcf.event_tracker["aTime"][prev_aid]
+            prev_agn_time = a_times[prev_aid] if a_times else -1
 
         # Compute the previous location
         prev_loc:Dict[int, Tuple[int, int]] = {}
