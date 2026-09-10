@@ -1,4 +1,18 @@
 # Changelog
+
+## Unreleased — PySide6 migration
+
+- Promote the PySide6 application from `qt/` to the repository root. Run it with
+  `python run.py`, or install this directory and use `planviz-qt`.
+- Replace the Tkinter application, dependencies and manuals on this branch with
+  the Qt implementation and its illustrated user guide. The original release
+  remains available under the `v3.2.0` tag.
+- Include LoRR 2023/2024/2026 and MAPF/MAPF_T input adapters, a common JSON format,
+  converter tools, compressed replay, agent/task inspection, visual settings,
+  configurable palettes, solution details, productivity charts and overlays.
+- Keep shared example data and update tests, documentation captures and
+  benchmark tools for the root layout.
+
 Version 3.2.0 - 2026-06-02
 ---
 Added:

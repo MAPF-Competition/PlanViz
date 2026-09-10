@@ -1,8 +1,0 @@
-{"fixture": "warehouse", "agents": 200, "max_time": 5000, "source_MiB": 0.98, "compressed_path_MiB": 2.61, "load_and_index_ms": 59.44, "viewport": [864, 710]}
-{"fixture": "warehouse", "agent_ids": false, "selected": 0, "tick_start": 1000, "logical_tick_update_median_ms": 0.32, "paint_median_ms": 1.85, "paint_p95_ms": 2.05, "path_cache_entries": 0}
-{"fixture": "warehouse", "agent_ids": true, "selected": 0, "tick_start": 1000, "logical_tick_update_median_ms": 0.39, "paint_median_ms": 2.25, "paint_p95_ms": 2.42, "path_cache_entries": 0}
-{"fixture": "warehouse", "agent_ids": false, "selected": 20, "tick_start": 1000, "logical_tick_update_median_ms": 6.69, "paint_median_ms": 4.98, "paint_p95_ms": 5.17, "path_cache_entries": 128}
-{"fixture": "iron", "agents": 10000, "max_time": 1000, "source_MiB": 7.59, "compressed_path_MiB": 11.73, "load_and_index_ms": 686.48, "viewport": [864, 710]}
-{"fixture": "iron", "agent_ids": false, "selected": 0, "tick_start": 900, "logical_tick_update_median_ms": 5.79, "paint_median_ms": 12.44, "paint_p95_ms": 14.19, "path_cache_entries": 0}
-{"fixture": "iron", "agent_ids": true, "selected": 0, "tick_start": 900, "logical_tick_update_median_ms": 5.79, "paint_median_ms": 31.0, "paint_p95_ms": 32.81, "path_cache_entries": 0}
-{"fixture": "iron", "agent_ids": false, "selected": 20, "tick_start": 900, "logical_tick_update_median_ms": 7.64, "paint_median_ms": 10.78, "paint_p95_ms": 11.24, "path_cache_entries": 128}

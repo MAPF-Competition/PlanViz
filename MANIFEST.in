@@ -1,0 +1,7 @@
+include run.py requirements.txt Changelog.md INPUT_FORMAT.md PALETTE.md
+include VALIDATION.md VALIDATION_POLICY.md
+recursive-include tests *.py
+recursive-include docs *.md *.py *.png *.json
+recursive-include benchmarks *.md *.py *.json *.jsonl
+recursive-include example *.map *.json *.csv *.scen
+global-exclude __pycache__ *.py[cod] .DS_Store

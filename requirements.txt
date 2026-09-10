@@ -1,6 +1,4 @@
-matplotlib==3.10.6
-numpy==2.2.6
-pandas==2.3.2
-pillow==11.3.0
-scipy==1.15.3
-numba==0.64.0
+PySide6>=6.8,<7
+numpy>=2,<3
+matplotlib>=3.9,<4
+PyYAML>=6,<7

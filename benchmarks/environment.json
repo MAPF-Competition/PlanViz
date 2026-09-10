@@ -1,0 +1,19 @@
+{
+  "date": "2026-09-09",
+  "os": "macOS-26.6.2-arm64-arm-64bit",
+  "machine": "arm64",
+  "python": "3.12.13",
+  "pyside6": "6.11.1",
+  "numpy": "2.2.6",
+  "matplotlib": "3.10.6",
+  "pyyaml": "6.0.3",
+  "platform_plugin": "offscreen",
+  "samples": 20,
+  "warmup": 4,
+  "fixtures": {
+    "example/warehouse_small.map": "8b7e0c65f0c38c49c742278ae35123f1c3f02d5069ca22a560fe199bd8c8d1ad",
+    "example/warehouse_small_2026.json": "7ca30b87095f47b8ca6e05e79f7f8ae6e3b7825f57c065642e531a1c86611c27",
+    "example/LoRR2026/maps/scene_mp_2p_01.map": "81da7c665735fa2a9e30eb8ba28ffc23d586b483fd00ef0e4d5064bce0ab074b",
+    "example/LoRR2026/outputs/iron-example_10000_output.json": "d9e3208118de3764908a319e9286dd25160ff033f5597389b2725a6e56f73600"
+  }
+}
