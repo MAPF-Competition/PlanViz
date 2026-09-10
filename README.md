@@ -1,5 +1,8 @@
 # PlanViz
 
+**Looking for the new PySide6 application?** See the [PlanViz Qt illustrated guide](qt/README.md)
+for installation, supported inputs, playback, visual settings, analysis, and screenshots.
+
 Welcome to PlanViz! This is an **offline** (i.e., post-hoc) visualiser for analysing solutions to multi-robot and multi-agent coordination problems.
 It is developed as a support tool for participants in the [League of Robot Runners](http://leagueofrobotrunners.org) competition.
 However, PlanViz can also be used for a variety of similar problems which are outside the scope of the competition. 

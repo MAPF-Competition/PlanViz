@@ -1,0 +1,10 @@
+{"fixture": "warehouse", "agents": 200, "max_time": 5000, "source_MiB": 0.98, "compressed_path_MiB": 2.61, "load_and_index_ms": 60.84, "viewport": [864, 710]}
+{"fixture": "warehouse", "agent_ids": false, "selected": 0, "tick_start": 1000, "logical_tick_update_median_ms": 0.4, "logical_tick_update_p95_ms": 1.14, "paint_median_ms": 1.99, "paint_p95_ms": 2.17, "path_cache_entries": 0, "path_cache_MiB": 0.0, "label_cache_MiB": 0.17}
+{"fixture": "warehouse", "agent_ids": true, "selected": 0, "tick_start": 1000, "logical_tick_update_median_ms": 0.36, "logical_tick_update_p95_ms": 0.83, "paint_median_ms": 2.17, "paint_p95_ms": 2.3, "path_cache_entries": 0, "path_cache_MiB": 0.0, "label_cache_MiB": 0.17}
+{"fixture": "warehouse", "agent_ids": false, "selected": 20, "tick_start": 1000, "logical_tick_update_median_ms": 0.96, "logical_tick_update_p95_ms": 1.67, "paint_median_ms": 4.77, "paint_p95_ms": 4.9, "path_cache_entries": 40, "path_cache_MiB": 2.1, "label_cache_MiB": 0.17}
+{"fixture": "warehouse", "cold_label_paint_ms": 4.55}
+{"fixture": "iron", "agents": 10000, "max_time": 1000, "source_MiB": 7.59, "compressed_path_MiB": 11.73, "load_and_index_ms": 701.36, "viewport": [864, 710]}
+{"fixture": "iron", "agent_ids": false, "selected": 0, "tick_start": 900, "logical_tick_update_median_ms": 5.74, "logical_tick_update_p95_ms": 65.23, "paint_median_ms": 12.54, "paint_p95_ms": 14.66, "path_cache_entries": 0, "path_cache_MiB": 0.0, "label_cache_MiB": 12.99}
+{"fixture": "iron", "agent_ids": true, "selected": 0, "tick_start": 900, "logical_tick_update_median_ms": 6.04, "logical_tick_update_p95_ms": 70.89, "paint_median_ms": 21.18, "paint_p95_ms": 22.51, "path_cache_entries": 0, "path_cache_MiB": 0.0, "label_cache_MiB": 12.99}
+{"fixture": "iron", "agent_ids": false, "selected": 20, "tick_start": 900, "logical_tick_update_median_ms": 6.36, "logical_tick_update_p95_ms": 6.76, "paint_median_ms": 10.65, "paint_p95_ms": 11.2, "path_cache_entries": 20, "path_cache_MiB": 0.13, "label_cache_MiB": 12.99}
+{"fixture": "iron", "cold_label_paint_ms": 172.37}
